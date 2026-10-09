@@ -17,7 +17,7 @@ import { isCleared, getBest, chapterOpen } from '../meta/run';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
-import { GAME_INFO } from '../data/platformConfig';
+import { GAME_INFO, SUBSCRIBE_CONFIG } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -425,7 +425,8 @@ export class SettingsDialog implements Dialog {
         else ui.toast(r.msg);
       });
     }
-    if (ui.button('st_sub', f.x + 100 * u + bw, y, bw, 80 * u, save.subscribed ? '提醒已开启' : '体力满提醒', save.subscribed ? C.btnGray : C.btnGreen, { size: 22 })) {
+    // 订阅消息模板未配置时不显示提醒按钮，避免出现点了没反应的功能
+    if (subscribeEnabled() && ui.button('st_sub', f.x + 100 * u + bw, y, bw, 80 * u, save.subscribed ? '提醒已开启' : '体力满提醒', save.subscribed ? C.btnGray : C.btnGreen, { size: 22 })) {
       getPlatform().requestSubscribe().then((ok) => {
         save.subscribed = ok;
         markDirty();
@@ -440,7 +441,8 @@ export class SettingsDialog implements Dialog {
     y += 90 * u;
     ui.text(`${GAME_INFO.name}  v${GAME_INFO.version}`, ui.W / 2, y, 22, C.textDim);
     ui.text(GAME_INFO.copyright, ui.W / 2, y + 36 * u, 18, C.textDim);
-    ui.text(GAME_INFO.icp, ui.W / 2, y + 66 * u, 18, C.textDim);
+    // 备案号拿到前不显示占位文字
+    if (!GAME_INFO.icp.includes('待填写')) ui.text(GAME_INFO.icp, ui.W / 2, y + 66 * u, 18, C.textDim);
     ui.text(`适龄提示：${GAME_INFO.ageRating}+`, ui.W / 2, y + 96 * u, 18, C.textDim);
   }
 }
@@ -631,4 +633,12 @@ export class PrivacyDialog implements Dialog {
       return false;
     }
   }
+}
+
+/** 当前平台是否已配置订阅消息模板 */
+function subscribeEnabled(): boolean {
+  const p = getPlatform().name;
+  if (p !== 'wx' && p !== 'tt') return false;
+  const c = p === 'tt' ? SUBSCRIBE_CONFIG.tt : SUBSCRIBE_CONFIG.wx;
+  return !!(c.stamina || c.patrol);
 }
