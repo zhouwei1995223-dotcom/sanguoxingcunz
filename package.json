@@ -1,0 +1,17 @@
+{
+  "name": "sanguo-xingcun",
+  "version": "1.0.0",
+  "private": true,
+  "description": "一骑当千：三国幸存者 —— 微信/抖音小游戏",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "dev": "node tools/build.mjs --watch",
+    "audio": "node tools/gen-audio.mjs",
+    "typecheck": "tsc --noEmit",
+    "sim": "node tools/build.mjs --sim && node dist/sim/sim.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}
