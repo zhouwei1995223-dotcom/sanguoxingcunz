@@ -14,14 +14,15 @@ import {
   HERO, heroLevelCost, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
   CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS,
 } from '../data/meta';
-import { CHAPTERS } from '../data/chapters';
+import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
+import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK } from '../meta/run';
 import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, ChapterStoryDialog,
+  SidebarDialog, ChapterStoryDialog, ChapterListDialog,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { GAME_INFO } from '../data/platformConfig';
@@ -205,41 +206,70 @@ export class HomeScene implements Scene {
     drawSide(side, 18 * u);
     drawSide(sideR, ui.W - bs - 18 * u);
 
-    // 章节卡
-    const ch = CHAPTERS[save.selectedChapter - 1];
-    const unlocked = chapterUnlocked(ch.id);
-    const cw = ui.W - 80 * u, chH = 250 * u;
+    // 章节卡（含难度切换）
+    const ch = CHAPTERS[Math.min(CHAPTERS.length, save.selectedChapter) - 1];
+    const d = save.selectedDiff || 0;
+    const diff = DIFFICULTIES[d];
+    const unlocked = chapterOpen(ch.id, d);
+    const cw = ui.W - 80 * u, chH = 310 * u;
     const cx = 40 * u, cy = this.contentBottom(ui) - chH - 170 * u;
     ui.panel(cx, cy, cw, chH, 'wood');
-    ui.text(`第${ch.id}章`, ui.W / 2, cy + 46 * u, 26, C.textDim);
-    ui.text(ch.name, ui.W / 2, cy + 96 * u, 50, unlocked ? '#fff4d6' : '#8b8b8b');
-    ui.text(ch.subtitle, ui.W / 2, cy + 146 * u, 24, C.gold);
-    const best = save.chapterBest[ch.id] || 0;
-    const info = save.firstClear[ch.id] ? '已通关 ✓' : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
-    ui.text(info, ui.W / 2, cy + 190 * u, 22, save.firstClear[ch.id] ? '#9be37a' : '#d9c6a0');
+    // 难度页签
+    const tw = (cw - 60 * u) / 3;
+    DIFFICULTIES.forEach((df, i) => {
+      const open = diffOpen(df.id);
+      const tx = cx + 30 * u + i * tw, ty = cy + 22 * u;
+      const on = d === df.id;
+      ui.pixRect(tx + 4 * u, ty, tw - 8 * u, 50 * u, on ? df.color : '#231917');
+      ui.text(df.name, tx + tw / 2, ty + 25 * u, 24, on ? '#1a1210' : open ? df.color : '#666', 'center', null);
+      if (!open) ui.icon('lock', tx + tw - 26 * u, ty + 25 * u, 26 * u);
+      if (ui.clicked('diff_' + df.id, tx, ty, tw, 50 * u)) {
+        if (!open) ui.toast(`通关${DIFFICULTIES[df.id - 1].name}难度第1章解锁`);
+        else { save.selectedDiff = df.id; markDirty(); }
+      }
+    });
+    const oy = cy + 60 * u;
+    ui.text(`第${ch.id}章`, ui.W / 2, oy + 40 * u, 24, C.textDim);
+    ui.text(ch.name, ui.W / 2, oy + 88 * u, 50, unlocked ? '#fff4d6' : '#8b8b8b');
+    ui.text(ch.subtitle, ui.W / 2, oy + 136 * u, 24, C.gold);
+    const best = getBest(d, ch.id);
+    const cleared = isCleared(d, ch.id);
+    const info = cleared ? `${diff.name}已通关 ✓` : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
+    ui.text(info, ui.W / 2, oy + 178 * u, 22, cleared ? '#9be37a' : '#d9c6a0');
     const power = combatPower();
-    ui.text(`推荐战力 ${fmtNum(ch.power)}`, ui.W / 2, cy + 224 * u, 20, power >= ch.power ? '#9be37a' : '#ff8a80');
+    const need = Math.round(ch.power * diff.power + (d > 0 ? 1500 * d * ch.id : 0));
+    ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2, oy + 212 * u, 20, power >= need ? '#9be37a' : '#ff8a80');
     if (!unlocked) {
-      ui.ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ui.ctx.fillRect(cx + 12 * u, cy + 12 * u, cw - 24 * u, chH - 24 * u);
-      ui.icon('lock', ui.W / 2, cy + chH / 2, 80 * u);
-      ui.text(`通关第${ch.id - 1}章解锁`, ui.W / 2, cy + chH / 2 + 70 * u, 26, '#fff');
+      ui.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ui.ctx.fillRect(cx + 12 * u, oy + 6 * u, cw - 24 * u, chH - 78 * u);
+      ui.icon('lock', ui.W / 2, oy + 90 * u, 80 * u);
+      ui.text(d === 0 ? `通关第${ch.id - 1}章解锁` : `通关${DIFFICULTIES[d - 1].name}难度第${ch.id}章解锁`, ui.W / 2, oy + 160 * u, 26, '#fff');
     }
-    if (ui.clicked('chapter_story', cx + 100 * u, cy, cw - 200 * u, chH)) game.openDialog(new ChapterStoryDialog(ch.id));
+    if (ui.clicked('chapter_story', cx + 100 * u, oy, cw - 200 * u, chH - 60 * u)) game.openDialog(new ChapterStoryDialog(ch.id, d));
     // 左右切换
     const aw = 70 * u;
-    if (save.selectedChapter > 1 && ui.button('ch_prev', cx - 10 * u, cy + chH / 2 - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedChapter--; markDirty(); }
-    if (save.selectedChapter < CHAPTERS.length && ui.button('ch_next', cx + cw - aw + 10 * u, cy + chH / 2 - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedChapter++; markDirty(); }
+    if (save.selectedChapter > 1 && ui.button('ch_prev', cx - 10 * u, oy + 110 * u - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedChapter--; markDirty(); }
+    if (save.selectedChapter < CHAPTERS.length && ui.button('ch_next', cx + cw - aw + 10 * u, oy + 110 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedChapter++; markDirty(); }
 
     // 出征按钮
-    const bw = 420 * u, bh = 130 * u;
+    const bw = 400 * u, bh = 130 * u;
     const by = cy + chH + 24 * u;
-    if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id);
+    if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
+    // 无尽模式入口
+    const eo = endlessOpen();
+    const ew = 150 * u;
+    const ex = 20 * u;
+    if (ui.button('endless', ex, by, ew, bh, '无尽', eo ? C.btnPurple : C.btnGray, { size: 32, sub: eo ? (save.endlessBest ? fmtTime(save.endlessBest) : '挑战') : `通关第${ENDLESS_UNLOCK}章` })) {
+      if (!eo) ui.toast(`通关第${ENDLESS_UNLOCK}章解锁无尽模式`);
+      else this.startBattle(0, 0);
+    }
+    // 章节总览
+    if (ui.button('chapters', ui.W - ew - 20 * u, by, ew, bh, '章节', C.btnBlue, { size: 32, sub: `${save.maxCleared}/${CHAPTERS.length}` })) game.openDialog(new ChapterListDialog((c, dd) => { save.selectedChapter = c; save.selectedDiff = dd; markDirty(); }));
   }
   private startRect: [number, number, number, number] = [0, 0, 0, 0];
 
-  private startBattle(id: number) {
+  private startBattle(id: number, diff = 0) {
     if (!spendStamina()) {
       game.openDialog(new StaminaDialog());
       return;
@@ -247,7 +277,7 @@ export class HomeScene implements Scene {
     if (save.guide === 6) save.guide = 99;
     flushSave(true);
     playSfx('boss');
-    game.setScene(new BattleScene(id));
+    game.setScene(new BattleScene(id, diff));
   }
 
   // —— 装备页 ——

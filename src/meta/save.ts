@@ -51,9 +51,15 @@ export interface SaveData {
   equipped: Record<Slot, number>;
   nextUid: number;
   maxCleared: number;
-  chapterBest: Record<number, number>;
-  firstClear: Record<number, boolean>;
+  chapterBest: Record<number, number>; // 旧版字段（普通难度），迁移到 bests
+  firstClear: Record<number, boolean>; // 旧版字段，迁移到 clears
+  /** 各难度通关记录，键为 "难度-章节" */
+  clears: Record<string, boolean>;
+  bests: Record<string, number>;
   selectedChapter: number;
+  selectedDiff: number;
+  endlessBest: number;
+  endlessRuns: number;
   patrolTs: number;
   signinCount: number;
   signinDay: string;
@@ -105,6 +111,11 @@ function freshSave(): SaveData {
     chapterBest: {},
     firstClear: {},
     selectedChapter: 1,
+    clears: {},
+    bests: {},
+    selectedDiff: 0,
+    endlessBest: 0,
+    endlessRuns: 0,
     patrolTs: now,
     signinCount: 0,
     signinDay: '',
@@ -133,6 +144,11 @@ export function loadSave() {
       save.stats = Object.assign(base.stats, data.stats || {});
       save.daily = Object.assign(freshDaily(), data.daily || {});
       save.equipped = Object.assign(base.equipped, data.equipped || {});
+      // 旧存档迁移：通关记录改为按难度存储
+      if (!data.clears) {
+        for (const k in save.firstClear) if (save.firstClear[+k]) save.clears['0-' + k] = true;
+        for (const k in save.chapterBest) save.bests['0-' + k] = save.chapterBest[+k];
+      }
       // 旧存档迁移：只有赵云时等级存在 heroLv
       save.heroes = Object.assign(freshHeroes(), data.heroes || {});
       if (!data.heroes) save.heroes.zhaoyun.lv = data.heroLv || 1;

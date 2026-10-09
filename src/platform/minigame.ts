@@ -196,7 +196,7 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
         if (kind === 'wx') {
           api.setUserCloudStorage({ KVDataList: [{ key, value: JSON.stringify({ wxgame: { score: value, update_time: Math.floor(Date.now() / 1000) } }) }] });
         } else if (api.setImRankData) {
-          api.setImRankData({ dataType: 0, value: String(value), priority: 0, zoneId: 'default' });
+          api.setImRankData({ dataType: 0, value: String(value), priority: 0, zoneId: key === 'endless' ? 'endless' : 'default' });
         }
       } catch (e) {}
     },

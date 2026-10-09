@@ -160,6 +160,38 @@ export const THEMES: Record<string, GroundTheme> = {
   },
 };
 
+Object.assign(THEMES, {
+  hulao: {
+    base: '#8a7356', dark: '#76624a', light: '#a08868', accent: '#6b7a44',
+    decor: [['rock', 16], ['bigRock', 8], ['banner', 4], ['bones', 4], ['deadTree', 4], ['grass', 10], ['stumps', 3]],
+    recolor: { g: 'E', G: 'u' },
+    fog: 'rgba(40,20,10,0.4)',
+  },
+  guandu: {
+    base: '#9a8a4a', dark: '#857640', light: '#b0a05a', accent: '#6f8a3a',
+    decor: [['grass', 30], ['flowerY', 8], ['bush', 8], ['banner', 4], ['rock', 6], ['stumps', 4]],
+    recolor: { g: 'y', G: 'o', d: 'U' },
+    fog: 'rgba(40,30,0,0.3)',
+  },
+  chibi: {
+    base: '#3e4a46', dark: '#323d3a', light: '#4d5a55', accent: '#6b3a2a',
+    decor: [['reeds', 24], ['rock', 8], ['bones', 4], ['deadTree', 4], ['banner', 3], ['stumps', 4]],
+    recolor: { g: 'G', G: 'd' },
+    fog: 'rgba(60,10,0,0.45)',
+  },
+  yiling: {
+    base: '#2f4a32', dark: '#253c28', light: '#3a5a3d', accent: '#5a6a2a',
+    decor: [['pine', 16], ['tree', 14], ['bush', 14], ['grass', 20], ['rock', 4], ['flowerR', 3]],
+    fog: 'rgba(5,20,10,0.5)',
+  },
+  wuzhang: {
+    base: '#a0703a', dark: '#8a5f30', light: '#b8844a', accent: '#7a5a2a',
+    decor: [['grass', 24], ['tree', 6], ['deadTree', 6], ['rock', 8], ['banner', 3], ['stumps', 4]],
+    recolor: { g: 'o', G: 'l', Y: 'Y', d: 'U' },
+    fog: 'rgba(40,15,0,0.35)',
+  },
+});
+
 export function decorImage(name: string): PixelImage {
   switch (name) {
     case 'tree': return tree();

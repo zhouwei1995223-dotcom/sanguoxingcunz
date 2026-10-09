@@ -4,7 +4,9 @@ import type { TouchKind, TouchPoint } from '../platform/types';
 import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
-import { CHAPTERS, ChapterDef } from '../data/chapters';
+import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS } from '../data/chapters';
+import { THEMES } from '../gfx/art/env';
+import { endlessHpMul, endlessDmgMul } from '../meta/run';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, MAX_PASSIVE_LV } from '../data/skills';
 import { BossDef } from '../data/enemies';
 import { computeStats } from '../meta/ops';
@@ -33,8 +35,15 @@ export class BattleScene implements Scene {
   private autoGoldT = 0;
   paused = false;
 
-  constructor(chapterId: number) {
-    this.chapter = CHAPTERS[chapterId - 1];
+  diff: DifficultyDef;
+
+  /** chapterId 为 0 表示无尽模式 */
+  constructor(chapterId: number, diff = 0) {
+    if (chapterId === 0) {
+      const themes = Object.keys(THEMES);
+      this.chapter = { ...ENDLESS, theme: themes[(Math.random() * themes.length) | 0] };
+    } else this.chapter = CHAPTERS[chapterId - 1];
+    this.diff = DIFFICULTIES[diff] || DIFFICULTIES[0];
   }
 
   enter() {
@@ -44,6 +53,10 @@ export class BattleScene implements Scene {
     this.battle = new Battle(this.chapter, computeStats(), this.renderer.w, this.renderer.h);
     // 新手教学局降低难度
     if (save.guide === 0) { this.battle.enemyHpMul = 0.75; this.battle.enemyDmgMul = 0.6; }
+    this.battle.enemyHpMul *= this.diff.hp;
+    this.battle.enemyDmgMul *= this.diff.dmg;
+    // 无尽模式的敌人强度跟随玩家的章节进度
+    if (this.chapter.endless) { this.battle.enemyHpMul *= endlessHpMul(); this.battle.enemyDmgMul *= endlessDmgMul(); }
     this.battle.showDamage = save.settings.dmgNum;
     this.battle.hooks = {
       sfx: (n) => playSfx(n as Sfx),
@@ -53,7 +66,7 @@ export class BattleScene implements Scene {
       bossAppear: (d: BossDef) => this.onBoss(d),
     };
     playBgm('bgm_battle');
-    this.banners.push({ text: `第${this.chapter.id}章 · ${this.chapter.name}`, color: C.gold, t: 0 });
+    this.banners.push({ text: this.label, color: this.chapter.endless ? '#ff8a80' : this.diff.color, t: 0 });
   }
 
   /** 切到后台时自动暂停 */
@@ -170,6 +183,11 @@ export class BattleScene implements Scene {
     if (!blocked) this.drawJoystick();
   }
 
+  get label(): string {
+    if (this.chapter.endless) return '无尽战场';
+    return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
+  }
+
   /** 选择技能后调用 */
   choose(c: Choice) {
     this.battle.applyChoice(c);
@@ -190,8 +208,6 @@ export class BattleScene implements Scene {
     save.stats.kills += b.kills;
     save.stats.bossKills += b.bossKills;
     if (win) save.stats.wins++;
-    const best = save.chapterBest[this.chapter.id] || 0;
-    if (b.t > best) save.chapterBest[this.chapter.id] = Math.min(this.chapter.duration, Math.floor(b.t));
     markDirty();
     flushSave(true);
     game.openDialog(new ResultDialog(this, win));
@@ -208,9 +224,15 @@ export class BattleScene implements Scene {
     ui.bar(16 * u, top, bw, 30 * u, b.exp / b.expNeed, '#2ce8f5', '#1a2236');
     ui.text('Lv.' + b.level, 30 * u, top + 15 * u, 22, '#fff', 'left');
     // 计时
-    const remain = b.finalBoss ? 0 : this.chapter.duration - b.t;
-    ui.text(b.finalBoss ? '击败敌将' : fmtTime(Math.max(0, remain)), ui.W / 2, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
-    ui.text(`第${this.chapter.id}章 ${this.chapter.name}`, ui.W / 2, top + 108 * u, 20, C.textDim);
+    if (this.chapter.endless) {
+      // 无尽模式：正计时，显示最佳记录
+      ui.text(fmtTime(b.t), ui.W / 2, top + 70 * u, 40, b.t > save.endlessBest && save.endlessBest > 0 ? C.gold : '#fff');
+      ui.text(`无尽战场 · 最佳 ${fmtTime(save.endlessBest)}`, ui.W / 2, top + 108 * u, 20, C.textDim);
+    } else {
+      const remain = b.finalBoss ? 0 : this.chapter.duration - b.t;
+      ui.text(b.finalBoss ? '击败敌将' : fmtTime(Math.max(0, remain)), ui.W / 2, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
+      ui.text(this.label, ui.W / 2, top + 108 * u, 20, this.diff.id ? this.diff.color : C.textDim);
+    }
     // 击杀与金币
     ui.icon('skull', 36 * u, top + 62 * u, 32 * u);
     ui.text(fmtNum(b.kills), 60 * u, top + 62 * u, 26, '#fff', 'left');

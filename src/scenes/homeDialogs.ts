@@ -12,7 +12,8 @@ import {
   SIGNIN, DAILY_TASKS, ACTIVITY_REWARDS, PATROL, EQUIP_BY_ID, QUALITY_NAMES, QUALITY_COLORS, QUALITY_MAX_LV, STAT_NAMES,
   PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES,
 } from '../data/meta';
-import { CHAPTERS } from '../data/chapters';
+import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
+import { isCleared, getBest, chapterOpen } from '../meta/run';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
@@ -419,6 +420,7 @@ export class TextDialog implements Dialog {
 
 export class RankDialog implements Dialog {
   t?: number;
+  private key: 'score' | 'endless' = 'score';
   private requested = false;
   draw(ui: UI) {
     const u = ui.u;
@@ -431,24 +433,31 @@ export class RankDialog implements Dialog {
     ui.text(`我的最佳：${ch >= 1 ? `通关第${ch}章` : '未通关'}${sec ? ` · 第${Math.min(5, ch + 1)}章坚守${fmtTime(sec)}` : ''}`, ui.W / 2, f.y + 80 * u, 22, C.gold);
     if (p.name === 'wx') {
       const shared = p.getSharedCanvas();
+      const tbw = 200 * u;
+      (['score', 'endless'] as const).forEach((k, i) => {
+        if (ui.button('rk_tab_' + k, ui.W / 2 - tbw - 10 * u + i * (tbw + 20 * u), f.y + 110 * u, tbw, 64 * u, k === 'score' ? '闯关榜' : '无尽榜', this.key === k ? C.btnGold : C.btnGray, { size: 24 })) { this.key = k; this.requested = false; }
+      });
       if (!this.requested) {
         this.requested = true;
-        if (shared) { shared.width = Math.round(w - 80 * u); shared.height = Math.round(h - 200 * u); }
-        p.postToOpenData({ type: 'rank', key: 'score', width: Math.round(w - 80 * u), height: Math.round(h - 200 * u) });
+        if (shared) { shared.width = Math.round(w - 80 * u); shared.height = Math.round(h - 280 * u); }
+        p.postToOpenData({ type: 'rank', key: this.key, width: Math.round(w - 80 * u), height: Math.round(h - 280 * u) });
       }
-      if (shared) ui.ctx.drawImage(shared, f.x + 40 * u, f.y + 120 * u);
+      if (shared) ui.ctx.drawImage(shared, f.x + 40 * u, f.y + 200 * u);
     } else if (p.name === 'tt') {
       ui.text('排行榜由抖音提供', ui.W / 2, f.y + 200 * u, 24, '#fff4d6');
       if (ui.button('rk_open', ui.W / 2 - 180 * u, f.y + 260 * u, 360 * u, 96 * u, '查看好友排行', C.btnGold)) p.showNativeRank();
     } else {
-      // 浏览器：展示本地各章战绩
-      let y = f.y + 150 * u;
-      for (const c of CHAPTERS) {
-        const best = save.chapterBest[c.id] || 0;
-        ui.pixRect(f.x + 40 * u, y, w - 80 * u, 90 * u, '#4a3630');
-        ui.text(`第${c.id}章 ${c.name}`, f.x + 70 * u, y + 45 * u, 26, '#fff4d6', 'left');
-        ui.text(save.firstClear[c.id] ? '已通关' : best ? `坚守 ${fmtTime(best)}` : '—', f.x + w - 70 * u, y + 45 * u, 24, save.firstClear[c.id] ? '#9be37a' : C.textDim, 'right');
-        y += 104 * u;
+      // 浏览器：展示本地战绩
+      let y = f.y + 130 * u;
+      ui.text(`无尽模式最佳：${save.endlessBest ? fmtTime(save.endlessBest) : '—'}`, ui.W / 2, y, 26, '#dc9be9');
+      y += 40 * u;
+      for (const df of DIFFICULTIES) {
+        let n = 0;
+        for (const c of CHAPTERS) if (isCleared(df.id, c.id)) n++;
+        ui.pixRect(f.x + 40 * u, y, w - 80 * u, 80 * u, '#4a3630');
+        ui.text(`${df.name}难度`, f.x + 70 * u, y + 40 * u, 26, df.color, 'left');
+        ui.text(`已通关 ${n}/${CHAPTERS.length} 章`, f.x + w - 70 * u, y + 40 * u, 24, '#fff', 'right');
+        y += 94 * u;
       }
       ui.text('好友排行榜在微信 / 抖音小游戏中可用', ui.W / 2, y + 30 * u, 20, C.textDim);
     }
@@ -482,10 +491,11 @@ export class SidebarDialog implements Dialog {
 
 export class ChapterStoryDialog implements Dialog {
   t?: number;
-  constructor(private id: number) {}
+  constructor(private id: number, private d = 0) {}
   draw(ui: UI) {
     const u = ui.u;
     const ch = CHAPTERS[this.id - 1];
+    const diff = DIFFICULTIES[this.d];
     const w = ui.W - 70 * u, h = 900 * u;
     const f = dialogFrame(ui, w, h, `第${ch.id}章 ${ch.name}`, this.t, 'cs_close');
     if (f.close) return false;
@@ -494,6 +504,7 @@ export class ChapterStoryDialog implements Dialog {
     ui.wrapText(ch.story, f.x + 70 * u, y + 20 * u, w - 140 * u, 24, '#3e2731');
     y += 290 * u;
     ui.text('敌军将领', f.x + 50 * u, y, 26, C.gold, 'left');
+    ui.text(`当前难度：${diff.name}（敌军生命×${diff.hp}）`, f.x + w - 50 * u, y, 20, diff.color, 'right');
     y += 30 * u;
     [ch.midBoss, ch.boss].forEach((bid, i) => {
       const b = BOSSES[bid];
@@ -505,8 +516,45 @@ export class ChapterStoryDialog implements Dialog {
       ui.text(i ? '10:00 出现' : '05:00 出现', x + 180 * u, y + 126 * u, 18, '#ff8a80', 'left');
     });
     y += 200 * u;
-    ui.text('首通奖励：元宝×' + 100 * ch.id + ' + ' + ['优良', '精良', '精良', '史诗', '史诗'][ch.id - 1] + '装备', ui.W / 2, y, 22, save.firstClear[ch.id] ? '#888' : '#9be37a');
+    const qn = ['普通', '优良', '精良', '史诗', '传说', '神话'];
+    const q = Math.min(5, [1, 2, 2, 3, 3, 3, 4, 4, 4, 5][ch.id - 1] + this.d);
+    const extra = this.d === 0 && ch.id === 2 ? ' + 武将关羽' : ch.id >= 3 || this.d > 0 ? ` + 武将碎片×${10 + this.d * 5}` : '';
+    ui.text(`首通奖励：元宝×${100 * ch.id * (1 + this.d)} + ${qn[q]}装备${extra}`, ui.W / 2, y, 22, isCleared(this.d, ch.id) ? '#888' : '#9be37a');
     ui.text('坚守10分钟并击败敌军主将即可通关', ui.W / 2, y + 50 * u, 22, C.textDim);
+  }
+}
+
+/** 章节总览：所有章节在三个难度下的进度 */
+export class ChapterListDialog implements Dialog {
+  t?: number;
+  constructor(private onPick: (c: number, d: number) => void) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const w = ui.W - 40 * u, h = ui.H - 240 * u - ui.safeTop;
+    const f = dialogFrame(ui, w, h, '章节总览', this.t, 'cl_close');
+    if (f.close) return false;
+    const top = f.y + 70 * u;
+    const rowH = 120 * u;
+    const off = ui.beginScroll('chapter_list', f.x + 20 * u, top, w - 40 * u, h - 100 * u, CHAPTERS.length * (rowH + 10 * u) + 10 * u);
+    let picked = false;
+    CHAPTERS.forEach((ch, i) => {
+      const y = top + i * (rowH + 10 * u) + off;
+      ui.pixRect(f.x + 30 * u, y, w - 60 * u, rowH, '#4a3630');
+      ui.text(`${ch.id}. ${ch.name}`, f.x + 54 * u, y + 36 * u, 28, chapterOpen(ch.id, 0) ? '#fff4d6' : '#777', 'left');
+      ui.text(ch.subtitle, f.x + 54 * u, y + 80 * u, 20, C.textDim, 'left');
+      DIFFICULTIES.forEach((df, k) => {
+        const bx = f.x + w - 60 * u - (3 - k) * 116 * u, bw = 106 * u;
+        const open = chapterOpen(ch.id, df.id);
+        const done = isCleared(df.id, ch.id);
+        ui.pixRect(bx, y + 16 * u, bw, rowH - 32 * u, open ? (done ? df.color : '#231917') : '#1a1414');
+        ui.text(df.name, bx + bw / 2, y + 44 * u, 20, done ? '#1a1210' : open ? df.color : '#555', 'center', null);
+        const best = getBest(df.id, ch.id);
+        ui.text(done ? '✓' : open ? (best ? fmtTime(best) : '—') : '未解锁', bx + bw / 2, y + 78 * u, 18, done ? '#1a1210' : open ? '#fff' : '#555', 'center', null);
+        if (open && ui.clicked(`cl_${ch.id}_${df.id}`, bx, y + 16 * u, bw, rowH - 32 * u)) { this.onPick(ch.id, df.id); picked = true; }
+      });
+    });
+    ui.endScroll();
+    if (picked) return false;
   }
 }
 

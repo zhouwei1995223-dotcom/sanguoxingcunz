@@ -2,11 +2,17 @@
 const sharedCanvas = wx.getSharedCanvas();
 const ctx = sharedCanvas.getContext('2d');
 
+const DIFF = ['普通', '困难', '噩梦'];
+let currentKey = 'score';
+function mmss(sec) {
+  return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+}
 function fmtScore(score) {
-  const ch = Math.floor(score / 10000), sec = score % 10000;
-  const mm = String(Math.floor(sec / 60)).padStart(2, '0'), ss = String(sec % 60).padStart(2, '0');
-  if (ch >= 5) return '全部通关';
-  return (ch >= 1 ? '通关第' + ch + '章 ' : '') + '第' + (ch + 1) + '章 ' + mm + ':' + ss;
+  if (currentKey === 'endless') return '坚持 ' + mmss(score);
+  const idx = Math.floor(score / 10000), sec = score % 10000;
+  const d = Math.min(2, Math.floor(idx / 10)), ch = idx % 10;
+  if (idx >= 30) return '噩梦全通';
+  return DIFF[d] + ' 通关' + ch + '章' + (sec ? ' · ' + mmss(sec) : '');
 }
 
 function draw(list, w, h) {
@@ -45,6 +51,7 @@ function draw(list, w, h) {
 wx.onMessage((msg) => {
   if (!msg || msg.type !== 'rank') return;
   const w = msg.width || sharedCanvas.width, h = msg.height || sharedCanvas.height;
+  currentKey = msg.key || 'score';
   wx.getFriendCloudStorage({
     keyList: [msg.key || 'score'],
     success: (res) => {

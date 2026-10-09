@@ -8,7 +8,7 @@ import type { Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, MAX_PASSIVE_LV } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
-import { settleRun, RunResult } from '../meta/run';
+import { settleRun, settleEndless, RunResult } from '../meta/run';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
 import { fmtTime, easeOutBack, fmtNum } from '../core/math';
@@ -181,7 +181,7 @@ export class PauseDialog implements Dialog {
     const f = dialogFrame(ui, w, h, '暂停', this.t);
     let y = f.y + 70 * u;
     const x = f.x + 40 * u;
-    ui.text(`第${b.chapter.id}章 ${b.chapter.name}   ${fmtTime(b.t)}   击败 ${fmtNum(b.kills)}`, ui.W / 2, y, 24, C.textDim);
+    ui.text(`${this.scene.label}   ${fmtTime(b.t)}   击败 ${fmtNum(b.kills)}`, ui.W / 2, y, 24, C.textDim);
     y += 46 * u;
     ui.text('武器', x, y, 26, C.gold, 'left');
     y += 30 * u;
@@ -313,7 +313,9 @@ export class ResultDialog implements Dialog {
   t?: number;
   constructor(private scene: BattleScene, private win: boolean) {
     const b = scene.battle;
-    this.res = settleRun(b.chapter, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
+    this.res = b.chapter.endless
+      ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
+      : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
     if (save.guide === 0) save.guide = 1;
     markDirty();
     flushSave(true);
@@ -327,9 +329,10 @@ export class ResultDialog implements Dialog {
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
+    else if (this.res.endless) ui.text(this.res.newBest ? `新纪录！坚持 ${fmtTime(b.t)}` : `最佳纪录 ${fmtTime(this.res.best || 0)}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');
     y += 60 * u;
-    ui.text(`第${b.chapter.id}章 · ${b.chapter.name}`, ui.W / 2, y, 26, C.textDim);
+    ui.text(this.scene.label, ui.W / 2, y, 26, this.scene.diff.id ? this.scene.diff.color : C.textDim);
     y += 60 * u;
     const rows: [string, string][] = [['坚守时间', fmtTime(b.t)], ['击败敌军', fmtNum(b.kills)], ['武将等级', 'Lv.' + b.level], ['斩获敌将', String(b.bossKills)]];
     rows.forEach((r, i) => {

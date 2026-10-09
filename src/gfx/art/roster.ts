@@ -17,6 +17,16 @@ export const SOLDIER_STYLES: Record<string, SoldierStyle> = {
   // 西凉羌兵（韩德部，紫黑）
   qiang_spear: { helm: 'm', helmDark: 'z', armor: 'M', armorDark: 'm', pants: 'z', weapon: 'spear', plume: 'Y', skin: 'E' },
   qiang_club: { helm: 'z', helmDark: 'k', armor: 'm', armorDark: 'z', pants: 'k', weapon: 'club', headband: 'M', skin: 'E' },
+  // 袁绍军（金甲）
+  yuan_spear: { helm: 'y', helmDark: 'o', armor: 'Y', armorDark: 'y', pants: 'U', weapon: 'spear', plume: 'R' },
+  yuan_shield: { helm: 'o', helmDark: 'U', armor: 'y', armorDark: 'o', pants: 'z', weapon: 'shield' },
+  yuan_archer: { helm: 'U', helmDark: 'z', armor: 'p', armorDark: 'E', pants: 'U', weapon: 'bow', headband: 'y' },
+  // 东吴军（赤甲）
+  wu_spear: { helm: 'R', helmDark: 'r', armor: 'R', armorDark: 'r', pants: 'z', weapon: 'spear', plume: 'Y' },
+  wu_shield: { helm: 'r', helmDark: 'z', armor: 'r', armorDark: 'z', pants: 'k', weapon: 'shield' },
+  wu_archer: { helm: 'l', helmDark: 'r', armor: 'L', armorDark: 'l', pants: 'z', weapon: 'bow', headband: 'R' },
+  // 西凉重甲（董卓部）
+  xl_heavy: { helm: 'm', helmDark: 'z', armor: 'z', armorDark: 'k', pants: 'k', weapon: 'club', plume: 'R', big: true },
   // 魏国精锐（黑金）
   elite_guard: { helm: 'K', helmDark: 'k', armor: 'K', armorDark: 'k', pants: 'k', weapon: 'halberd', plume: 'y', big: true },
 };
@@ -26,7 +36,19 @@ export const GENERAL_STYLES: Record<string, GeneralStyle> = {
   wei_cavalry: { horse: 'brown', colors: { R: 'B', r: 'b', S: 'b', w: 'B', G: 'n', g: 'N', n: 'K', y: 'U' }, cloth: 'n', trim: 'U', weapon: 'spear' },
   tiger_cavalry: { horse: 'black', colors: { R: 'y', r: 'o', S: 'K', w: 'n', G: 'k', g: 'K', n: 'k', y: 'y' }, cloth: 'k', trim: 'y', weapon: 'halberd' },
   qiang_cavalry: { horse: 'brown', colors: { R: 'Y', r: 'y', S: 'm', w: 'M', G: 'z', g: 'm', n: 'z', y: 'U', q: 'E' }, cloth: 'm', trim: 'y', weapon: 'spear' },
+  yuan_cavalry: { horse: 'gold', colors: { R: 'R', r: 'r', S: 'y', w: 'Y', G: 'o', g: 'y', n: 'U', y: 'R' }, cloth: 'y', trim: 'R', weapon: 'spear' },
+  wu_cavalry: { horse: 'brown', colors: { R: 'Y', r: 'y', S: 'R', w: 'f', G: 'r', g: 'R', n: 'z' }, cloth: 'R', trim: 'y', weapon: 'spear' },
   // 武将
+  huaxiong: { horse: 'black', colors: { R: 'R', r: 'r', S: 'm', w: 'M', G: 'z', g: 'm', n: 'k', q: 'E' }, cloth: 'm', trim: 'R', weapon: 'blade', weaponColor: 'S' },
+  dongzhuo: { horse: 'black', colors: { R: 'Y', r: 'y', S: 'z', w: 'U', G: 'm', g: 'M', n: 'k', q: 'E' }, cloth: 'k', trim: 'y', weapon: 'club' },
+  yanliang: { horse: 'gold', colors: { R: 'R', r: 'r', S: 'o', w: 'y', G: 'U', g: 'o', n: 'z' }, cloth: 'o', trim: 'R', weapon: 'blade' },
+  wenchou: { horse: 'black', colors: { R: 'y', r: 'o', S: 'U', w: 'u', G: 'z', g: 'U', n: 'k', q: 'E' }, cloth: 'U', trim: 'y', weapon: 'spear' },
+  caimao: { horse: 'brown', colors: { R: 'c', r: 'B', S: 'b', w: 'B', G: 't', g: 'b', n: 'K' }, cloth: 'b', trim: 'c', weapon: 'fork' },
+  caocao: { horse: 'gold', colors: { R: 'R', r: 'r', S: 'K', w: 'y', G: 'b', g: 'B', n: 'k' }, cloth: 'K', trim: 'Y', weapon: 'sword', weaponColor: 'Y' },
+  zhuran: { horse: 'brown', colors: { R: 'Y', r: 'y', S: 'r', w: 'R', G: 'z', g: 'r', n: 'k' }, cloth: 'r', trim: 'y', weapon: 'spear' },
+  luxun: { horse: 'white', colors: { R: 'R', r: 'r', S: 'w', w: 'R', G: 'r', g: 'R', n: 'U' }, cloth: 'R', trim: 'w', weapon: 'sword', weaponColor: 'o' },
+  guohuai: { horse: 'brown', colors: { R: 'B', r: 'b', S: 'N', w: 'S', G: 'b', g: 'B', n: 'K' }, cloth: 'b', trim: 'S', weapon: 'halberd' },
+  simayi: { horse: 'black', colors: { R: 'M', r: 'm', S: 'K', w: 'm', G: 'k', g: 'm', n: 'k' }, cloth: 'm', trim: 'M', weapon: 'fork', weaponColor: 'M' },
   xiahouen: { horse: 'brown', colors: { R: 'B', r: 'b', S: 'B', w: 'c', G: 'b', g: 'B', n: 'n' }, cloth: 'b', trim: 'y', weapon: 'sword', weaponColor: 'c' },
   caochun: { horse: 'black', colors: { R: 'y', r: 'o', S: 'K', w: 'N', G: 'k', g: 'r', n: 'k' }, cloth: 'r', trim: 'y', weapon: 'halberd' },
   chenying: { horse: 'brown', colors: { R: 'y', r: 'U', S: 'l', w: 'L', G: 'U', g: 'u', n: 'z' }, cloth: 'l', trim: 'y', weapon: 'fork' },

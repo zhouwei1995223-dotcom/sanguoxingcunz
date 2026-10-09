@@ -256,7 +256,9 @@ export class Battle {
     const e = newEnemy();
     const ch = this.chapter;
     const minute = this.t / 60;
-    const hpScale = ch.hpMul * (1 + ch.growth * minute) * this.enemyHpMul;
+    // 无尽模式：二次曲线成长，后期压力越来越大
+    const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute;
+    const hpScale = ch.hpMul * grow * this.enemyHpMul;
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -264,7 +266,7 @@ export class Battle {
     e.r = d.radius;
     e.maxHp = e.hp = Math.round(d.hp * hpScale * (opts.elite ? 14 : 1));
     e.speed = d.speed * rand(0.92, 1.08) * (opts.elite ? 0.9 : 1);
-    e.dmg = d.dmg * ch.dmgMul * (1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
+    e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + 0.012 * minute * minute : 1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
     e.exp = d.exp * (opts.elite ? 20 : 1);
     e.sprite = 'u_' + d.sprite;
@@ -275,7 +277,7 @@ export class Battle {
     return e;
   }
 
-  spawnBoss(id: string, x: number, y: number, isFinal: boolean): Enemy {
+  spawnBoss(id: string, x: number, y: number, isFinal: boolean, hpScale = 1): Enemy {
     const d = BOSSES[id];
     const e = newEnemy();
     e.uid = this.uidSeq++;
@@ -284,7 +286,7 @@ export class Battle {
     e.x = x;
     e.y = y;
     e.r = d.radius;
-    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul);
+    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale);
     e.speed = d.speed;
     e.dmg = d.dmg * this.enemyDmgMul;
     e.mass = 50;

@@ -1,11 +1,12 @@
 // 无界面战斗模拟：自动走位 + 自动选技能，用于检验数值平衡与稳定性
 // 用法：npm run sim -- [章节] [攻击] [生命] [次数]
 import { Battle } from '../src/battle/battle';
-import { CHAPTERS } from '../src/data/chapters';
+import { CHAPTERS, DIFFICULTIES, ENDLESS } from '../src/data/chapters';
+import { resetSpawner } from '../src/battle/spawner';
 import type { HeroStats } from '../src/meta/ops';
 
 const args = process.argv.slice(2).map(Number);
-const chId = args[0] || 1;
+const chId = Number.isNaN(args[0]) ? 1 : args[0];
 const atk = args[1] || 20;
 const hp = args[2] || 120;
 const runs = args[3] || 3;
@@ -15,14 +16,18 @@ function stats(): HeroStats {
 }
 
 for (let r = 0; r < runs; r++) {
-  const b = new Battle(CHAPTERS[chId - 1], stats(), 280, 560);
+  resetSpawner();
+  const b = new Battle(chId === 0 ? ENDLESS : CHAPTERS[chId - 1], stats(), 280, 560);
+  const D = DIFFICULTIES[Number(process.env.DIFF || 0)];
+  b.enemyHpMul *= D.hp; b.enemyDmgMul *= D.dmg;
+  if (chId === 0) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
   if (process.env.EASY) { b.enemyHpMul = 0.75; b.enemyDmgMul = 0.6; }
   const dt = 1 / 30;
   let ang = 0;
   const log: string[] = [];
   let maxEnemies = 0;
   const t0 = Date.now();
-  while (!b.dead && !b.won && b.t < 720) {
+  while (!b.dead && !b.won && b.t < (chId === 0 ? 3600 : 720)) {
     // 走位：危险时躲避，安全时去捡经验、贴近敌人输出
     let fx = 0, fy = 0, danger = 0;
     let nearest = 1e9, nx = 0, ny = 0;

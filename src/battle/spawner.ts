@@ -1,6 +1,6 @@
 import { lerp, rand, weighted, TAU } from '../core/math';
 import { ENEMIES } from '../data/enemies';
-import type { ChapterEvent } from '../data/chapters';
+import { ChapterEvent, ENDLESS_POOLS } from '../data/chapters';
 import type { Battle } from './battle';
 
 // 刷怪：按时间轴维持场上敌人密度 + 触发特殊事件
@@ -8,9 +8,57 @@ import type { Battle } from './battle';
 const MAX_ENEMIES = 380;
 let breakableT = 20;
 
+// 无尽模式的事件计时
+const ENDLESS_BOSSES = ['xiahouen', 'chenying', 'xuhuang', 'hanying', 'suyong', 'huaxiong', 'yanliang', 'caimao', 'zhuran', 'guohuai', 'caochun', 'baolong', 'zhanghe', 'hande', 'caozhen'];
+let et = { elite: 60, ring: 100, stampede: 130, swarm: 75, lantern: 40, boss: 180, bossIdx: 0 };
+
+function updateEndless(b: Battle, dt: number) {
+  const t = b.t, m = t / 60;
+  let pool = ENDLESS_POOLS[0].pool;
+  for (const p of ENDLESS_POOLS) if (t >= p.from) pool = p.pool;
+  const density = Math.min(300, 18 + m * 20);
+  b.spawnT -= dt;
+  if (b.spawnT <= 0) {
+    b.spawnT = 0.42;
+    let alive = 0;
+    for (const e of b.enemies) if (!e.dead && !e.boss && !e.fixedDir) alive++;
+    const need = density - alive;
+    if (need > 0 && b.enemies.length < MAX_ENEMIES) {
+      const n = Math.min(Math.ceil(need), 2 + Math.floor(density / 25));
+      for (let i = 0; i < n; i++) { const [x, y] = b.spawnPoint(); b.spawnEnemy(weighted(pool, (x2) => x2[1])[0], x, y); }
+    }
+  }
+  const fire = (key: 'elite' | 'ring' | 'stampede' | 'swarm' | 'lantern' | 'boss', every: number, ev: ChapterEvent) => {
+    et[key] -= dt;
+    if (et[key] > 0) return;
+    et[key] = every;
+    runEvent(b, ev);
+  };
+  const strong = t > 420;
+  fire('elite', 60, { t, type: 'elite', enemy: strong ? 'elite_guard' : 'wei_heavy', count: 1 + Math.floor(m / 4) });
+  fire('ring', 100, { t, type: 'ring', enemy: strong ? 'wu_shield' : 'wei_spear', count: Math.min(80, 30 + Math.floor(m * 3)), text: '四面伏兵！' });
+  fire('stampede', 130, { t, type: 'stampede', enemy: strong ? 'tiger_cavalry' : 'wei_cavalry', count: Math.min(30, 12 + Math.floor(m)), text: '骑兵冲阵！' });
+  fire('swarm', 75, { t, type: 'swarm', enemy: 'bandit', count: Math.min(60, 20 + Math.floor(m * 2)), text: '流寇来袭！' });
+  fire('lantern', 45, { t, type: 'lanterns' });
+  et.boss -= dt;
+  if (et.boss <= 0) {
+    et.boss = 180;
+    const id = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
+    et.bossIdx++;
+    const [x, y] = b.spawnPoint();
+    // 首领血量随时间成长
+    b.spawnBoss(id, x, y, false, 0.4 + m * 0.12);
+  }
+}
+
 export function updateSpawner(b: Battle, dt: number) {
   const ch = b.chapter;
   const t = b.t;
+  if (ch.endless) {
+    updateEndless(b, dt);
+    breakableT -= dt;
+    return;
+  }
   while (b.eventIdx < ch.events.length && ch.events[b.eventIdx].t <= t) {
     runEvent(b, ch.events[b.eventIdx]);
     b.eventIdx++;
@@ -116,5 +164,6 @@ function runEvent(b: Battle, ev: ChapterEvent) {
 }
 
 export function resetSpawner() {
+  et = { elite: 60, ring: 100, stampede: 130, swarm: 75, lantern: 40, boss: 180, bossIdx: 0 };
   breakableT = 20;
 }
