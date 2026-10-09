@@ -354,12 +354,18 @@ export class BattleScene implements Scene {
     }
 
     this.drawOffscreenArrows();
+    if (this.chestAlertT > 0) {
+      this.chestAlertT -= dt;
+      ui.ctx.globalAlpha = clamp(this.chestAlertT / 0.4, 0, 1);
+      ui.text('宝箱掉落！跟着金色箭头去拾取', ui.W / 2, ui.safeTop + 230 * u, 26, '#fee761');
+      ui.ctx.globalAlpha = 1;
+    }
     this.drawCombo(dt);
     this.drawUltButton();
 
     // 新手提示
     if (save.guide === 0 && this.tutorialT < 9 && !game.dialogs.length) {
-      guideHint(ui, this.tutorialT < 4.5 ? '按住屏幕任意位置拖动，控制赵云移动' : '赵云会自动攻击，拾取蓝色宝石升级', ui.H * 0.72);
+      guideHint(ui, this.tutorialT < 4.5 ? `按住屏幕任意位置拖动，控制${this.battle.hero.name}移动` : `${this.battle.hero.name}会自动攻击，拾取蓝色宝石升级`, ui.H * 0.72);
     }
   }
 
@@ -449,32 +455,49 @@ export class BattleScene implements Scene {
   }
 
   /** 屏幕外的磁石 / 宝箱 / 包子：在屏幕边缘画箭头 */
+  private seenChests = new WeakSet<object>();
+  private chestAlertT = 0;
+
   private drawOffscreenArrows() {
     const ui = game.ui;
     const u = ui.u;
     const g = ui.ctx;
-    const m = 60 * u;
+    const m = 72 * u;
     const top = ui.safeTop + 260 * u;
+    // 箭头不能落进底部大招按钮区域
+    const bottom = ui.H - ui.safeBottom - 440 * u;
     for (const k of this.battle.pickups) {
       if (k.kind !== 'magnet' && k.kind !== 'chest' && k.kind !== 'bun') continue;
+      if (k.kind === 'chest' && !this.seenChests.has(k)) {
+        this.seenChests.add(k);
+        this.chestAlertT = 2.2;
+      }
       const [sx, sy] = this.renderer.worldToScreen(k.x, k.y);
       if (sx > 0 && sx < ui.W && sy > top && sy < ui.H) continue;
       const cx = ui.W / 2, cy = ui.H / 2;
       const dx = sx - cx, dy = sy - cy;
       const kx = (ui.W / 2 - m) / Math.abs(dx || 1e-6), ky = (ui.H / 2 - m - 140 * u) / Math.abs(dy || 1e-6);
       const kk = Math.min(kx, ky);
-      const ax = cx + dx * kk, ay = Math.max(top, cy + dy * kk);
-      const a = Math.atan2(dy, dx);
+      const ax = cx + dx * kk, ay = clamp(cy + dy * kk, top, bottom);
+      const a = Math.atan2(sy - ay, sx - ax);
       const bob = Math.sin(ui.time * 6) * 6 * u;
+      const chest = k.kind === 'chest';
+      const s = chest ? 1.35 : 1;
       g.save();
       g.translate(ax + Math.cos(a) * bob, ay + Math.sin(a) * bob);
+      if (chest) {
+        // 宝箱：金色脉动光圈，比包子、磁石更醒目
+        g.strokeStyle = `rgba(254,231,97,${0.5 + 0.4 * Math.sin(ui.time * 8)})`;
+        g.lineWidth = 4 * u;
+        g.beginPath(); g.arc(0, 0, 44 * u + 4 * u * Math.sin(ui.time * 8), 0, Math.PI * 2); g.stroke();
+      }
       g.fillStyle = 'rgba(12,8,16,0.7)';
-      g.beginPath(); g.arc(0, 0, 36 * u, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(0, 0, 36 * u * s, 0, Math.PI * 2); g.fill();
       g.rotate(a);
       g.fillStyle = k.kind === 'magnet' ? '#2ce8f5' : '#fee761';
-      g.beginPath(); g.moveTo(48 * u, 0); g.lineTo(32 * u, -12 * u); g.lineTo(32 * u, 12 * u); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(48 * u * s, 0); g.lineTo(32 * u * s, -12 * u * s); g.lineTo(32 * u * s, 12 * u * s); g.closePath(); g.fill();
       g.restore();
-      ui.icon(k.kind === 'chest' ? (k.boss ? 'chest_gold' : 'chest') : k.kind, ax + Math.cos(a) * bob, ay + Math.sin(a) * bob, 44 * u);
+      ui.icon(chest ? (k.boss ? 'chest_gold' : 'chest') : k.kind, ax + Math.cos(a) * bob, ay + Math.sin(a) * bob, 44 * u * s);
     }
   }
 

@@ -332,23 +332,33 @@ export function collectPatrol(mul = 1) {
 export interface ChestResult {
   item: EquipItem;
   shards?: { hero: string; n: number };
+  /** 名将宝匣开出整将（已拥有则转为碎片） */
+  hero?: { id: string; got: 'new' | 'shards' };
 }
 
+/** 名将宝匣：每次开启出整将的概率 */
+export const GOLD_CHEST_HERO_RATE = 0.05;
+
 export function openChest(def: ChestDef): ChestResult {
-  let q = weighted([0, 1, 2, 3, 4, 5], (i) => def.weights[i]);
-  if (def.pity) {
-    save.goldChestCount++;
-    if (q >= 3) save.goldChestCount = 0;
-    else if (save.goldChestCount >= def.pity) { q = 3; save.goldChestCount = 0; }
-  }
+  const q = weighted([0, 1, 2, 3, 4, 5], (i) => def.weights[i]);
   progressTask('chest', 1);
   getPlatform().report('chest_open', { chest: def.id });
   const item = newItem(randomItemTemplate(), q);
   let shards: ChestResult['shards'];
-  if (def.id === 'gold') shards = { hero: randomShardHero(true), n: 5 + Math.floor(Math.random() * 6) };
-  else if (Math.random() < 0.4) shards = { hero: randomShardHero(false), n: 2 + Math.floor(Math.random() * 3) };
+  let hero: ChestResult['hero'];
+  if (def.id === 'gold') {
+    // 名将宝匣以武将为主：概率直接出整将，N 次保底；否则必出大量武将碎片
+    save.goldChestCount++;
+    if (Math.random() < GOLD_CHEST_HERO_RATE || (def.pity && save.goldChestCount >= def.pity)) {
+      save.goldChestCount = 0;
+      const notOwned = Object.keys(save.heroes).filter((id) => !save.heroes[id].owned);
+      let id = randomShardHero(true);
+      if (notOwned.length && save.heroes[id].owned) id = notOwned[Math.floor(Math.random() * notOwned.length)];
+      hero = { id, got: grantHero(id) };
+    } else shards = { hero: randomShardHero(true), n: 8 + Math.floor(Math.random() * 8) };
+  } else if (Math.random() < 0.4) shards = { hero: randomShardHero(false), n: 2 + Math.floor(Math.random() * 3) };
   if (shards) grantShards(shards.hero, shards.n);
-  return { item, shards };
+  return { item, shards, hero };
 }
 
 export function chestById(id: string) {

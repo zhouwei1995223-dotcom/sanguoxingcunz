@@ -248,11 +248,11 @@ export interface ChestDef {
   cost: number; // 元宝
   adDaily: number; // 每日看广告免费次数
   weights: number[]; // 各品质权重
-  pity?: number; // 保底：每 N 次必出史诗
+  pity?: number; // 保底：每 N 次必出武将（名将宝匣）
 }
 export const CHESTS: ChestDef[] = [
   { id: 'wood', name: '军资箱', icon: 'chest', cost: 60, adDaily: 3, weights: [60, 32, 8, 0, 0, 0] },
-  { id: 'gold', name: '名将宝匣', icon: 'chest_gold', cost: 300, adDaily: 1, weights: [0, 50, 38, 11, 1, 0], pity: 10 },
+  { id: 'gold', name: '名将宝匣', icon: 'chest_gold', cost: 300, adDaily: 1, weights: [0, 50, 38, 11, 1, 0], pity: 15 },
 ];
 
 // —— 七日签到 ——

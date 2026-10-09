@@ -103,7 +103,7 @@ export class UI {
       this.pressedId = r ? r.id : null;
       this.activeScroll = null;
       const sr = this.hit(t.x, t.y, true);
-      if (sr) { this.activeScroll = sr.id; const s = this.scrolls[sr.id]; if (s) s.vel = 0; }
+      if (sr) { this.activeScroll = sr.id.slice('scroll:'.length); const s = this.scrolls[this.activeScroll]; if (s) s.vel = 0; }
       this.lastMoveY = t.y;
       this.lastMoveT = this.time;
     } else {

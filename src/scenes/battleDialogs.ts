@@ -246,7 +246,7 @@ export class ReviveDialog implements Dialog {
     const w = ui.W - 100 * u, h = 640 * u;
     const f = dialogFrame(ui, w, h, '力竭', this.t);
     const left = Math.max(0, 10 - (this.t || 0));
-    ui.text('赵云力竭倒地……是否再战？', ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
+    ui.text(`${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
     ui.icon('revive', ui.W / 2, f.y + 230 * u, 140 * u);
     ui.text(String(Math.ceil(left)), ui.W / 2, f.y + 230 * u, 48, '#fff');
     let y = f.y + 340 * u;

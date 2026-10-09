@@ -52,7 +52,7 @@ export const WEAPONS = {
     evo: { dmg: 3.4, cd: 0.75, count: 7, area: 82, knock: 90, desc: '七向连环重刺，所向披靡' },
   },
   sword: {
-    id: 'sword', name: '青釭剑', icon: 'w_sword', evoName: '青釭剑阵', evoIcon: 'w_sword_evo', evoPassive: 'flag',
+    id: 'sword', name: '青锋剑', icon: 'w_sword', evoName: '万剑归宗', evoIcon: 'w_sword_evo', evoPassive: 'flag',
     intro: '飞剑环绕自身旋转，切割靠近的敌人',
     levels: [
       { dmg: 1.0, cd: 3.0, count: 1, area: 34, duration: 3, speed: 3.6, knock: 12, desc: '一柄飞剑环绕护身' },
@@ -61,7 +61,7 @@ export const WEAPONS = {
       { dmg: 1.3, cd: 2.6, count: 3, area: 40, duration: 4, speed: 4.0, knock: 14, desc: '飞剑+1，持续更久' },
       { dmg: 1.6, cd: 2.4, count: 4, area: 44, duration: 4.5, speed: 4.2, knock: 16, desc: '飞剑+1，伤害提升' },
     ],
-    evo: { dmg: 2.2, cd: 0, count: 6, area: 50, duration: 9999, speed: 4.8, knock: 20, desc: '青釭剑阵：六剑常驻，永不停歇' },
+    evo: { dmg: 2.2, cd: 0, count: 6, area: 50, duration: 9999, speed: 4.8, knock: 20, desc: '万剑归宗：六剑常驻，永不停歇' },
   },
   crossbow: {
     id: 'crossbow', name: '连弩', icon: 'w_crossbow', evoName: '诸葛连弩', evoIcon: 'w_crossbow_evo', evoPassive: 'book',
@@ -76,8 +76,8 @@ export const WEAPONS = {
     evo: { dmg: 1.5, cd: 0.1, count: 1, area: 0, pierce: 4, speed: 320, desc: '诸葛连弩：一弩十矢，箭如雨下' },
   },
   horse: {
-    id: 'horse', name: '白马', icon: 'w_horse', evoName: '白马义从', evoIcon: 'w_horse_evo', evoPassive: 'horseshoe',
-    intro: '召唤白马骑兵横冲战场，撞飞敌人',
+    id: 'horse', name: '轻骑', icon: 'w_horse', evoName: '铁骑突阵', evoIcon: 'w_horse_evo', evoPassive: 'horseshoe',
+    intro: '召唤骑兵横冲战场，撞飞敌人',
     levels: [
       { dmg: 2.4, cd: 5.0, count: 1, area: 12, speed: 230, knock: 90, desc: '召唤一骑横冲战场' },
       { dmg: 2.4, cd: 5.0, count: 2, area: 12, speed: 230, knock: 90, desc: '骑兵+1' },
@@ -85,7 +85,7 @@ export const WEAPONS = {
       { dmg: 3.2, cd: 4.2, count: 3, area: 14, speed: 250, knock: 100, desc: '骑兵+1，冷却缩短' },
       { dmg: 4.0, cd: 4.0, count: 4, area: 16, speed: 270, knock: 110, desc: '骑兵+1，伤害提升' },
     ],
-    evo: { dmg: 5.0, cd: 3.0, count: 8, area: 18, speed: 300, knock: 130, desc: '白马义从：八骑齐出，纵横交错' },
+    evo: { dmg: 5.0, cd: 3.0, count: 8, area: 18, speed: 300, knock: 130, desc: '铁骑突阵：八骑齐出，纵横交错' },
   },
   fire: {
     id: 'fire', name: '火油罐', icon: 'w_fire', evoName: '火烧连营', evoIcon: 'w_fire_evo', evoPassive: 'pouch',
@@ -100,16 +100,16 @@ export const WEAPONS = {
     evo: { dmg: 1.0, cd: 2.4, count: 6, area: 32, duration: 4.5, tick: 0.28, slow: 0.4, desc: '火烧连营：烈焰连营，敌军减速' },
   },
   aura: {
-    id: 'aura', name: '龙吟枪风', icon: 'w_aura', evoName: '龙胆护体', evoIcon: 'w_aura_evo', evoPassive: 'lingzhi',
-    intro: '周身枪风持续伤害附近敌人',
+    id: 'aura', name: '罡风', icon: 'w_aura', evoName: '金刚护体', evoIcon: 'w_aura_evo', evoPassive: 'lingzhi',
+    intro: '周身罡风持续伤害附近敌人',
     levels: [
-      { dmg: 0.45, cd: 0, count: 1, area: 26, tick: 0.5, knock: 4, desc: '枪风护体，伤害周围敌人' },
+      { dmg: 0.45, cd: 0, count: 1, area: 26, tick: 0.5, knock: 4, desc: '罡风护体，伤害周围敌人' },
       { dmg: 0.55, cd: 0, count: 1, area: 30, tick: 0.5, knock: 5, desc: '范围与伤害提升' },
       { dmg: 0.55, cd: 0, count: 1, area: 34, tick: 0.45, knock: 6, slow: 0.15, desc: '范围提升，使敌人减速' },
       { dmg: 0.7, cd: 0, count: 1, area: 38, tick: 0.45, knock: 6, slow: 0.2, desc: '伤害提升' },
       { dmg: 0.85, cd: 0, count: 1, area: 44, tick: 0.4, knock: 8, slow: 0.25, desc: '范围与伤害大幅提升' },
     ],
-    evo: { dmg: 1.15, cd: 0, count: 1, area: 54, tick: 0.35, knock: 10, slow: 0.3, desc: '龙胆护体：受到伤害降低20%，每秒回复1%生命' },
+    evo: { dmg: 1.15, cd: 0, count: 1, area: 54, tick: 0.35, knock: 10, slow: 0.3, desc: '金刚护体：受到伤害降低20%，每秒回复1%生命' },
   },
 } as Record<WeaponId, WeaponDef>;
 

@@ -332,7 +332,7 @@ export class ItemDialog implements Dialog {
 
 export class ChestResultDialog implements Dialog {
   t?: number;
-  constructor(private it: EquipItem, private gold: boolean, private shards?: { hero: string; n: number }) { playSfx('chest'); }
+  constructor(private it: EquipItem, private gold: boolean, private shards?: { hero: string; n: number }, private hero?: { id: string; got: 'new' | 'shards' }) { playSfx('chest'); }
   draw(ui: UI) {
     const u = ui.u;
     const t = this.t || 0;
@@ -356,6 +356,20 @@ export class ChestResultDialog implements Dialog {
     ui.ctx.restore();
     ui.ctx.globalAlpha = 1;
     const k = easeOutBack(Math.min(1, (t - 0.9) * 3));
+    if (this.hero) {
+      // 开出整将：武将为主角，装备作为附赠
+      const h = HERO_BY_ID[this.hero.id];
+      ui.icon(`hero_${this.hero.id}_0`, ui.W / 2, cy - 20 * u, 300 * u * k);
+      ui.text(this.hero.got === 'new' ? '获得武将！' : '武将已拥有', ui.W / 2, cy - 230 * u, 32, '#fee761');
+      ui.text(h.name, ui.W / 2, cy + 170 * u, 48, h.color);
+      ui.text(this.hero.got === 'new' ? h.title : `转化为${h.name}碎片 ×20`, ui.W / 2, cy + 226 * u, 26, '#fff4d6');
+      const s2 = 90 * u;
+      itemSlot(ui, ui.W / 2 - 180 * u, cy + 270 * u, s2, this.it);
+      ui.text(`附赠 ${tpl.name}（${QUALITY_NAMES[this.it.q]}）`, ui.W / 2 - 70 * u, cy + 315 * u, 24, col, 'left');
+      const bw = 300 * u;
+      if (t > 1.3 && ui.button('cr_ok', ui.W / 2 - bw / 2, cy + 420 * u, bw, 96 * u, '确定', C.btnGold)) return false;
+      return;
+    }
     const s = 220 * u * k;
     itemSlot(ui, ui.W / 2 - s / 2, cy - s / 2, s, this.it);
     ui.text(tpl.name, ui.W / 2, cy + 170 * u, 44, col);

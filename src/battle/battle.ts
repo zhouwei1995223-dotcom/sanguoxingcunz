@@ -466,7 +466,7 @@ export class Battle {
       this.hooks.vibrate(true);
       this.hooks.sfx('explode');
       this.fx.push({ kind: 'explo', x: e.x, y: e.y - 10, t: 0, dur: 0.5 });
-      this.fx.push({ kind: 'text', x: e.x, y: e.y - 50, t: 0, dur: 2.2, text: e.boss.quote, color: '#fee761' });
+      this.fx.push({ kind: 'text', x: e.x, y: e.y - 50, t: 0, dur: 2.2, text: (this.hero.id === 'zhaoyun' && e.boss.zyQuote) || e.boss.quote.replace('{name}', this.hero.name), color: '#fee761' });
       this.dropPickup('chest', e.x, e.y, 1, true);
       for (let i = 0; i < 12; i++) this.dropPickup('coin', e.x + rand(-20, 20), e.y + rand(-20, 20), 5);
       this.dropGem(e.x + 10, e.y, e.exp);

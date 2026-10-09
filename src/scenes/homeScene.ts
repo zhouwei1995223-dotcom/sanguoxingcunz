@@ -8,7 +8,7 @@ import { WEAPONS, PASSIVES } from '../data/skills';
 import {
   heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
-  canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask,
+  canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE,
 } from '../meta/ops';
 import {
   HERO, heroLevelCost, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
@@ -361,7 +361,7 @@ export class HomeScene implements Scene {
     const u = ui.u;
     const top = this.contentTop(ui);
     ui.ribbon(ui.W / 2, top + 30 * u, 360 * u, '军略');
-    ui.text('永久提升赵云的基础能力', ui.W / 2, top + 90 * u, 24, C.textDim);
+    ui.text('永久提升全体武将的基础能力', ui.W / 2, top + 90 * u, 24, C.textDim);
     const gy = top + 120 * u;
     const gh = this.contentBottom(ui) - gy - 10 * u;
     const cols = 3, cw = (ui.W - 48 * u) / cols, ch = 330 * u;
@@ -533,8 +533,11 @@ export class HomeScene implements Scene {
       ui.icon(c.icon, 140 * u, y + 130 * u, 170 * u);
       ui.text(c.name, 140 * u, y + 240 * u, 28, c.id === 'gold' ? '#fee761' : '#fff4d6');
       const qs = c.weights.map((w, q) => (w > 0 ? q : -1)).filter((q) => q >= 0);
-      ui.text('可能获得：' + qs.map((q) => QUALITY_NAMES[q]).join('/'), 270 * u, y + 56 * u, 20, '#d9c6a0', 'left');
-      if (c.pity) ui.text(`再开${c.pity - save.goldChestCount}次必得史诗`, 270 * u, y + 92 * u, 20, '#dc9be9', 'left');
+      if (c.id === 'gold') {
+        ui.text(`${Math.round(GOLD_CHEST_HERO_RATE * 100)}%直接获得武将，否则得武将碎片×8~15`, 270 * u, y + 40 * u, 20, '#fee761', 'left');
+        ui.text('另送装备：' + qs.map((q) => QUALITY_NAMES[q]).join('/'), 270 * u, y + 74 * u, 20, '#d9c6a0', 'left');
+        if (c.pity) ui.text(`再开${c.pity - save.goldChestCount}次必得武将`, 270 * u, y + 106 * u, 20, '#dc9be9', 'left');
+      } else ui.text('可能获得：' + qs.map((q) => QUALITY_NAMES[q]).join('/') + '装备、武将碎片', 270 * u, y + 56 * u, 20, '#d9c6a0', 'left');
       const used = save.daily.chestAd[c.id] || 0;
       const bw = 200 * u;
       if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
@@ -588,7 +591,7 @@ export class HomeScene implements Scene {
     const r = openChest(chestById(id));
     markDirty();
     flushSave(true);
-    game.openDialog(new ChestResultDialog(r.item, id === 'gold', r.shards));
+    game.openDialog(new ChestResultDialog(r.item, id === 'gold', r.shards, r.hero));
   }
 
   // —— 新手引导 ——
