@@ -30,7 +30,7 @@ export default async function ({ page, wait, shot, tap }) {
   await page.evaluate(() => { const b = window.__game.scene.battle; b.rage = 100; b.rageLock = 0; window.__game.dialogs.length = 0; });
   await wait(200);
   const cdp = await page.context().newCDPSession(page);
-  const before = await page.evaluate(() => window.__game.scene.battle.ultCasts);
+  const before = await page.evaluate(() => { const g = window.__game; const b = g.scene.battle; b.pendingLevelUps = 0; b.pendingChests.length = 0; g.dialogs.length = 0; return b.ultCasts; });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 300, y: 600, id: 1 }] });
   await wait(100);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 330, y: 600, id: 1 }] });

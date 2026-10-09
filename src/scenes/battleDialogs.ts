@@ -17,6 +17,7 @@ import { HomeScene } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer } from '../ui/guide';
 
+/** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
 
 interface CardExtra {
@@ -138,6 +139,7 @@ export class LevelUpDialog implements Dialog {
         if (this.banishMode) {
           if (ex.banish === 'yes' && b.banish(this.choices, i)) { this.banishMode = false; playSfx('hurt'); }
           else ui.toast('只能封禁新技能');
+          y += ch + 20 * u;
           continue;
         }
         this.scene.choose(c);
@@ -159,11 +161,11 @@ export class LevelUpDialog implements Dialog {
         this.t = 0.2;
       }
     } else {
-      const left = LEVELUP_AD_LIMIT - save.daily.levelupAds;
-      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: `今日剩余${Math.max(0, left)}次` })) {
+      const left = LEVELUP_AD_LIMIT - b.adRerolls;
+      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: `本局剩余${Math.max(0, left)}次` })) {
         getPlatform().showRewardedAd('levelup_reroll').then((ok) => {
           if (!ok) return;
-          save.daily.levelupAds++;
+          b.adRerolls++;
           progressTask('ad', 1);
           this.choices = b.rollChoices();
           this.banishMode = false;

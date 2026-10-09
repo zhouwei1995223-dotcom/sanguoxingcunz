@@ -85,7 +85,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: 1, name: '长坂坡', subtitle: '单骑救主', theme: 'changban',
     story: '建安十三年，曹操亲率虎豹骑追击刘备于当阳长坂。赵云怀抱阿斗，于百万军中七进七出……',
-    duration: 600, hpMul: 1, dmgMul: 1, growth: 0.28, goldBase: 300, power: 0,
+    duration: 600, hpMul: 1, dmgMul: 1, growth: 0.28, goldBase: 300, power: 400,
     waves: [
       { from: 0, to: 60, density: [8, 24], pool: [['wei_spear', 10]], interval: 0.8 },
       { from: 60, to: 180, density: [24, 60], pool: [['wei_spear', 10], ['wei_shield', 3], ['wei_archer', 2], ['bandit', 4]], interval: 0.6 },

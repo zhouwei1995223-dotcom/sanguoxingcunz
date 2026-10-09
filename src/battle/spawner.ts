@@ -174,7 +174,7 @@ function runEvent(b: Battle, ev: ChapterEvent) {
     }
     case 'horde': {
       // 四个方向各一股，略带弧形，一碰就倒
-      const n = ev.count || 120;
+      const n = Math.max(0, Math.min(ev.count || 120, MAX_ENEMIES + 40 - b.enemies.length));
       const R = Math.hypot(b.viewW, b.viewH) / 2 + 24;
       const a0 = rand(TAU);
       for (let i = 0; i < n; i++) {

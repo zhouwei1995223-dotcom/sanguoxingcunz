@@ -280,7 +280,7 @@ function sweep(b: Battle, cx: number, cy: number, R: number, dir: number, arc: n
     if (e.dead) continue;
     const dx = e.x - cx, dy = e.y - 4 * e.scale - cy;
     const d = Math.hypot(dx, dy) || 1;
-    if (d > R + e.r) continue;
+    if (d > R + e.r || (!e.boss && !b.canHit(e))) continue;
     if (arc < Math.PI) {
       let da = Math.atan2(dy, dx) - dir;
       while (da > Math.PI) da -= TAU;
@@ -427,7 +427,7 @@ function thunder(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       b.grid.query(cur.x, cur.y, jump, near);
       let next: Enemy | null = null, bd = jump * jump;
       for (const e of near) {
-        if (e.dead || hit.has(e.uid)) continue;
+        if (e.dead || hit.has(e.uid) || (!e.boss && !b.canHit(e))) continue;
         const d = (e.x - cur.x) ** 2 + (e.y - cur.y) ** 2;
         if (d < bd) { bd = d; next = e; }
       }

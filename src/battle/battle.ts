@@ -86,6 +86,8 @@ export class Battle {
   bossKills = 0;
   equipDrops = 0;
   rerolls = 0;
+  /** 本局已看广告刷新的次数 */
+  adRerolls = 0;
   revives = 0;
   adReviveUsed = false;
   dead = false;
@@ -484,10 +486,10 @@ export class Battle {
   }
 
   /** 对敌人造成伤害，返回是否击杀 */
-  damage(e: Enemy, base: number, kx = 0, ky = 0, knock = 0, opts: { noCrit?: boolean } = {}): boolean {
+  damage(e: Enemy, base: number, kx = 0, ky = 0, knock = 0, opts: { noCrit?: boolean; force?: boolean } = {}): boolean {
     if (e.dead) return false;
-    // 屏幕外的敌人打不到：敌人一定会先出现在玩家眼前
-    if (!e.boss && !this.inView(e.x, e.y - 6 * e.scale, 4)) return false;
+    // 屏幕外的敌人打不到：敌人一定会先出现在玩家眼前（大招除外）
+    if (!opts.force && !e.boss && !this.canHit(e)) return false;
     let dmg = base * this.dmgMul;
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (e.boss) dmg *= 1 + this.base.bossDmg / 100;
@@ -687,7 +689,7 @@ export class Battle {
       pr.y += pr.vy * dt;
       if (pr.life <= 0) { this.projs.splice(i, 1); continue; }
       // 飞出屏幕的弩箭、风刃、飞刀直接消失
-      if (pr.kind !== 'horse' && !this.inView(pr.x, pr.y, 6)) { this.projs.splice(i, 1); continue; }
+      if (pr.kind !== 'horse' && pr.kind !== 'knife' && !this.inView(pr.x, pr.y, this.finalBoss || this.midBoss ? 120 : 6)) { this.projs.splice(i, 1); continue; }
       this.grid.query(pr.x, pr.y, pr.r + 20, near);
       let removed = false;
       for (const e of near) {
@@ -713,7 +715,7 @@ export class Battle {
       if (e.dead) continue;
       const dx = e.x - x, dy = e.y - y;
       const d = Math.hypot(dx, dy) || 1;
-      if (d > R + e.r) continue;
+      if (d > R + e.r || (!e.boss && !this.canHit(e))) continue;
       this.damage(e, dmg, dx / d, dy / d, knock);
       if (stun && !e.dead) { e.slow = 1; e.slowT = Math.max(e.slowT, e.boss ? stun * 0.3 : stun); }
     }
@@ -739,7 +741,7 @@ export class Battle {
       for (const e of near) {
         if (e.dead) continue;
         if ((e.x - pr.x) ** 2 + (e.y - pr.y) ** 2 > (pr.r + e.r) ** 2) continue;
-        this.damage(e, pr.dmg, 0, 0, 0, { noCrit: true });
+        this.damage(e, pr.dmg, 0, 0, 0, { noCrit: true, force: true });
       }
       this.hitBreakables(pr.x, pr.y, pr.r);
     }
@@ -993,7 +995,7 @@ export class Battle {
       if (proj < -e.r || proj > len + e.r) continue;
       if (Math.abs(ex * -dy + ey * dx) > width / 2 + e.r) continue;
       const side = ex * -dy + ey * dx >= 0 ? 1 : -1;
-      this.damage(e, dmg, dx * 0.6 - dy * side * 0.8, dy * 0.6 + dx * side * 0.8, 120);
+      this.damage(e, dmg, dx * 0.6 - dy * side * 0.8, dy * 0.6 + dx * side * 0.8, 120, { force: true });
     }
     this.fx.push({ kind: 'beam', x: u.x0, y: u.y0 - 8, t: 0, dur: 0.45, a: Math.atan2(dy, dx), len, w: width });
     this.hooks.shake(3);
@@ -1016,7 +1018,7 @@ export class Battle {
           if (e.dead) continue;
           const dx = e.x - p.x, dy = e.y - p.y;
           const d = Math.hypot(dx, dy) || 1;
-          if (d < R) this.damage(e, this.base.atk * 10, dx / d, dy / d, 150);
+          if (d < R) this.damage(e, this.base.atk * 10, dx / d, dy / d, 150, { force: true });
         }
         this.shots.length = 0;
         this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: R, color: '#fee761' });
@@ -1070,7 +1072,7 @@ export class Battle {
             if (e.dead || ring.hit.has(e.uid)) continue;
             const dx = e.x - p.x, dy = e.y - p.y;
             const d = Math.hypot(dx, dy) || 1;
-            if (d <= ring.r + e.r) { ring.hit.add(e.uid); this.damage(e, atk * 9, dx / d, dy / d, 140); }
+            if (d <= ring.r + e.r) { ring.hit.add(e.uid); this.damage(e, atk * 9, dx / d, dy / d, 140, { force: true }); }
           }
         }
         if (u.t >= u.dur) this.ultEnd(u);
@@ -1093,7 +1095,7 @@ export class Battle {
             if (e.dead) continue;
             const dx = e.x - p.x, dy = e.y - p.y;
             const d = Math.hypot(dx, dy) || 1;
-            if (d < R + e.r) this.damage(e, atk * 2.6, dx / d, dy / d, 90);
+            if (d < R + e.r) this.damage(e, atk * 2.6, dx / d, dy / d, 90, { force: true });
           }
           this.hitBreakables(p.x, p.y, R);
           if (Math.random() < 0.3) this.hooks.shake(1.5);
@@ -1116,7 +1118,7 @@ export class Battle {
       const d = Math.hypot(dx, dy) || 1;
       e.slow = 1;
       e.slowT = e.boss ? 1.5 : 4;
-      this.damage(e, this.base.atk * 6, dx / d, dy / d, 220);
+      this.damage(e, this.base.atk * 6, dx / d, dy / d, 220, { force: true });
     }
     this.shots.length = 0;
     for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.1 + i * 0.05, r: Math.max(this.viewW, this.viewH) * (0.5 + i * 0.15), color: '#ffffff' });
@@ -1340,6 +1342,11 @@ export class Battle {
       if (d < bd) { bd = d; best = e; }
     }
     return best;
+  }
+
+  /** 普通技能能否打到这个敌人（在屏幕内） */
+  canHit(e: Enemy): boolean {
+    return this.inView(e.x, e.y - 6 * e.scale, 4);
   }
 
   /** 是否在屏幕内（镜头以玩家为中心；margin 为负表示更靠里） */

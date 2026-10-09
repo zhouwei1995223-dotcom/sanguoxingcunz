@@ -15,7 +15,7 @@ import {
   CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK } from '../meta/run';
+import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower } from '../meta/run';
 import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
@@ -249,7 +249,7 @@ export class HomeScene implements Scene {
     const info = cleared ? `${diff.name}已通关 ✓` : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
     ui.text(info, ui.W / 2, oy + 178 * u, 22, cleared ? '#9be37a' : '#d9c6a0');
     const power = combatPower();
-    const need = Math.round(ch.power * diff.power + (d > 0 ? 1500 * d * ch.id : 0));
+    const need = recommendedPower(ch, diff);
     ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2, oy + 212 * u, 20, power >= need ? '#9be37a' : '#ff8a80');
     if (!unlocked) {
       ui.ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -453,7 +453,8 @@ export class HomeScene implements Scene {
     row(wd.evoIcon, `大招 · ${h.ultName}`, h.ultDesc);
     for (const { weapon, link } of heroLinks(h.id)) {
       const d = WEAPONS[weapon];
-      row(d.evoIcon, `专属联动 · ${link.name}`, `「${d.name}」搭配「${PASSIVES[d.evoPassive].name}」进化时，变为专属形态：${link.desc.replace(/^.*?：/, '')}`);
+      const lock = (d.unlockCh || 0) > save.maxCleared ? `（「${d.name}」通关第${d.unlockCh}章后出现）` : '';
+      row(d.evoIcon, `专属联动 · ${link.name}`, `「${d.name}」搭配「${PASSIVES[d.evoPassive].name}」进化时，变为专属形态：${link.desc.replace(/^.*?：/, '')}${lock}`);
     }
     y += 10 * u;
     // 操作按钮

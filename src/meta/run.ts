@@ -170,3 +170,12 @@ export function settleWeeklyRun(t: number, coins: number, kills: number, bossKil
   markDirty();
   return { win: true, firstClear: false, gold, iron, yuanbao: 0, items, newBest: false };
 }
+
+/**
+ * 推荐战力：普通难度按章节配置；困难/噩梦按难度倍率换算，章节越往后倍率略增（每章 +3.5%）。
+ * 用模拟器校准：达到推荐战力时胜率约 65%～75%，只有 70% 战力时约 20%～30%。
+ */
+export function recommendedPower(ch: ChapterDef, diff: DifficultyDef): number {
+  const k = diff.id > 0 ? 1 + 0.035 * (ch.id - 1) : 1;
+  return Math.round((ch.power * diff.power * k) / 100) * 100;
+}
