@@ -9,6 +9,7 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 if (sim) {
   await build({ entryPoints: ['tools/sim.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/sim.js', logLevel: 'error' });
+  await build({ entryPoints: ['tools/dps.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/dps.js', logLevel: 'error' });
   process.exit(0);
 }
 
