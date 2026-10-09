@@ -3,6 +3,7 @@ import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef } from '../data/chapters';
 import { ENEMIES, BOSSES, BossDef } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
+import type { WeeklyDef } from '../data/goals';
 import {
   WEAPONS, PASSIVES, WeaponId, PassiveId, weaponsForHero, MAX_WEAPON_LV, MAX_PASSIVE_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
@@ -111,6 +112,12 @@ export class Battle {
   combo = 0;
   comboT = 0;
   bestCombo = 0;
+  // 图鉴与成就统计
+  killsBy: Record<string, number> = {};
+  bossesKilled: string[] = [];
+  evolved: string[] = [];
+  /** 每周挑战规则 */
+  mods: WeeklyDef | null = null;
   // 磁石保底
   private magnetT = 60;
   private magnetCd = 0;
@@ -182,7 +189,8 @@ export class Battle {
     this.player.hp = Math.min(this.player.hp, newMax);
     this.regen = b.regen + 0.3 * P('lingzhi') + (auraEvo ? newMax * 0.01 : 0);
     this.pickupR = this.hero.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl'));
-    this.expMul = 1 + b.exp / 100 + 0.08 * P('seal');
+    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1);
+    if (this.mods?.playerDmg) this.dmgMul *= this.mods.playerDmg;
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
     this.crit = b.crit / 100 + this.critBonus;
     this.critDmg = 1 + b.critDmg / 100 + this.critDmgBonus;
@@ -200,6 +208,12 @@ export class Battle {
     // 大招期间：赵云正常速度冲杀，其余一切慢动作
     if (this.ult) dt = rawDt * this.updateUlt(rawDt);
     this.t += dt;
+    // 每周挑战：坚持到时间即胜利
+    if (this.chapter.endless && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
+      for (const e of this.enemies) if (!e.dead) { e.dead = true; this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
+      this.won = true;
+      return;
+    }
     this.hitStopCd = Math.max(0, this.hitStopCd - rawDt);
     this.updateRage(dt);
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
@@ -433,6 +447,8 @@ export class Battle {
     this.kills++;
     this.combo++;
     this.comboT = 2.5;
+    if (e.def) this.killsBy[e.def.id] = (this.killsBy[e.def.id] || 0) + 1;
+    if (e.boss) this.bossesKilled.push(e.boss.id);
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
     if (this.combo === 100 || this.combo === 300 || this.combo === 500 || this.combo % 1000 === 0) {
       this.hooks.banner(this.combo >= 1000 ? `${this.combo / 1000}千人斩！` : this.combo === 100 ? '百人斩！' : `${this.combo}连斩！`, '#fee761');
@@ -892,8 +908,10 @@ export class Battle {
     return u.slow;
   }
 
+  /** 由场景根据皮肤设置 */
+  heroSpriteName = '';
   get heroSprite() {
-    return 'hero_' + this.hero.id;
+    return this.heroSpriteName || 'hero_' + this.hero.id;
   }
 
   private ultEnd(u: UltState) {
@@ -1061,6 +1079,7 @@ export class Battle {
       case 'evo': {
         const w = this.weapon(c.id)!;
         w.evo = true;
+        this.evolved.push(c.id);
         w.t = 0;
         break;
       }

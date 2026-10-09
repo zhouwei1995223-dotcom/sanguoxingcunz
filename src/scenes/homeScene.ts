@@ -25,6 +25,9 @@ import {
   SidebarDialog, ChapterStoryDialog, ChapterListDialog,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
+import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
+import { heroSpriteName, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
+import { SKINS, EQUIP_SETS } from '../data/goals';
 import { GAME_INFO } from '../data/platformConfig';
 
 type Tab = 'shop' | 'equip' | 'battle' | 'talent' | 'hero';
@@ -53,8 +56,11 @@ export class HomeScene implements Scene {
     flushSave(true);
   }
 
+  private lastGuide = -1;
   update(dt: number) {
     const ui = game.ui;
+    // 埋点：新手引导每推进一步上报一次
+    if (save.guide !== this.lastGuide) { if (this.lastGuide >= 0) getPlatform().report('guide_step', { step: save.guide }); this.lastGuide = save.guide; }
     tickStamina();
     rolloverDaily();
     if (this.tab === 'battle') this.bg.draw(ui.ctx, dt);
@@ -107,7 +113,7 @@ export class HomeScene implements Scene {
     // 头像与战力
     const av = 92 * u;
     ui.qualityFrame(16 * u, y, av, '#feae34');
-    ui.icon(`hero_${save.hero}_0`, 16 * u + av / 2, y + av / 2, av * 0.9);
+    ui.icon(`${heroSpriteName(save.hero)}_0`, 16 * u + av / 2, y + av / 2, av * 0.9);
     ui.pixRect(16 * u, y + av - 4 * u, av, 30 * u, '#120d0c');
     ui.text('Lv.' + save.heroes[save.hero].lv, 16 * u + av / 2, y + av + 11 * u, 18, '#fff');
     ui.text('战力', 124 * u, y + 24 * u, 20, C.textDim, 'left');
@@ -182,24 +188,30 @@ export class HomeScene implements Scene {
     // 侧边功能按钮
     const side: { id: string; icon: string; label: string; dot: boolean; on: () => void; show?: boolean }[] = [
       { id: 'signin', icon: 'calendar', label: '签到', dot: canSignin(), on: () => game.openDialog(new SigninDialog()) },
+      ...(newbieActive() ? [{ id: 'newbie', icon: 'chest_gold', label: '七日', dot: newbieRedDot(), on: () => game.openDialog(new NewbieDialog()) }] : []),
       { id: 'tasks', icon: 'scroll', label: '任务', dot: tasksRedDot(), on: () => game.openDialog(new TasksDialog()) },
       { id: 'patrol', icon: 'tent', label: '巡营', dot: patrolPending().minutes >= 60, on: () => game.openDialog(new PatrolDialog()) },
+      { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
       { id: 'rank', icon: 'trophy', label: '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
+      { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
       { id: 'settings', icon: 'gear', label: '设置', dot: false, on: () => game.openDialog(new SettingsDialog()) },
       { id: 'share', icon: 'share', label: '分享', dot: false, on: () => getPlatform().share('长坂坡七进七出，你能撑过几分钟？') },
     ];
     if (getPlatform().supportsSidebar() || getPlatform().name === 'tt') sideR.push({ id: 'sidebar', icon: 'sidebar', label: '侧边栏', dot: !save.daily.sidebar, on: () => game.openDialog(new SidebarDialog()) });
-    const bs = 96 * u;
-    const sy = top + 200 * u;
+    const bs = 84 * u;
+    const sy = top + 180 * u;
+    // 按钮多时自动压缩间距，避免压住章节卡
+    const cardTop = this.contentBottom(ui) - 310 * u - 170 * u;
     const drawSide = (list: typeof side, x: number) => list.forEach((s, i) => {
-      const y = sy + i * (bs + 46 * u);
+      const step = Math.min(bs + 40 * u, (cardTop - sy - 20 * u) / list.length);
+      const y = sy + i * step;
       this.sideBtnRect[s.id] = [x, y, bs, bs];
       const pressed = ui.isPressed('side_' + s.id);
       ui.panel(x, y + (pressed ? 3 * u : 0), bs, bs, 'dark');
       ui.icon(s.icon, x + bs / 2, y + bs / 2 + (pressed ? 3 * u : 0), bs * 0.58);
-      ui.text(s.label, x + bs / 2, y + bs + 18 * u, 22, '#fff');
+      ui.text(s.label, x + bs / 2, y + bs + 16 * u, 20, '#fff');
       if (s.dot) ui.redDot(x + bs - 6 * u, y + 6 * u);
       if (ui.clicked('side_' + s.id, x, y, bs, bs)) s.on();
     });
@@ -289,11 +301,15 @@ export class HomeScene implements Scene {
     // 人物
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ui.ctx.fillRect(ui.W / 2 - 150 * u, top + 60 * u, 300 * u, 330 * u);
-    ui.icon(`hero_${save.hero}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, top + 230 * u, 280 * u);
+    ui.icon(`${heroSpriteName(save.hero)}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, top + 230 * u, 280 * u);
     ui.text(`${HERO_BY_ID[save.hero].name} · Lv.${save.heroes[save.hero].lv}`, ui.W / 2, top + 50 * u, 28, C.gold);
     const st = computeStats();
     ui.text(`攻击 ${fmtNum(st.atk)}`, ui.W / 2 - 80 * u, top + 425 * u, 26, '#ffb070');
     ui.text(`生命 ${fmtNum(st.hp)}`, ui.W / 2 + 80 * u, top + 425 * u, 26, '#9be37a');
+    // 套装
+    const tids = SLOTS.map((sl) => getEquipped(sl)).filter((x) => !!x).map((x) => x!.tid);
+    const sets = setBonuses(tids).active;
+    if (sets.length) ui.text(sets.map((a) => `${a.name}${a.n}/6`).join('  '), ui.W / 2, top + 458 * u, 18, '#dc9be9');
     // 六个槽位
     const ss = 124 * u;
     SLOTS.forEach((slot, i) => {
@@ -404,12 +420,12 @@ export class HomeScene implements Scene {
     const py = top + cw + 30 * u;
     const ph = this.contentBottom(ui) - py - 10 * u;
     ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
-    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, 1060 * u);
+    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, 1290 * u);
     let y = py + 20 * u + off;
     // 立绘区
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ui.ctx.fillRect(50 * u, y, ui.W - 100 * u, 260 * u);
-    ui.icon(`hero_${h.id}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, y + 130 * u, 250 * u, st.owned ? 1 : 0.5);
+    ui.icon(`${heroSpriteName(h.id)}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, y + 130 * u, 250 * u, st.owned ? 1 : 0.5);
     ui.text(h.title, ui.W / 2, y + 290 * u, 34, h.color);
     ui.text(`「${h.quote}」`, ui.W / 2, y + 334 * u, 22, '#fff4d6');
     ui.pixRect(60 * u, y + 14 * u, 140 * u, 40 * u, '#231917');
@@ -473,6 +489,31 @@ export class HomeScene implements Scene {
       }
     }
     if (st.owned && st.shards > 0) ui.text(`持有碎片 ${st.shards}`, ui.W / 2, y + bh + 30 * u, 20, C.textDim);
+    // 皮肤
+    {
+      const sk = SKINS[h.id];
+      const ss = skinState(h.id);
+      const sy2 = y + bh + 60 * u;
+      ui.pixRect(lx, sy2, ui.W - lx * 2, 150 * u, '#231917');
+      ui.qualityFrame(lx + 14 * u, sy2 + 14 * u, 122 * u, ss.owned ? '#b55088' : '#3a3040');
+      ui.icon(`hero_${h.id}_skin_${Math.floor(ui.time * 6) % 4}`, lx + 75 * u, sy2 + 75 * u, 116 * u, ss.owned ? 1 : 0.45);
+      ui.text(`皮肤 · ${sk.name}`, lx + 156 * u, sy2 + 40 * u, 26, '#dc9be9', 'left');
+      ui.text(`穿戴效果：${sk.bonus}`, lx + 156 * u, sy2 + 80 * u, 20, '#d9c6a0', 'left');
+      const bw2 = 180 * u, bx2 = ui.W - lx - bw2 - 14 * u, by2 = sy2 + 36 * u;
+      if (ss.owned) {
+        if (ui.button('skin_toggle', bx2, by2, bw2, 80 * u, ss.on ? '卸下' : '穿戴', ss.on ? C.btnGray : C.btnPurple, { size: 26 })) { ss.on = !ss.on; markDirty(); playSfx('click'); }
+      } else {
+        ui.text(`观看视频 ${ss.ads}/${sk.ads} 解锁`, lx + 156 * u, sy2 + 116 * u, 20, C.gold, 'left');
+        if (adButton(ui, 'skin_ad', bx2, by2, bw2, 80 * u, '解锁', { size: 24 })) {
+          getPlatform().showRewardedAd('skin_' + h.id).then((ok) => {
+            if (!ok) return;
+            progressTask('ad', 1);
+            if (skinAdProgress(h.id)) { playSfx('victory'); ui.toast(`获得皮肤「${sk.name}」！`); } else ui.toast(`皮肤进度 ${skinState(h.id).ads}/${sk.ads}`);
+            flushSave(true);
+          });
+        }
+      }
+    }
     ui.endScroll();
   }
 

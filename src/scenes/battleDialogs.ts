@@ -8,7 +8,8 @@ import type { Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, MAX_PASSIVE_LV } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
-import { settleRun, settleEndless, RunResult } from '../meta/run';
+import { settleRun, settleEndless, settleWeeklyRun, RunResult } from '../meta/run';
+import { settleWeekly } from '../meta/goals';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
 import { fmtTime, easeOutBack, fmtNum } from '../core/math';
@@ -308,14 +309,33 @@ export class BossIntroDialog implements Dialog {
 
 export class ResultDialog implements Dialog {
   private res: RunResult;
+  private weeklyBest = 0;
+  private tierCount = 0;
+  private video: string | null = null;
+  private shared = false;
   private doubled = false;
   private busy = false;
   t?: number;
   constructor(private scene: BattleScene, private win: boolean) {
     const b = scene.battle;
-    this.res = b.chapter.endless
-      ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
-      : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
+    if (scene.weekly) {
+      this.res = settleWeeklyRun(b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
+      const w = settleWeekly(b.kills);
+      this.res.newBest = w.newBest;
+      this.weeklyBest = save.weekly.best;
+      for (const g of w.rewards) {
+        this.res.gold += g.reward.gold || 0;
+        this.res.iron += g.reward.iron || 0;
+        this.res.yuanbao += g.reward.yuanbao || 0;
+        if (g.reward.shards) this.res.shardReward = g.reward.shards;
+      }
+      this.tierCount = w.rewards.length;
+    } else {
+      this.res = b.chapter.endless
+        ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
+        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
+    }
+    if (scene.videoPath) scene.videoPath.then((p) => { this.video = p; });
     if (save.guide === 0) save.guide = 1;
     markDirty();
     flushSave(true);
@@ -325,10 +345,11 @@ export class ResultDialog implements Dialog {
     const b = this.scene.battle;
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0);
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
-    if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
+    if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
+    else if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
     else if (this.res.endless) ui.text(this.res.newBest ? `新纪录！坚持 ${fmtTime(b.t)}` : `最佳纪录 ${fmtTime(this.res.best || 0)}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');
     y += 60 * u;
@@ -368,6 +389,20 @@ export class ResultDialog implements Dialog {
         });
       }
       y += 120 * u;
+    }
+    // 抖音：分享本局录屏集锦（每日首次分享奖励元宝）
+    if (this.video && !this.shared) {
+      const today = new Date().toDateString();
+      const bonus = save.videoShareDay !== today;
+      if (ui.button('res_video', bx, y, bw, 86 * u, bonus ? '分享战斗视频 +30元宝' : '分享战斗视频', C.btnBlue, { size: 26 })) {
+        getPlatform().shareVideo(this.video, `${this.scene.label}，一骑当千斩敌${b.kills}！`).then((ok) => {
+          if (!ok) return;
+          this.shared = true;
+          getPlatform().report('video_share', { mode: this.scene.modeName });
+          if (save.videoShareDay !== today) { save.videoShareDay = today; save.yuanbao += 30; markDirty(); ui.toast('分享成功，元宝+30'); }
+        });
+      }
+      y += 104 * u;
     }
     if (ui.button('res_ok', bx, y, bw, 96 * u, this.doubled ? '收下' : '直接领取', this.doubled ? C.btnGold : C.btnGray) && t > 0.6) {
       // 非首局且未看广告时偶尔展示插屏

@@ -27,3 +27,27 @@ export const GAME_INFO = {
   copyright: '著作权人：（待填写）',
   icp: '备案号：（待填写）',
 };
+
+/** 云开发配置（云存档、订阅提醒）。开通后填写环境 ID。 */
+export const CLOUD_CONFIG = {
+  wx: { env: '' }, // 微信云开发环境 ID，例如 'cloud1-xxxxx'
+  tt: { env: '' }, // 抖音云环境 ID
+  collection: 'saves',
+  reminderCollection: 'reminders',
+};
+
+/** 订阅消息模板 ID（微信公众平台 → 订阅消息 → 选用模板后填写） */
+export const SUBSCRIBE_CONFIG = {
+  wx: { stamina: '', patrol: '' },
+  tt: { stamina: '', patrol: '' },
+};
+
+/**
+ * 兑换码：键为兑换码（不区分大小写），值为奖励。上线后可在这里增删，重新构建发布即可。
+ * 每个码每位玩家只能用一次。
+ */
+export const REDEEM_CODES: Record<string, { gold?: number; yuanbao?: number; iron?: number; stamina?: number; shards?: { hero: string; n: number } }> = {
+  YIQIDANGQIAN: { yuanbao: 200, gold: 2000 },
+  ZILONG666: { yuanbao: 100, stamina: 30 },
+  WUHUSHANGJIANG: { shards: { hero: 'zhuge', n: 10 }, iron: 30 },
+};

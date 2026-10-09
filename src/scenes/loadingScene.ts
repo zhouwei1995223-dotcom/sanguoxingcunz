@@ -4,6 +4,7 @@ import { buildAtlas } from '../gfx/atlas';
 import { initAudio, playBgm } from '../audio/sound';
 import { loadSave, save, flushSave } from '../meta/save';
 import { onLogin } from '../meta/ops';
+import { cloudPull } from '../meta/cloud';
 import { GAME_INFO } from '../data/platformConfig';
 import { HomeScene } from './homeScene';
 import { BattleScene } from './battleScene';
@@ -15,6 +16,8 @@ export class LoadingScene implements Scene {
   private t = 0;
   private step = 0;
   private done = false;
+  private cloudWait = false;
+  private restored = false;
 
   update(dt: number) {
     const ui = game.ui;
@@ -23,7 +26,17 @@ export class LoadingScene implements Scene {
     // 分帧初始化，先画出启动页
     if (this.step === 1) { loadSave(); }
     if (this.step === 2) { buildAtlas(); }
-    if (this.step === 3) { initAudio(); onLogin(); flushSave(true); }
+    if (this.step === 3) {
+      initAudio();
+      // 云存档：等待拉取完成（最多 3 秒）再进入游戏
+      this.cloudWait = true;
+      cloudPull().then((restored) => {
+        this.cloudWait = false;
+        this.restored = restored;
+        onLogin();
+        flushSave(true);
+      });
+    }
     this.step++;
 
     const g = ui.ctx;
@@ -38,7 +51,8 @@ export class LoadingScene implements Scene {
     lines.forEach((l, i) => ui.text(l, ui.W / 2, ui.H - 190 * u - ui.safeBottom + i * 40 * u, 20, '#a89a86', 'center', null, false));
     ui.text(`适龄提示 ${GAME_INFO.ageRating}+`, ui.W / 2, ui.H - 100 * u - ui.safeBottom, 20, '#a89a86', 'center', null, false);
 
-    if (prog >= 1 && !this.done && this.step > 4) {
+    if (this.restored) ui.text('已从云端恢复进度', ui.W / 2, ui.H * 0.62 + 100 * u, 22, '#9be37a');
+    if (prog >= 1 && !this.done && this.step > 4 && !this.cloudWait) {
       this.done = true;
       if (!save.agreedPrivacy) game.openDialog(new PrivacyDialog(() => this.route()));
       else this.route();

@@ -21,6 +21,10 @@ import { GAME_INFO } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
+import { setOf, redeem } from '../meta/goals';
+import { getEquipped } from '../meta/ops';
+import { SLOTS } from '../data/meta';
+import { cloudStatus, cloudEnabled, lastSyncAt, cloudPush } from '../meta/cloud';
 
 function statLines(s: StatBlock): string[] {
   const out: string[] = [];
@@ -264,7 +268,7 @@ export class ItemDialog implements Dialog {
     const it = this.it;
     if (!save.items.includes(it)) return false;
     const tpl = EQUIP_BY_ID[it.tid];
-    const w = ui.W - 60 * u, h = 1060 * u;
+    const w = ui.W - 60 * u, h = 1200 * u;
     const f = dialogFrame(ui, w, h, SLOT_NAMES[tpl.slot], this.t, 'it_close');
     if (f.close) return false;
     const x = f.x + 50 * u;
@@ -289,6 +293,16 @@ export class ItemDialog implements Dialog {
       y += 36 * u;
     }
     y += 10 * u;
+    // 套装
+    const set = setOf(it.tid);
+    if (set) {
+      const tids = SLOTS.map((sl) => getEquipped(sl)).filter((x) => !!x).map((x) => x!.tid);
+      const n = tids.filter((t) => set.pieces.includes(t)).length;
+      ui.text(`${set.name}（已穿${n}/6）`, x, y, 22, '#dc9be9', 'left');
+      y += 32 * u;
+      for (const b of set.bonus) { ui.text(`${b.n}件：${b.desc}`, x + 20 * u, y, 19, n >= b.n ? '#dc9be9' : '#6a6a6a', 'left'); y += 28 * u; }
+      y += 6 * u;
+    }
     // 合成信息
     const mats = mergeCandidates(it);
     if (it.q < 5) ui.text(`合成：3件同名${QUALITY_NAMES[it.q]}装备 → ${QUALITY_NAMES[it.q + 1]}（拥有${mats.length + 1}/3）`, x, y, 20, '#dc9be9', 'left');
@@ -362,7 +376,7 @@ export class SettingsDialog implements Dialog {
   t?: number;
   draw(ui: UI) {
     const u = ui.u;
-    const w = ui.W - 80 * u, h = 1000 * u;
+    const w = ui.W - 80 * u, h = 1220 * u;
     const f = dialogFrame(ui, w, h, '设置', this.t, 'st_close');
     if (f.close) return false;
     const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['震动', 'vibrate'], ['伤害数字', 'dmgNum']];
@@ -387,7 +401,29 @@ export class SettingsDialog implements Dialog {
     if (getPlatform().supportsAddShortcut() && ui.button('st_shortcut', f.x + 100 * u + bw, y, bw, 80 * u, '添加到桌面', C.btnGreen, { size: 22 })) {
       getPlatform().addShortcut().then((ok) => ui.toast(ok ? '添加成功' : '添加失败'));
     }
-    y += 130 * u;
+    y += 100 * u;
+    // 兑换码 / 提醒
+    if (ui.button('st_redeem', f.x + 40 * u, y, bw, 80 * u, '兑换码', C.btnGold, { size: 24 })) {
+      getPlatform().inputText('请输入兑换码').then((code) => {
+        if (code === null) return;
+        const r = redeem(code);
+        if (r.ok && r.result) { game.openDialog(new RewardDialog('兑换成功', r.result)); flushSave(true); }
+        else ui.toast(r.msg);
+      });
+    }
+    if (ui.button('st_sub', f.x + 100 * u + bw, y, bw, 80 * u, save.subscribed ? '提醒已开启' : '体力满提醒', save.subscribed ? C.btnGray : C.btnGreen, { size: 22 })) {
+      getPlatform().requestSubscribe().then((ok) => {
+        save.subscribed = ok;
+        markDirty();
+        ui.toast(ok ? '体力回满、巡营满仓时会提醒你' : '未开启提醒');
+      });
+    }
+    y += 110 * u;
+    // 云存档状态
+    const cs = !cloudEnabled() ? '未开启（进度仅保存在本机）' : cloudStatus === 'ok' ? `已同步 ${lastSyncAt ? new Date(lastSyncAt).toTimeString().slice(0, 5) : ''}` : cloudStatus === 'syncing' ? '同步中…' : '同步失败，稍后重试';
+    ui.text('云存档：' + cs, f.x + 60 * u, y + 20 * u, 22, cloudEnabled() && cloudStatus === 'ok' ? '#9be37a' : C.textDim, 'left');
+    if (cloudEnabled() && ui.button('st_sync', f.x + w - 220 * u, y - 10 * u, 160 * u, 60 * u, '立即同步', C.btnBlue, { size: 20 })) cloudPush(true);
+    y += 90 * u;
     ui.text(`${GAME_INFO.name}  v${GAME_INFO.version}`, ui.W / 2, y, 22, C.textDim);
     ui.text(GAME_INFO.copyright, ui.W / 2, y + 36 * u, 18, C.textDim);
     ui.text(GAME_INFO.icp, ui.W / 2, y + 66 * u, 18, C.textDim);

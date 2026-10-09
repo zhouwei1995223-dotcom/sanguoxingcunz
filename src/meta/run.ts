@@ -147,3 +147,19 @@ export function bestScore(): number {
   }
   return best;
 }
+
+/** 每周挑战结算：基础奖励按击杀数，档位奖励见 goals.settleWeekly */
+export function settleWeeklyRun(t: number, coins: number, kills: number, bossKills: number, equipDrops: number): RunResult {
+  const gold = Math.round(kills * 2 * (1 + save.maxCleared * 0.2) + coins * 2);
+  const iron = Math.round(kills / 40);
+  const items: EquipItem[] = [];
+  for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(Math.max(1, save.maxCleared), 0)));
+  save.gold += gold;
+  save.iron += iron;
+  progressTask('battle', 1);
+  progressTask('kill', kills);
+  if (bossKills) progressTask('boss', bossKills);
+  getPlatform().submitScore('weekly', kills);
+  markDirty();
+  return { win: true, firstClear: false, gold, iron, yuanbao: 0, items, newBest: false };
+}

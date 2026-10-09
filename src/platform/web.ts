@@ -141,6 +141,40 @@ export function createWebPlatform(): Platform {
     postToOpenData() {},
     showNativeRank() {},
     showToast,
+    // 浏览器：?cloud=1 时用另一个本地键模拟云存档，方便测试同步逻辑
+    cloudReady() { return /cloud=1/.test(location.search); },
+    cloudLoad() {
+      try { const v = localStorage.getItem('sgxc_cloud'); return Promise.resolve(v ? JSON.parse(v) : null); } catch (e) { return Promise.resolve(null); }
+    },
+    cloudSave(data, updatedAt) {
+      try { localStorage.setItem('sgxc_cloud', JSON.stringify({ data, updatedAt })); } catch (e) {}
+      return Promise.resolve(true);
+    },
+    report(event, data) {
+      const w = window as any;
+      (w.__reports = w.__reports || []).push({ event, data });
+    },
+    supportsRecorder() { return false; },
+    recorderStart() {},
+    recorderMark() {},
+    recorderStop() { return Promise.resolve(null); },
+    shareVideo() { return Promise.resolve(false); },
+    inputText(title) {
+      return new Promise((resolve) => {
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100';
+        mask.innerHTML = `<div style="background:#3a2c2a;border:3px solid #c89b5c;padding:18px;width:260px;color:#fff4d6;font:15px sans-serif"><div style="margin-bottom:10px">${title}</div><input id="__inp" style="width:100%;box-sizing:border-box;padding:8px;font-size:16px" autocomplete="off"><div style="display:flex;gap:10px;margin-top:12px"><button id="__no" style="flex:1;padding:8px">取消</button><button id="__ok" style="flex:1;padding:8px">确定</button></div></div>`;
+        document.body.appendChild(mask);
+        const inp = mask.querySelector('#__inp') as HTMLInputElement;
+        setTimeout(() => inp.focus(), 50);
+        const done = (v: string | null) => { mask.remove(); resolve(v); };
+        mask.querySelector('#__ok')!.addEventListener('click', () => done(inp.value));
+        mask.querySelector('#__no')!.addEventListener('click', () => done(null));
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(inp.value); });
+      });
+    },
+    requestSubscribe() { showToast('（浏览器无订阅消息）'); return Promise.resolve(false); },
+    scheduleReminder() {},
     exit() {},
   };
 }

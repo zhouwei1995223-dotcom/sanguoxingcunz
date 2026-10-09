@@ -2,6 +2,7 @@ import { getPlatform } from '../platform';
 import { sprite } from '../gfx/atlas';
 import { hash2 } from '../core/math';
 import { save } from '../meta/save';
+import { heroSpriteName } from '../meta/goals';
 
 // 主城背景：低分辨率像素风动态场景（黄昏战场、远山、旌旗、奔驰的赵云）
 
@@ -78,7 +79,7 @@ export class HomeBackground {
       g.fillRect(Math.round(w * 0.5 - 18 - k * 40), Math.round(gy + 14 - k * 6 - r), Math.round(r * 2), Math.round(r));
     }
     // 赵云
-    const hero = sprite(`hero_${save.hero}_${Math.floor(t * 10) % 4}`);
+    const hero = sprite(`${heroSpriteName(save.hero)}_${Math.floor(t * 10) % 4}`);
     const hs = 2;
     g.imageSmoothingEnabled = false;
     g.fillStyle = 'rgba(0,0,0,0.3)';

@@ -12,10 +12,15 @@ let breakableT = 20;
 const ENDLESS_BOSSES = ['xiahouen', 'chenying', 'xuhuang', 'hanying', 'suyong', 'huaxiong', 'yanliang', 'caimao', 'zhuran', 'guohuai', 'caochun', 'baolong', 'zhanghe', 'hande', 'caozhen'];
 let et = { elite: 60, ring: 100, stampede: 130, swarm: 75, lantern: 40, boss: 180, bossIdx: 0 };
 
+export function setFirstBoss(sec: number) {
+  et.boss = sec;
+}
+
 function updateEndless(b: Battle, dt: number) {
   const t = b.t, m = t / 60;
   let pool = ENDLESS_POOLS[0].pool;
   for (const p of ENDLESS_POOLS) if (t >= p.from) pool = p.pool;
+  if (b.mods?.pool) pool = b.mods.pool;
   const density = Math.min(300, 18 + m * 20);
   b.spawnT -= dt;
   if (b.spawnT <= 0) {
@@ -42,7 +47,7 @@ function updateEndless(b: Battle, dt: number) {
   fire('lantern', 45, { t, type: 'lanterns' });
   et.boss -= dt;
   if (et.boss <= 0) {
-    et.boss = 180;
+    et.boss = b.mods?.bossEvery || 180;
     const id = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
     et.bossIdx++;
     const [x, y] = b.spawnPoint();

@@ -7,6 +7,10 @@ import { resetSpawner } from '../battle/spawner';
 import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul } from '../meta/run';
+import { currentWeekly, recordCodex, heroSpriteName } from '../meta/goals';
+import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
+import { setFirstBoss } from '../battle/spawner';
+import type { WeaponId } from '../data/skills';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, MAX_PASSIVE_LV } from '../data/skills';
 import { BossDef } from '../data/enemies';
 import { computeStats } from '../meta/ops';
@@ -38,10 +42,20 @@ export class BattleScene implements Scene {
   diff: DifficultyDef;
 
   /** chapterId 为 0 表示无尽模式 */
+  /** 每周挑战规则（每周挑战模式下有值） */
+  weekly: WeeklyDef | null = null;
+  private speedMul = 1;
+  videoPath: Promise<string | null> | null = null;
+
+  /** chapterId：0 为无尽模式，-1 为每周挑战 */
   constructor(chapterId: number, diff = 0) {
+    const themes = Object.keys(THEMES);
     if (chapterId === 0) {
-      const themes = Object.keys(THEMES);
       this.chapter = { ...ENDLESS, theme: themes[(Math.random() * themes.length) | 0] };
+    } else if (chapterId === -1) {
+      this.weekly = currentWeekly();
+      this.chapter = { ...ENDLESS, id: -1, name: '每周挑战', duration: WEEKLY_DURATION, theme: themes[(Math.random() * themes.length) | 0] };
+      this.speedMul = this.weekly.gameSpeed || 1;
     } else this.chapter = CHAPTERS[chapterId - 1];
     this.diff = DIFFICULTIES[diff] || DIFFICULTIES[0];
   }
@@ -50,7 +64,23 @@ export class BattleScene implements Scene {
     const p = getPlatform();
     resetSpawner();
     this.renderer = new WorldRenderer(p.width, p.height, this.chapter.theme);
-    this.battle = new Battle(this.chapter, computeStats(), this.renderer.w, this.renderer.h);
+    const stats = computeStats();
+    if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
+    this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
+    if (this.weekly) {
+      this.battle.mods = this.weekly;
+      if (this.weekly.enemyHp) this.battle.enemyHpMul *= this.weekly.enemyHp;
+      if (this.weekly.bossEvery) setFirstBoss(this.weekly.bossEvery);
+      if (this.weekly.bonusWeapon && !this.battle.weapon(this.weekly.bonusWeapon as WeaponId)) {
+        this.battle.addWeapon(this.weekly.bonusWeapon as WeaponId);
+        this.battle.weapon(this.weekly.bonusWeapon as WeaponId)!.lv = 3;
+      }
+      this.battle.recalc();
+    }
+    this.battle.heroSpriteName = heroSpriteName(save.hero);
+    // 抖音录屏：整局录制，精彩时刻打点剪辑
+    getPlatform().recorderStart();
+    getPlatform().report('battle_start', { mode: this.modeName, chapter: this.chapter.id, diff: this.diff.id, hero: save.hero });
     // 新手教学局降低难度
     if (save.guide === 0) { this.battle.enemyHpMul = 0.75; this.battle.enemyDmgMul = 0.6; }
     this.battle.enemyHpMul *= this.diff.hp;
@@ -78,6 +108,7 @@ export class BattleScene implements Scene {
   private onBoss(d: BossDef) {
     playSfx('boss');
     vibrate(true);
+    getPlatform().recorderMark();
     this.bossBar = { name: d.name, title: d.title };
     if (this.battle.finalBoss) playBgm('bgm_boss');
     game.openDialog(new BossIntroDialog(d, !!this.battle.finalBoss));
@@ -139,7 +170,7 @@ export class BattleScene implements Scene {
       // 调试加速：拆成多个小步长，保证碰撞稳定
       // 顿帧：命中瞬间画面停一下，增强打击感
       if (b.hitStop > 0) b.hitStop -= dt;
-      else for (let i = 0; i < DEBUG.speed && !b.dead && !b.won; i++) b.update(dt);
+      else for (let i = 0; i < DEBUG.speed && !b.dead && !b.won; i++) b.update(dt * this.speedMul);
       const keys = (typeof window !== 'undefined' && (window as any).__keys) || null;
       if (keys && keys[' ']) this.tryUlt();
       save.stats.playSec += dt;
@@ -184,6 +215,7 @@ export class BattleScene implements Scene {
   }
 
   get label(): string {
+    if (this.weekly) return `每周挑战 · ${this.weekly.name}`;
     if (this.chapter.endless) return '无尽战场';
     return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
   }
@@ -191,7 +223,7 @@ export class BattleScene implements Scene {
   /** 选择技能后调用 */
   choose(c: Choice) {
     this.battle.applyChoice(c);
-    if (c.kind === 'evo') { playSfx('evolve'); vibrate(true); }
+    if (c.kind === 'evo') { playSfx('evolve'); vibrate(true); getPlatform().recorderMark(); }
   }
 
   revive() {
@@ -200,6 +232,10 @@ export class BattleScene implements Scene {
   }
 
   /** 结算 */
+  get modeName(): string {
+    return this.weekly ? 'weekly' : this.chapter.endless ? 'endless' : 'chapter';
+  }
+
   finish(win: boolean) {
     const b = this.battle;
     playBgm(null);
@@ -207,7 +243,16 @@ export class BattleScene implements Scene {
     save.stats.runs++;
     save.stats.kills += b.kills;
     save.stats.bossKills += b.bossKills;
+    save.stats.ults += b.ultCasts;
+    save.stats.evos += b.evolved.length;
+    save.stats.bestCombo = Math.max(save.stats.bestCombo, b.bestCombo);
     if (win) save.stats.wins++;
+    recordCodex(b.killsBy, b.bossesKilled, b.evolved);
+    getPlatform().report('battle_end', {
+      mode: this.modeName, chapter: this.chapter.id, diff: this.diff.id, hero: save.hero,
+      win: win ? 1 : 0, sec: Math.floor(b.t), kills: b.kills, level: b.level,
+    });
+    this.videoPath = getPlatform().recorderStop();
     markDirty();
     flushSave(true);
     game.openDialog(new ResultDialog(this, win));
@@ -224,7 +269,10 @@ export class BattleScene implements Scene {
     ui.bar(16 * u, top, bw, 30 * u, b.exp / b.expNeed, '#2ce8f5', '#1a2236');
     ui.text('Lv.' + b.level, 30 * u, top + 15 * u, 22, '#fff', 'left');
     // 计时
-    if (this.chapter.endless) {
+    if (this.weekly) {
+      ui.text(fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 70 * u, 40, '#fff');
+      ui.text(`每周挑战 · ${this.weekly.name} · 最佳 ${save.weekly.best}`, ui.W / 2, top + 108 * u, 20, '#dc9be9');
+    } else if (this.chapter.endless) {
       // 无尽模式：正计时，显示最佳记录
       ui.text(fmtTime(b.t), ui.W / 2, top + 70 * u, 40, b.t > save.endlessBest && save.endlessBest > 0 ? C.gold : '#fff');
       ui.text(`无尽战场 · 最佳 ${fmtTime(save.endlessBest)}`, ui.W / 2, top + 108 * u, 20, C.textDim);
@@ -314,7 +362,7 @@ export class BattleScene implements Scene {
 
   private tryUlt() {
     const b = this.battle;
-    if (b.castUlt()) this.renderer.shake = Math.max(this.renderer.shake, 4);
+    if (b.castUlt()) { this.renderer.shake = Math.max(this.renderer.shake, 4); getPlatform().recorderMark(); }
   }
 
   /** 大招按钮：怒气环 + 满怒发光；未满时可看视频充满 */

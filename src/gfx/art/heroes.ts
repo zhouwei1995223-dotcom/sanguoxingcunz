@@ -88,3 +88,32 @@ export function heroFramesFor(id: HeroId): PixelImage[] {
 }
 
 export const HERO_IDS: HeroId[] = ['zhaoyun', 'guanyu', 'zhangfei', 'zhuge', 'lvbu'];
+
+/** 皮肤造型：在原造型基础上换色、换坐骑 */
+export function heroSkinFrames(id: HeroId): PixelImage[] {
+  const frames = [0, 1, 2, 3];
+  switch (id) {
+    case 'zhaoyun': {
+      const rider = riderImage({ G: 'y', g: 'Y', R: 'c', r: 'B', y: 'c' });
+      const sp = spear(13, 'Y', 'w', 'c');
+      return frames.map((f) => mountedFrame({ frame: f, horse: 'ghost', rider, cloth: 'y', trim: 'w', weapon: sp, weaponX: 16, weaponY: 2 }));
+    }
+    case 'guanyu': {
+      const rider = guanyuRider().recolor({ d: 'k', G: 'd' });
+      return frames.map((f) => mountedFrame({ frame: f, horse: 'red', rider, cloth: 'd', trim: 'Y', weapon: generalWeapon('blade', 'Y'), weaponX: 14, weaponY: 1 }));
+    }
+    case 'zhangfei': {
+      const rider = zhangfeiRider().recolor({ n: 'U', s: 'y', R: 'o', r: 'U' });
+      return frames.map((f) => mountedFrame({ frame: f, horse: 'brown', rider, cloth: 'o', trim: 'k', weapon: generalWeapon('fork', 'Y'), weaponX: 14, weaponY: 1 }));
+    }
+    case 'zhuge': {
+      const rider = zhugeRider().recolor({ w: 'M', b: 'm', B: 'f', K: 'm' });
+      return frames.map((f) => mountedFrame({ frame: f, horse: 'cart', rider, cloth: 'm', trim: 'Y', weapon: featherFan(), weaponX: 17, weaponY: 9 }));
+    }
+    case 'lvbu': {
+      const rider = lvbuRider().recolor({ y: 'K', Y: 'n', M: 'k', f: 'K' });
+      return frames.map((f) => mountedFrame({ frame: f, horse: 'black', rider, cloth: 'k', trim: 'Y', weapon: generalWeapon('halberd', 'R'), weaponX: 14, weaponY: 0 }));
+    }
+  }
+  return heroFramesFor(id);
+}

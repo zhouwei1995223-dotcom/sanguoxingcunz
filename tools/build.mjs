@@ -57,6 +57,7 @@ function writeShells() {
     description: '一骑当千：三国幸存者',
     setting: { urlCheck: false, es6: true, enhance: true, postcss: false, minified: true, minifyWXSS: true },
     compileType: 'game',
+    cloudfunctionRoot: 'cloudfunctions/',
     libVersion: '3.3.4',
     appid: 'touristappid',
     projectname: 'sanguo-xingcun',

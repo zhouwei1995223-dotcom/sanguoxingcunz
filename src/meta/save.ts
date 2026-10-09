@@ -67,7 +67,22 @@ export interface SaveData {
   goldChestCount: number;
   settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean };
   guide: number;
-  stats: { kills: number; runs: number; bossKills: number; playSec: number; wins: number };
+  stats: {
+    kills: number; runs: number; bossKills: number; playSec: number; wins: number;
+    chests: number; upgrades: number; ads: number; ults: number; evos: number; bestCombo: number;
+  };
+  /** 最后修改时间（云存档比对用） */
+  updatedAt: number;
+  achClaimed: Record<string, boolean>;
+  codex: { bosses: Record<string, number>; enemies: Record<string, number>; weapons: Record<string, number> };
+  codexClaimed: Record<string, boolean>;
+  newbieClaimed: Record<string, boolean>;
+  newbiePrizes: Record<number, boolean>;
+  weekly: { week: string; best: number; claimed: Record<number, boolean> };
+  skins: Record<string, { owned: boolean; ads: number; on: boolean }>;
+  redeemed: Record<string, boolean>;
+  subscribed: boolean;
+  videoShareDay: string;
   agreedPrivacy: boolean;
   lastLogin: number;
 }
@@ -123,7 +138,18 @@ function freshSave(): SaveData {
     goldChestCount: 0,
     settings: { music: true, sfx: true, vibrate: true, dmgNum: true },
     guide: 0,
-    stats: { kills: 0, runs: 0, bossKills: 0, playSec: 0, wins: 0 },
+    stats: { kills: 0, runs: 0, bossKills: 0, playSec: 0, wins: 0, chests: 0, upgrades: 0, ads: 0, ults: 0, evos: 0, bestCombo: 0 },
+    updatedAt: now,
+    achClaimed: {},
+    codex: { bosses: {}, enemies: {}, weapons: {} },
+    codexClaimed: {},
+    newbieClaimed: {},
+    newbiePrizes: {},
+    weekly: { week: '', best: 0, claimed: {} },
+    skins: {},
+    redeemed: {},
+    subscribed: false,
+    videoShareDay: '',
     agreedPrivacy: false,
     lastLogin: now,
   };
@@ -143,6 +169,8 @@ export function loadSave() {
       save.settings = Object.assign(base.settings, data.settings || {});
       save.stats = Object.assign(base.stats, data.stats || {});
       save.daily = Object.assign(freshDaily(), data.daily || {});
+      save.codex = Object.assign(base.codex, data.codex || {});
+      save.weekly = Object.assign(base.weekly, data.weekly || {});
       save.equipped = Object.assign(base.equipped, data.equipped || {});
       // 旧存档迁移：通关记录改为按难度存储
       if (!data.clears) {
@@ -170,6 +198,24 @@ export function loadSave() {
 
 export function markDirty() {
   dirty = true;
+  save.updatedAt = Date.now();
+}
+
+/** 用云端存档替换本地（云存档恢复） */
+export function replaceSave(raw: string): boolean {
+  try {
+    const KEYTMP = getPlatform();
+    KEYTMP.setItem(KEY, raw);
+    loadSave();
+    flushSave(true);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function rawSave(): string {
+  return JSON.stringify(save);
 }
 
 export function flushSave(force = false) {

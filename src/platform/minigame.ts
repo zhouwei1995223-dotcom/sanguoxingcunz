@@ -1,5 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { AD_CONFIG, SHARE_CONFIG } from '../data/platformConfig';
+import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG } from '../data/platformConfig';
 
 // 微信 / 抖音小游戏通用实现。两家 API 绝大部分同名，差异点单独判断。
 
@@ -129,6 +129,44 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     }
   } catch (e) {}
 
+  // —— 云开发 ——
+  const cloudEnv = kind === 'wx' ? CLOUD_CONFIG.wx.env : CLOUD_CONFIG.tt.env;
+  let db: any = null;
+  try {
+    if (cloudEnv && kind === 'wx' && api.cloud) {
+      api.cloud.init({ env: cloudEnv, traceUser: true });
+      db = api.cloud.database();
+    } else if (cloudEnv && kind === 'tt' && api.createCloud) {
+      const c = api.createCloud({ envID: cloudEnv });
+      db = c.database();
+    }
+  } catch (e) { db = null; }
+  let saveDocId: string | null = null;
+  const subTpl = kind === 'wx' ? SUBSCRIBE_CONFIG.wx : SUBSCRIBE_CONFIG.tt;
+
+  // —— 录屏（仅抖音）——
+  let recorder: any = null;
+  let recording = false;
+  const clips: number[] = [];
+  let stopResolve: ((p: string | null) => void) | null = null;
+  if (kind === 'tt') {
+    try {
+      recorder = api.getGameRecorderManager();
+      recorder.onStop((res: any) => {
+        recording = false;
+        const path = res && res.videoPath;
+        const finish = (p: string | null) => { if (stopResolve) { stopResolve(p); stopResolve = null; } };
+        if (!path) { finish(null); return; }
+        // 有精彩片段就剪辑成集锦，否则使用整段录屏
+        if (clips.length && recorder.clipVideo) {
+          recorder.clipVideo({ path, clipRange: clips.slice(-6), success: (r: any) => finish(r.videoPath || path), fail: () => finish(path) });
+        } else finish(path);
+        clips.length = 0;
+      });
+      recorder.onError(() => { recording = false; if (stopResolve) { stopResolve(null); stopResolve = null; } });
+    } catch (e) { recorder = null; }
+  }
+
   let openData: any = null;
   if (kind === 'wx') {
     try { openData = api.getOpenDataContext(); } catch (e) {}
@@ -209,6 +247,101 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
       } catch (e) {}
     },
     showToast(text) { try { api.showToast({ title: text, icon: 'none' }); } catch (e) {} },
+    cloudReady() { return !!db; },
+    cloudLoad() {
+      return new Promise((resolve) => {
+        if (!db) { resolve(null); return; }
+        try {
+          db.collection(CLOUD_CONFIG.collection).limit(1).get().then((res: any) => {
+            const doc = res && res.data && res.data[0];
+            if (!doc) { resolve(null); return; }
+            saveDocId = doc._id;
+            resolve({ data: doc.data, updatedAt: doc.updatedAt || 0 });
+          }).catch(() => resolve(null));
+        } catch (e) { resolve(null); }
+      });
+    },
+    cloudSave(data, updatedAt) {
+      return new Promise((resolve) => {
+        if (!db) { resolve(false); return; }
+        try {
+          const col = db.collection(CLOUD_CONFIG.collection);
+          const body = { data, updatedAt };
+          const p = saveDocId ? col.doc(saveDocId).set({ data: body }) : col.add({ data: body }).then((r: any) => { saveDocId = r._id; });
+          p.then(() => resolve(true)).catch(() => resolve(false));
+        } catch (e) { resolve(false); }
+      });
+    },
+    report(event, data) {
+      try {
+        if (kind === 'wx' && api.reportEvent) api.reportEvent(event, data);
+        else if (kind === 'tt' && api.reportAnalytics) api.reportAnalytics(event, data);
+      } catch (e) {}
+    },
+    supportsRecorder() { return !!recorder; },
+    recorderStart() {
+      if (!recorder || recording) return;
+      try { clips.length = 0; recorder.start({ duration: 300 }); recording = true; } catch (e) {}
+    },
+    recorderMark() {
+      if (!recorder || !recording) return;
+      try { recorder.recordClip({ timeRange: [6, 2], success: (r: any) => { if (r && r.index !== undefined) clips.push(r.index); } }); } catch (e) {}
+    },
+    recorderStop() {
+      return new Promise((resolve) => {
+        if (!recorder || !recording) { resolve(null); return; }
+        stopResolve = resolve;
+        try { recorder.stop(); } catch (e) { resolve(null); }
+        setTimeout(() => { if (stopResolve === resolve) { stopResolve = null; resolve(null); } }, 8000);
+      });
+    },
+    shareVideo(videoPath, title) {
+      return new Promise((resolve) => {
+        try {
+          api.shareAppMessage({
+            channel: 'video', title,
+            extra: { videoPath, videoTopics: ['一骑当千', '三国'], hashtag_list: ['一骑当千', '三国'] },
+            success: () => resolve(true), fail: () => resolve(false),
+          });
+        } catch (e) { resolve(false); }
+      });
+    },
+    inputText(title) {
+      return new Promise((resolve) => {
+        try {
+          let value = '';
+          const onInput = (r: any) => { value = r.value; };
+          const onConfirm = (r: any) => { cleanup(); resolve(r.value || value); };
+          const onComplete = (r: any) => { cleanup(); resolve((r && r.value) || value || null); };
+          const cleanup = () => { api.offKeyboardInput(onInput); api.offKeyboardConfirm(onConfirm); api.offKeyboardComplete(onComplete); };
+          api.onKeyboardInput(onInput);
+          api.onKeyboardConfirm(onConfirm);
+          api.onKeyboardComplete(onComplete);
+          api.showKeyboard({ defaultValue: '', maxLength: 32, multiple: false, confirmHold: false, confirmType: 'done' });
+          void title;
+        } catch (e) { resolve(null); }
+      });
+    },
+    requestSubscribe() {
+      return new Promise((resolve) => {
+        const ids = [subTpl.stamina, subTpl.patrol].filter(Boolean);
+        if (!ids.length || !api.requestSubscribeMessage) { resolve(false); return; }
+        try {
+          api.requestSubscribeMessage({
+            tmplIds: ids,
+            success: (r: any) => resolve(ids.some((id) => r[id] === 'accept')),
+            fail: () => resolve(false),
+          });
+        } catch (e) { resolve(false); }
+      });
+    },
+    scheduleReminder(kindName, at) {
+      // 只登记，真正的推送由云函数 notify 定时完成（见 cloudfunctions/notify）
+      if (!db) return;
+      const tmpl = kindName === 'stamina' ? subTpl.stamina : subTpl.patrol;
+      if (!tmpl) return;
+      try { db.collection(CLOUD_CONFIG.reminderCollection).add({ data: { kind: kindName, at, tmpl, sent: false } }); } catch (e) {}
+    },
     exit() { try { api.exitMiniProgram && api.exitMiniProgram({}); } catch (e) {} },
   };
 }

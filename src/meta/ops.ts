@@ -1,3 +1,4 @@
+import { getPlatform } from '../platform';
 import { save, markDirty, tickStamina } from './save';
 import type { EquipItem } from './save';
 import {
@@ -6,6 +7,8 @@ import {
 } from '../data/meta';
 import { dayKey, weighted, pick } from '../core/math';
 import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS } from '../data/heroes';
+import { setBonuses, skinOn } from './goals';
+import { SKIN_DMG_BONUS } from '../data/goals';
 
 // 局外养成的所有操作（纯逻辑，UI 调用）
 
@@ -51,6 +54,12 @@ export function computeStats(heroId = save.hero): HeroStats {
     const it = getEquipped(slot);
     if (it) addStats(s, itemStats(it));
   }
+  // 套装加成
+  const tids: string[] = [];
+  for (const slot of SLOTS) { const it = getEquipped(slot); if (it) tids.push(it.tid); }
+  for (const st of setBonuses(tids).stats) addStats(s, st);
+  // 皮肤加成
+  if (skinOn(heroId)) addStats(s, { dmg: SKIN_DMG_BONUS });
   let revive = 0, reroll = 0;
   for (const t of TALENTS) {
     const lv = save.talents[t.id] || 0;
@@ -216,6 +225,7 @@ export function grantHero(hero: string): 'new' | 'shards' {
   st.owned = true;
   st.star = 1;
   markDirty();
+  getPlatform().report('hero_unlock', { hero, way: 'reward' });
   return 'new';
 }
 
@@ -228,6 +238,7 @@ export function unlockHero(id: string): string | null {
   st.owned = true;
   st.star = 1;
   markDirty();
+  getPlatform().report('hero_unlock', { hero: id, way: 'shards' });
   return null;
 }
 
@@ -289,6 +300,8 @@ export function spendStamina(n = STAMINA.costPerRun): boolean {
   if (save.stamina >= STAMINA.max) save.staminaTs = Date.now();
   save.stamina -= n;
   markDirty();
+  // 订阅了提醒：登记体力回满时间
+  if (save.subscribed) getPlatform().scheduleReminder('stamina', save.staminaTs + (STAMINA.max - save.stamina) * STAMINA.regenSeconds * 1000);
   return true;
 }
 
@@ -309,6 +322,7 @@ export function collectPatrol(mul = 1) {
   save.gold += p.gold * mul;
   save.iron += p.iron * mul;
   save.patrolTs = Date.now();
+  if (save.subscribed) getPlatform().scheduleReminder('patrol', save.patrolTs + PATROL.maxHours * 3600000);
   progressTask('patrol', 1);
   markDirty();
   return p;
@@ -328,6 +342,7 @@ export function openChest(def: ChestDef): ChestResult {
     else if (save.goldChestCount >= def.pity) { q = 3; save.goldChestCount = 0; }
   }
   progressTask('chest', 1);
+  getPlatform().report('chest_open', { chest: def.id });
   const item = newItem(randomItemTemplate(), q);
   let shards: ChestResult['shards'];
   if (def.id === 'gold') shards = { hero: randomShardHero(true), n: 5 + Math.floor(Math.random() * 6) };
@@ -342,6 +357,10 @@ export function chestById(id: string) {
 
 // —— 每日任务 ——
 export function progressTask(kind: TaskKind, n: number) {
+  // 累计统计（成就 / 新手目标使用）
+  if (kind === 'chest') save.stats.chests += n;
+  else if (kind === 'upgrade') save.stats.upgrades += n;
+  else if (kind === 'ad') save.stats.ads += n;
   for (const t of DAILY_TASKS) {
     if (t.kind !== kind) continue;
     save.daily.progress[t.id] = Math.min(t.target, (save.daily.progress[t.id] || 0) + n);

@@ -1,6 +1,6 @@
 import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
-import { heroFramesFor, HERO_IDS } from './art/heroes';
+import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
 import { soldierFrames, generalFrames } from './art/units';
 import { SOLDIER_STYLES, GENERAL_STYLES } from './art/roster';
 import * as I from './art/items';
@@ -97,7 +97,7 @@ function addUnit(name: string, frames: PixelImage[]) {
 }
 
 export function buildAtlas() {
-  for (const id of HERO_IDS) addUnit('hero_' + id, heroFramesFor(id));
+  for (const id of HERO_IDS) { addUnit('hero_' + id, heroFramesFor(id)); addUnit('hero_' + id + '_skin', heroSkinFrames(id)); }
   for (const k in SOLDIER_STYLES) addUnit('u_' + k, soldierFrames(SOLDIER_STYLES[k]));
   for (const k in GENERAL_STYLES) addUnit('u_' + k, generalFrames(GENERAL_STYLES[k]));
 
