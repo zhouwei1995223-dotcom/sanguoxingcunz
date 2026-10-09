@@ -175,7 +175,7 @@ function waves(early: string[], mid: string[], late: string[], heavy: string, el
 CHAPTERS.push(
   {
     id: 6, name: '虎牢关', subtitle: '群雄讨董', theme: 'hulao',
-    story: '十八路诸侯会盟讨伐董卓，西凉军据守虎牢关。华雄连斩数将，关下尸横遍野……',
+    story: '十八路诸侯会盟讨伐董卓，西凉军据守虎牢关。华雄连败数将，诸侯军中一时无人敢出战……',
     duration: 600, hpMul: 40, dmgMul: 8.6, growth: 0.36, goldBase: 3200, power: 12000,
     waves: waves(['qiang_spear', 'bandit'], ['qiang_spear', 'qiang_club', 'gy_archer', 'qiang_cavalry'], ['qiang_club', 'gy_archer', 'qiang_cavalry', 'tiger_cavalry'], 'xl_heavy', 'elite_guard'),
     events: standardEvents({ elite: 'xl_heavy', ring: 'qiang_spear', stampede: 'qiang_cavalry', swarm: 'bandit', midBoss: 'huaxiong', boss: 'dongzhuo' }),

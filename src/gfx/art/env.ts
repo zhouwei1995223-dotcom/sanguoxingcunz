@@ -142,13 +142,13 @@ export const THEMES: Record<string, GroundTheme> = {
   },
   hanshui: {
     base: '#b49a68', dark: '#9e845a', light: '#c8b07c', accent: '#8a9a58',
-    decor: [['reeds', 22], ['rock', 10], ['bigRock', 4], ['deadTree', 4], ['bones', 3], ['grass', 10], ['banner', 2]],
+    decor: [['reeds', 22], ['rock', 10], ['bigRock', 4], ['deadTree', 4], ['grass', 10], ['banner', 2]],
     recolor: { g: 'L', G: 'u' },
     fog: 'rgba(40,30,10,0.3)',
   },
   fengming: {
     base: '#7a6f66', dark: '#665c55', light: '#8f857b', accent: '#5f7a4a',
-    decor: [['rock', 16], ['bigRock', 8], ['deadTree', 6], ['pine', 6], ['grass', 8], ['bones', 3]],
+    decor: [['rock', 16], ['bigRock', 8], ['deadTree', 6], ['pine', 6], ['grass', 8]],
     recolor: { g: 'G', G: 'd' },
     fog: 'rgba(30,20,30,0.4)',
   },
@@ -163,7 +163,7 @@ export const THEMES: Record<string, GroundTheme> = {
 Object.assign(THEMES, {
   hulao: {
     base: '#8a7356', dark: '#76624a', light: '#a08868', accent: '#6b7a44',
-    decor: [['rock', 16], ['bigRock', 8], ['banner', 4], ['bones', 4], ['deadTree', 4], ['grass', 10], ['stumps', 3]],
+    decor: [['rock', 16], ['bigRock', 8], ['banner', 4], ['deadTree', 4], ['grass', 10], ['stumps', 3]],
     recolor: { g: 'E', G: 'u' },
     fog: 'rgba(40,20,10,0.4)',
   },
@@ -175,7 +175,7 @@ Object.assign(THEMES, {
   },
   chibi: {
     base: '#3e4a46', dark: '#323d3a', light: '#4d5a55', accent: '#6b3a2a',
-    decor: [['reeds', 24], ['rock', 8], ['bones', 4], ['deadTree', 4], ['banner', 3], ['stumps', 4]],
+    decor: [['reeds', 24], ['rock', 8], ['deadTree', 4], ['banner', 3], ['stumps', 4]],
     recolor: { g: 'G', G: 'd' },
     fog: 'rgba(60,10,0,0.45)',
   },

@@ -295,7 +295,7 @@ export class BattleScene implements Scene {
       ui.text(this.label, ui.W / 2, top + 108 * u, 20, this.diff.id ? this.diff.color : C.textDim);
     }
     // 击杀与金币
-    ui.icon('skull', 36 * u, top + 62 * u, 32 * u);
+    ui.icon('kills', 36 * u, top + 62 * u, 32 * u);
     ui.text(fmtNum(b.kills), 60 * u, top + 62 * u, 26, '#fff', 'left');
     ui.icon('gold', 36 * u, top + 100 * u, 30 * u);
     ui.text(fmtNum(b.coins), 60 * u, top + 100 * u, 26, C.gold, 'left');

@@ -351,7 +351,7 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   bowl: { id: 'bowl', name: '聚宝盆', icon: 'p_bowl', desc: '拾取范围+35%，金币+10%' },
   seal: { id: 'seal', name: '玉玺', icon: 'p_seal', desc: '经验获取+8%' },
   map: { id: 'map', name: '舆图', icon: 'p_map', desc: '飞剑、弩箭、飞刀等技能数量+1', max: 2, unlockCh: 3 },
-  wine: { id: 'wine', name: '美酒', icon: 'p_wine', desc: '暴击率+4%，暴击伤害+15%', unlockCh: 1 },
+  wine: { id: 'wine', name: '鹰羽', icon: 'p_wine', desc: '暴击率+4%，暴击伤害+15%', unlockCh: 1 },
   horn: { id: 'horn', name: '号角', icon: 'p_horn', desc: '怒气获取+15%', unlockCh: 2 },
   whetstone: { id: 'whetstone', name: '磨刀石', icon: 'p_whetstone', desc: '对精英与首领伤害+15%', unlockCh: 2 },
   mirror: { id: 'mirror', name: '护心镜', icon: 'p_mirror', desc: '每隔一段时间抵挡一次伤害（每级冷却-2秒）', unlockCh: 3 },
