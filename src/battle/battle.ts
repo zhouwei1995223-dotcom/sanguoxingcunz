@@ -162,7 +162,7 @@ export class Battle {
   densityMul = 1;
   /** 当前目标同屏敌人数（刷怪器写入） */
   targetDensity = 0;
-  /** 动态难度：屏幕长时间被清空时，新敌人血量逐步提高（1～2 倍） */
+  /** 动态难度：屏幕长时间被清空时，新敌人血量逐步提高（1～3 倍） */
   director = 1;
   private directorT = 0;
 
@@ -297,14 +297,22 @@ export class Battle {
   // —— 敌人 ——
   /** 普通敌人从出生到被击杀的平均秒数（指数平均） */
   killAge = 8;
+  /** 身边敌人 / 目标数量（平滑） */
+  screenFill = 0.1;
 
   private updateDirector(dt: number) {
     this.directorT -= dt;
     if (this.directorT > 0) return;
     this.directorT = 1;
-    // 敌人从屏幕外走到身边约需 7～10 秒；平均不到 6.5 秒就被消灭，说明还没靠近就被清光了
-    if (this.killAge < 6.5 && this.t > 120) this.director = Math.min(2, this.director + 0.03);
-    else if (this.killAge > 8.5) this.director = Math.max(1, this.director - 0.04);
+    // 玩家身边（约 200×200 范围）的敌人远少于应有数量，说明敌人还没靠近就被清光：慢慢加血；身边热闹起来后回落
+    if (this.targetDensity <= 0) return;
+    const p = this.player;
+    let near = 0;
+    for (const e of this.enemies) if (!e.dead && !e.boss && Math.abs(e.x - p.x) < 100 && Math.abs(e.y - p.y) < 100) near++;
+    const fill = near / this.targetDensity;
+    this.screenFill += (fill - this.screenFill) * 0.15;
+    if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(3, this.director + 0.04);
+    else if (this.screenFill > 0.06) this.director = Math.max(1, this.director - 0.02);
   }
 
   /** 后期人海程度：4 分钟起逐步提高，10 分钟达到最大 */
@@ -319,9 +327,9 @@ export class Battle {
     const minute = this.t / 60;
     // 无尽模式：二次曲线成长，后期压力越来越大
     const late = Math.max(0, minute - 4);
-    const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.08 * late * late;
+    const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
-    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.6 * this.crowdRamp()) * this.director;
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director;
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -332,7 +340,8 @@ export class Battle {
     e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + 0.012 * minute * minute : 1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
     // 敌人变多后单个经验相应减少，升级节奏不变（大军压境的弱兵经验减半）
-    e.exp = (d.exp * (opts.elite ? 20 : 1) * (opts.hpMul || 1)) / (opts.elite ? 1 : 1 + this.crowdRamp());
+    // 动态难度加血时经验同比减少，强势构筑不会越滚越快
+    e.exp = (d.exp * (opts.elite ? 20 : 1) * (opts.hpMul || 1)) / (opts.elite ? 1 : (1 + this.crowdRamp()) * this.director);
     e.sprite = 'u_' + d.sprite;
     e.elite = !!opts.elite;
     e.born = this.t;
@@ -477,6 +486,8 @@ export class Battle {
   /** 对敌人造成伤害，返回是否击杀 */
   damage(e: Enemy, base: number, kx = 0, ky = 0, knock = 0, opts: { noCrit?: boolean } = {}): boolean {
     if (e.dead) return false;
+    // 屏幕外的敌人打不到：敌人一定会先出现在玩家眼前
+    if (!e.boss && !this.inView(e.x, e.y - 6 * e.scale, 4)) return false;
     let dmg = base * this.dmgMul;
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (e.boss) dmg *= 1 + this.base.bossDmg / 100;
@@ -675,6 +686,8 @@ export class Battle {
       pr.x += pr.vx * dt;
       pr.y += pr.vy * dt;
       if (pr.life <= 0) { this.projs.splice(i, 1); continue; }
+      // 飞出屏幕的弩箭、风刃、飞刀直接消失
+      if (pr.kind !== 'horse' && !this.inView(pr.x, pr.y, 6)) { this.projs.splice(i, 1); continue; }
       this.grid.query(pr.x, pr.y, pr.r + 20, near);
       let removed = false;
       for (const e of near) {
@@ -1322,16 +1335,22 @@ export class Battle {
   nearestEnemy(maxD = 9999, from = this.player): Enemy | null {
     let best: Enemy | null = null, bd = maxD * maxD;
     for (const e of this.enemies) {
-      if (e.dead) continue;
+      if (e.dead || (!e.boss && !this.inView(e.x, e.y))) continue;
       const d = (e.x - from.x) ** 2 + (e.y - from.y) ** 2;
       if (d < bd) { bd = d; best = e; }
     }
     return best;
   }
 
-  randomVisibleEnemy(): Enemy | null {
+  /** 是否在屏幕内（镜头以玩家为中心；margin 为负表示更靠里） */
+  inView(x: number, y: number, margin = 0): boolean {
     const p = this.player;
-    const vis = this.enemies.filter((e) => !e.dead && Math.abs(e.x - p.x) < this.viewW / 2 && Math.abs(e.y - p.y) < this.viewH / 2);
+    return Math.abs(x - p.x) < this.viewW / 2 + margin && Math.abs(y - (p.y - 8)) < this.viewH / 2 + margin;
+  }
+
+  /** 屏幕内侧的随机敌人：范围技能只瞄准看得见的敌人，不会在屏幕边缘守株待兔 */
+  randomVisibleEnemy(): Enemy | null {
+    const vis = this.enemies.filter((e) => !e.dead && this.inView(e.x, e.y, -24));
     return vis.length ? pick(vis) : null;
   }
 

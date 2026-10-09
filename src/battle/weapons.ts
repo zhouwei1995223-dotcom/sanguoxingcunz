@@ -162,12 +162,12 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   }
   if (w.evo) {
     // 随机射向附近的敌人
-    const cands = b.enemies.filter((e) => !e.dead && Math.abs(e.x - p.x) < b.viewW * 0.55 && Math.abs(e.y - p.y) < b.viewH * 0.55);
+    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
     if (!cands.length) return;
     cands.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
     targets = [cands[(Math.random() * Math.min(8, cands.length)) | 0]];
   } else {
-    const cands = b.enemies.filter((e) => !e.dead && Math.abs(e.x - p.x) < b.viewW * 0.6 && Math.abs(e.y - p.y) < b.viewH * 0.6);
+    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
     if (!cands.length) return;
     cands.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
     targets = [];
@@ -469,7 +469,7 @@ function catapult(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t = L.cd * b.cdMul;
   const p = b.player;
   // 优先砸远处的敌群
-  const vis = b.enemies.filter((e) => !e.dead && Math.abs(e.x - p.x) < b.viewW / 2 && Math.abs(e.y - p.y) < b.viewH / 2);
+  const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -24));
   vis.sort((a, c) => (c.x - p.x) ** 2 + (c.y - p.y) ** 2 - ((a.x - p.x) ** 2 + (a.y - p.y) ** 2));
   for (let i = 0; i < L.count; i++) {
     const t = vis.length ? vis[Math.floor(Math.random() * Math.min(vis.length, 12))] : null;

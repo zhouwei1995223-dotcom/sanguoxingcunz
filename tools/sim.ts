@@ -30,7 +30,7 @@ function stats(): HeroStats {
 
 for (let r = 0; r < runs; r++) {
   resetSpawner();
-  const b = new Battle(chId === 0 ? ENDLESS : CHAPTERS[chId - 1], stats(), 280, 560);
+  const b = new Battle(chId === 0 ? ENDLESS : CHAPTERS[chId - 1], stats(), Number(process.env.VW || 308), Number(process.env.VH || 667));
   const D = DIFFICULTIES[Number(process.env.DIFF || 0)];
   b.enemyHpMul *= D.hp; b.enemyDmgMul *= D.dmg;
   if (chId === 0) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
@@ -94,7 +94,7 @@ for (let r = 0; r < runs; r++) {
         b.applyChoice(ch);
       }
     }
-    if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) log.push(`${b.t.toFixed(0)}s lv${b.level} hp${Math.round(b.player.hp)}/${b.player.maxHp} kills${b.kills} enemies${b.enemies.filter(e=>!e.dead).length}`);
+    if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) log.push(`${b.t.toFixed(0)}s fill${b.screenFill.toFixed(2)} dens${Math.round(b.targetDensity)} dir${b.director.toFixed(2)} lv${b.level} hp${Math.round(b.player.hp)}/${b.player.maxHp} kills${b.kills} enemies${b.enemies.filter(e=>!e.dead).length}`);
     if (b.dead && b.revives > 0) { b.revives--; b.revive(); log.push(`${b.t.toFixed(0)}s 复活`); }
   }
   console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 耗时${Date.now() - t0}ms`);
