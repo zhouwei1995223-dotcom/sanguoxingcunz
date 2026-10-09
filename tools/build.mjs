@@ -59,7 +59,7 @@ function writeShells() {
     networkTimeout: { request: 10000, connectSocket: 10000, uploadFile: 10000, downloadFile: 10000 },
   }, null, 2));
   fs.writeFileSync('dist/wechat/project.config.json', JSON.stringify({
-    description: '一骑当千：三国幸存者',
+    description: '三国一骑当千',
     setting: { urlCheck: false, es6: true, enhance: true, postcss: false, minified: true, minifyWXSS: true },
     compileType: 'game',
     cloudfunctionRoot: 'cloudfunctions/',
@@ -77,7 +77,7 @@ function writeShells() {
   fs.writeFileSync('dist/douyin/project.config.json', JSON.stringify({
     miniprogramRoot: '',
     projectname: 'sanguo-xingcun',
-    description: '一骑当千：三国幸存者',
+    description: '三国一骑当千',
     appid: TT_APPID,
     setting: { urlCheck: false, es6: true, postcss: false, minified: true, newFeature: true },
     compileType: 'game',

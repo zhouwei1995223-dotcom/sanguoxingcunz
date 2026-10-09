@@ -19,12 +19,12 @@ export const SHARE_CONFIG = {
 };
 
 export const GAME_INFO = {
-  name: '一骑当千：三国幸存者',
-  shortName: '一骑当千',
+  name: '三国一骑当千',
+  shortName: '三国一骑当千',
   version: '1.0.0',
   ageRating: 8, // 适龄提示：8+
   // 著作权人 / 出版单位等信息在拿到软著和备案后填写，显示在设置-关于
-  copyright: '著作权人：（待填写）',
+  copyright: '著作权人：张周炜',
   icp: '备案号：（待填写）',
 };
 

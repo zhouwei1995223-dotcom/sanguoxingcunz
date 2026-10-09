@@ -231,6 +231,7 @@ export class BattleScene implements Scene {
   /** 测试用：直接打开指定选项的升级弹窗 / 进化表 */
   openLevelUpForTest(choices: Choice[]) { game.openDialog(new LevelUpDialog(this, choices)); }
   openEvoTableForTest() { game.openDialog(new EvoTableDialog(this.battle)); }
+  pauseForTest() { game.openDialog(new PauseDialog(this)); }
 
   /** 选择技能后调用 */
   choose(c: Choice) {

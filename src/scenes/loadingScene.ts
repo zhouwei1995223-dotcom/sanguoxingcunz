@@ -43,7 +43,7 @@ export class LoadingScene implements Scene {
     g.fillStyle = '#120d14';
     g.fillRect(0, 0, ui.W, ui.H);
     ui.text(GAME_INFO.shortName, ui.W / 2, ui.H * 0.32, 110, '#fee761', 'center', '#7a1c24');
-    ui.text('三国幸存者', ui.W / 2, ui.H * 0.32 + 100 * u, 40, '#fff4d6');
+    ui.text('乱世幸存者', ui.W / 2, ui.H * 0.32 + 100 * u, 40, '#fff4d6');
     const prog = Math.min(1, this.t / 1.6);
     ui.bar(ui.W * 0.15, ui.H * 0.62, ui.W * 0.7, 26 * u, prog, C.gold);
     ui.text(prog < 1 ? '整军备战中…' : '点击屏幕继续', ui.W / 2, ui.H * 0.62 + 60 * u, 24, C.textDim);

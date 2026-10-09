@@ -183,7 +183,7 @@ export class HomeScene implements Scene {
     const ty = top + 70 * u;
     ui.text(GAME_INFO.shortName, ui.W / 2 + 4 * u, ty + 4 * u, 96, '#3a0d12', 'center', null);
     ui.text(GAME_INFO.shortName, ui.W / 2, ty, 96, '#fee761', 'center', '#7a1c24');
-    ui.text('— 三国幸存者 —', ui.W / 2, ty + 74 * u, 30, '#fff4d6');
+    ui.text('— 乱世幸存者 —', ui.W / 2, ty + 74 * u, 30, '#fff4d6');
 
     // 侧边功能按钮
     const side: { id: string; icon: string; label: string; dot: boolean; on: () => void; show?: boolean }[] = [
@@ -204,19 +204,22 @@ export class HomeScene implements Scene {
     const sy = top + 180 * u;
     // 按钮多时自动压缩间距，避免压住章节卡
     const cardTop = this.contentBottom(ui) - 310 * u - 170 * u;
-    const drawSide = (list: typeof side, x: number) => list.forEach((s, i) => {
+    const drawSide = (list: typeof side, x0: number, right: boolean) => list.forEach((s, i) => {
       const step = Math.min(bs + 40 * u, (cardTop - sy - 20 * u) / list.length);
+      // 空间不够时缩小按钮，保证下面的文字不被下一个按钮挡住
+      const b = Math.min(bs, step - 34 * u);
+      const x = right ? x0 + bs - b : x0;
       const y = sy + i * step;
-      this.sideBtnRect[s.id] = [x, y, bs, bs];
+      this.sideBtnRect[s.id] = [x, y, b, b];
       const pressed = ui.isPressed('side_' + s.id);
-      ui.panel(x, y + (pressed ? 3 * u : 0), bs, bs, 'dark');
-      ui.icon(s.icon, x + bs / 2, y + bs / 2 + (pressed ? 3 * u : 0), bs * 0.58);
-      ui.text(s.label, x + bs / 2, y + bs + 16 * u, 20, '#fff');
-      if (s.dot) ui.redDot(x + bs - 6 * u, y + 6 * u);
-      if (ui.clicked('side_' + s.id, x, y, bs, bs)) s.on();
+      ui.panel(x, y + (pressed ? 3 * u : 0), b, b, 'dark');
+      ui.icon(s.icon, x + b / 2, y + b / 2 + (pressed ? 3 * u : 0), b * 0.58);
+      ui.text(s.label, x + b / 2, y + b + 16 * u, 20, '#fff');
+      if (s.dot) ui.redDot(x + b - 6 * u, y + 6 * u);
+      if (ui.clicked('side_' + s.id, x, y, b, b)) s.on();
     });
-    drawSide(side, 18 * u);
-    drawSide(sideR, ui.W - bs - 18 * u);
+    drawSide(side, 18 * u, false);
+    drawSide(sideR, ui.W - bs - 18 * u, true);
 
     // 章节卡（含难度切换）
     const ch = CHAPTERS[Math.min(CHAPTERS.length, save.selectedChapter) - 1];
