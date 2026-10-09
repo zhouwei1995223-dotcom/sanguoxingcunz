@@ -19,8 +19,8 @@ export const SHARE_CONFIG = {
 };
 
 export const GAME_INFO = {
-  name: '三国一骑当千',
-  shortName: '三国一骑当千',
+  name: '长坂单骑传',
+  shortName: '长坂单骑传',
   version: '1.0.0',
   ageRating: 8, // 适龄提示：8+
   // 著作权人 / 出版单位等信息在拿到软著和备案后填写，显示在设置-关于

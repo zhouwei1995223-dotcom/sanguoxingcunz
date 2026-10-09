@@ -44,7 +44,7 @@ function writeShells() {
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>一骑当千：三国幸存者</title>
+<title>长坂单骑传</title>
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}</style>
 </head><body><script src="game.js"></script></body></html>
 `);
@@ -59,7 +59,7 @@ function writeShells() {
     networkTimeout: { request: 10000, connectSocket: 10000, uploadFile: 10000, downloadFile: 10000 },
   }, null, 2));
   fs.writeFileSync('dist/wechat/project.config.json', JSON.stringify({
-    description: '三国一骑当千',
+    description: '长坂单骑传',
     setting: { urlCheck: false, es6: true, enhance: true, postcss: false, minified: true, minifyWXSS: true },
     compileType: 'game',
     cloudfunctionRoot: 'cloudfunctions/',
@@ -77,7 +77,7 @@ function writeShells() {
   fs.writeFileSync('dist/douyin/project.config.json', JSON.stringify({
     miniprogramRoot: '',
     projectname: 'sanguo-xingcun',
-    description: '三国一骑当千',
+    description: '长坂单骑传',
     appid: TT_APPID,
     setting: { urlCheck: false, es6: true, postcss: false, minified: true, newFeature: true },
     compileType: 'game',

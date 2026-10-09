@@ -243,7 +243,7 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     postToOpenData(msg) { try { if (openData) openData.postMessage(msg); } catch (e) {} },
     showNativeRank() {
       try {
-        api.getImRankList({ relationType: 'default', dataType: 0, rankType: 'week', suffix: '关', rankTitle: '一骑当千·周榜', zoneId: 'default' });
+        api.getImRankList({ relationType: 'default', dataType: 0, rankType: 'week', suffix: '关', rankTitle: '长坂单骑传·周榜', zoneId: 'default' });
       } catch (e) {}
     },
     showToast(text) { try { api.showToast({ title: text, icon: 'none' }); } catch (e) {} },
@@ -300,7 +300,7 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
         try {
           api.shareAppMessage({
             channel: 'video', title,
-            extra: { videoPath, videoTopics: ['一骑当千', '三国'], hashtag_list: ['一骑当千', '三国'] },
+            extra: { videoPath, videoTopics: ['长坂单骑传', '三国'], hashtag_list: ['长坂单骑传', '三国'] },
             success: () => resolve(true), fail: () => resolve(false),
           });
         } catch (e) { resolve(false); }
