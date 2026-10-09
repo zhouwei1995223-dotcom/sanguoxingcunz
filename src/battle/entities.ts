@@ -77,7 +77,7 @@ export interface PassiveState {
   lv: number;
 }
 
-export type ProjKind = 'bolt' | 'pot' | 'horse' | 'sword';
+export type ProjKind = 'bolt' | 'pot' | 'horse' | 'sword' | 'wind' | 'tornado';
 
 export interface Projectile {
   kind: ProjKind;

@@ -257,6 +257,9 @@ export const CHESTS: ChestDef[] = [
 
 // —— 七日签到 ——
 export interface Reward {
+  /** 直接获得武将（已拥有则转为碎片） */
+  hero?: string;
+  shards?: { hero: string; n: number };
   gold?: number;
   yuanbao?: number;
   iron?: number;
@@ -270,7 +273,7 @@ export const SIGNIN: Reward[] = [
   { stamina: 20 },
   { gold: 2000 },
   { yuanbao: 120 },
-  { equip: { q: 3 } },
+  { hero: 'zhangfei', yuanbao: 100 },
 ];
 
 // —— 每日任务 ——
@@ -297,11 +300,12 @@ export const ACTIVITY_REWARDS: { points: number; reward: Reward }[] = [
   { points: 40, reward: { iron: 5 } },
   { points: 60, reward: { stamina: 10 } },
   { points: 80, reward: { yuanbao: 50 } },
-  { points: 100, reward: { equip: { q: 2 } } },
+  { points: 100, reward: { equip: { q: 2 }, shards: { hero: 'zhuge', n: 5 } } },
 ];
 
 // —— 商店日常 ——
 export const SHOP_DAILY = {
+  adShards: { amount: 4, limit: 2 },
   adYuanbao: { amount: 40, limit: 5 },
   adGold: { minutes: 120, limit: 3 },
   freeGift: { gold: 200 },

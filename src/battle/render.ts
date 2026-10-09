@@ -247,6 +247,30 @@ export class WorldRenderer {
         this.blitRot(sprite('fsword'), sx, sy, a + Math.PI / 2);
       }
     }
+    // 风刃与火焰龙卷
+    for (const pr of b.projs) {
+      if (pr.kind === 'wind') this.drawWind(pr.x, pr.y, pr.rot);
+      else if (pr.kind === 'tornado') this.drawTornado(pr.x, pr.y, pr.r, pr.rot, Math.min(1, pr.life / 0.5));
+    }
+    // 方天画戟旋风
+    const hb = b.weapon('halberd');
+    if (hb && hb.active > 0) this.drawWhirl(p.x, p.y - 6, levelData(hb).area * b.areaMul, hb.angle, hb.evo ? '#feae34' : '#e43b44');
+    // 大招：天下无双 / 青龙出水
+    if (b.ult && b.ult.kind === 'whirl') this.drawWhirl(p.x, p.y - 6, 62, b.t * 40, '#ff2a3a', true);
+    if (b.ult && b.ult.kind === 'crescent') {
+      for (const ring of b.ult.rings) {
+        const R = Math.hypot(this.w, this.h) * 0.55;
+        if (ring.r > R) continue;
+        g.globalAlpha = 0.85 * (1 - ring.r / R);
+        g.strokeStyle = '#63c74d';
+        g.lineWidth = 10;
+        this.ellipse(p.x, p.y - 6, ring.r, ring.r * 0.85, true);
+        g.strokeStyle = '#e8ffd8';
+        g.lineWidth = 3;
+        this.ellipse(p.x, p.y - 6, ring.r, ring.r * 0.85, true);
+        g.globalAlpha = 1;
+      }
+    }
     // 敌方投射物
     for (const s of b.shots) this.blitRot(sprite(s.sprite), s.x, s.y, s.rot);
 
@@ -279,6 +303,15 @@ export class WorldRenderer {
     if (e.slow > 0) g.globalAlpha = 0.85;
     this.blitScaled(s, e.x, e.y, sc);
     g.globalAlpha = 1;
+    if (e.slow >= 1) {
+      // 眩晕：头顶转圈的星星
+      const hy = e.y - s.h * sc - 1;
+      for (let i = 0; i < 2; i++) {
+        const a = b.t * 8 + i * Math.PI;
+        g.fillStyle = '#fee761';
+        g.fillRect(Math.round(e.x + Math.cos(a) * 4 - this.camX), Math.round(hy + Math.sin(a) * 1.5 - this.camY), 2, 2);
+      }
+    }
     // 精英血条
     if (e.elite && e.hp < e.maxHp) {
       const w = 20;
@@ -297,7 +330,7 @@ export class WorldRenderer {
     const flash = p.hurtFlash > 0 && Math.floor(p.hurtFlash * 30) % 2 === 0;
     this.blit(sprite('shadow_l'), p.x, p.y + 1);
     if (p.iframe > 0.5) g.globalAlpha = 0.5 + 0.5 * Math.sin(b.t * 30);
-    this.blit(sprite(`hero_${frame}${p.left ? '_L' : ''}${flash ? (p.left ? 'W' : '_W') : ''}`), p.x, p.y);
+    this.blit(sprite(`${b.heroSprite}_${frame}${p.left ? '_L' : ''}${flash ? (p.left ? 'W' : '_W') : ''}`), p.x, p.y);
     g.globalAlpha = 1;
     // 血条
     const w = 22;
@@ -363,6 +396,25 @@ export class WorldRenderer {
       case 'spark':
         this.blit(sprite('spark' + Math.min(2, Math.floor(k * 3))), f.x, f.y);
         break;
+      case 'slash': {
+        // 刀光：沿弧线展开的月牙
+        const R = f.r!;
+        const arc = Math.min(Math.PI, f.w!);
+        const sweepK = Math.min(1, k * 3);
+        const a0 = f.a! - arc, a1 = f.a! - arc + arc * 2 * sweepK;
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.scale(1, 0.85);
+        g.globalAlpha = (1 - k) * 0.55;
+        g.fillStyle = f.color || '#ffffff';
+        g.beginPath(); g.arc(0, 0, R, a0, a1); g.arc(0, 0, R * 0.55, a1, a0, true); g.closePath(); g.fill();
+        g.globalAlpha = 1 - k;
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(0, 0, R, a0, a1); g.arc(0, 0, R * 0.86, a1, a0, true); g.closePath(); g.fill();
+        g.restore();
+        g.globalAlpha = 1;
+        break;
+      }
       case 'corpse': {
         // 被击飞：抛物线 + 旋转 + 闪白后淡出
         const t = f.t;
@@ -438,6 +490,59 @@ export class WorldRenderer {
       }
     }
     void b;
+  }
+
+  private drawWind(x: number, y: number, a: number) {
+    const g = this.ctx;
+    g.save();
+    g.translate(Math.round(x - this.camX), Math.round(y - this.camY));
+    g.rotate(a);
+    g.fillStyle = 'rgba(44,232,245,0.5)';
+    g.beginPath(); g.arc(0, 0, 6, -1.2, 1.2); g.arc(-3, 0, 5, 1.1, -1.1, true); g.fill();
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc(0, 0, 5, -1.0, 1.0); g.arc(-2, 0, 4.5, 0.9, -0.9, true); g.fill();
+    g.restore();
+  }
+
+  private drawTornado(x: number, y: number, r: number, rot: number, alpha: number) {
+    const g = this.ctx;
+    const cols = ['#e43b44', '#f77622', '#feae34', '#fee761'];
+    g.globalAlpha = 0.25 * alpha;
+    g.fillStyle = '#f77622';
+    this.ellipse(x, y, r, r * 0.45);
+    for (let i = 0; i < 7; i++) {
+      const k = i / 6;
+      const rr = r * (0.35 + 0.65 * k);
+      const ox = Math.sin(rot + i * 0.9) * 3 * k;
+      g.globalAlpha = 0.75 * alpha;
+      g.strokeStyle = cols[i % 4];
+      g.lineWidth = 2;
+      this.ellipse(x + ox, y - i * 6, rr, rr * 0.3, true);
+    }
+    g.globalAlpha = 1;
+  }
+
+  private drawWhirl(x: number, y: number, R: number, angle: number, color: string, big = false) {
+    const g = this.ctx;
+    g.globalAlpha = big ? 0.35 : 0.22;
+    g.fillStyle = color;
+    this.ellipse(x, y, R, R * 0.8);
+    g.globalAlpha = 0.9;
+    g.strokeStyle = color;
+    g.lineWidth = big ? 3 : 2;
+    for (let i = 0; i < (big ? 3 : 2); i++) {
+      const a0 = angle + (i * TAU) / (big ? 3 : 2);
+      g.beginPath();
+      for (let s = 0; s <= 10; s++) {
+        const a = a0 - s * 0.12;
+        const px = Math.round(x + Math.cos(a) * R - this.camX), py = Math.round(y + Math.sin(a) * R * 0.8 - this.camY);
+        if (s === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.stroke();
+      // 戟头
+      this.blitRot(sprite('icon_w_halberd'), x + Math.cos(a0) * R * 0.85, y + Math.sin(a0) * R * 0.68, a0 + Math.PI / 4);
+    }
+    g.globalAlpha = 1;
   }
 
   // —— 基础绘制 ——

@@ -45,7 +45,7 @@ const LEGS: string[][] = [
   ],
 ];
 
-export type HorseColor = 'white' | 'brown' | 'black' | 'ghost' | 'gold';
+export type HorseColor = 'white' | 'brown' | 'black' | 'ghost' | 'gold' | 'red';
 
 const COLOR_MAPS: Record<HorseColor, Record<string, string>> = {
   white: {},
@@ -53,6 +53,7 @@ const COLOR_MAPS: Record<HorseColor, Record<string, string>> = {
   black: { w: 'n', S: 'K', s: 'k', N: 'k', R: 'R', k: 'R' },
   ghost: { w: 'c', S: 'B', s: 'b', N: 'b', R: 'w', k: 'w' },
   gold: { w: 'Y', S: 'y', s: 'o', N: 'U', R: 'R' },
+  red: { w: 'l', S: 'r', s: 'z', N: 'k', U: 'Y', k: 'Y' },
 };
 
 export function horseFrame(frame: number, color: HorseColor): PixelImage {

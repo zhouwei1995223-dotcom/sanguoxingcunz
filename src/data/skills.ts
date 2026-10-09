@@ -1,6 +1,6 @@
 // 局内技能：武器（主动）与兵法（被动）。所有数值都在这里调整。
 
-export type WeaponId = 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura';
+export type WeaponId = 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd';
 export type PassiveId = 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal';
 
 export interface WeaponLevel {
@@ -14,6 +14,8 @@ export interface WeaponLevel {
   tick?: number; // 持续伤害间隔
   slow?: number; // 减速比例
   knock?: number; // 击退力度
+  arc?: number; // 横扫弧度（弧度制的一半）
+  stun?: number; // 眩晕时长
   desc: string; // 升到本级时的描述
 }
 
@@ -25,6 +27,8 @@ export interface WeaponDef {
   evoIcon: string;
   evoPassive: PassiveId;
   intro: string;
+  /** 专属武将（不填为通用武器） */
+  hero?: string;
   levels: WeaponLevel[]; // 1..5 级
   evo: WeaponLevel; // 进化形态
 }
@@ -34,9 +38,9 @@ export const MAX_PASSIVE_LV = 5;
 export const WEAPON_SLOTS = 6;
 export const PASSIVE_SLOTS = 6;
 
-export const WEAPONS: Record<WeaponId, WeaponDef> = {
+export const WEAPONS = {
   spear: {
-    id: 'spear', name: '龙胆枪', icon: 'w_spear', evoName: '百鸟朝凤', evoIcon: 'w_spear_evo', evoPassive: 'tiger',
+    id: 'spear', name: '龙胆枪', icon: 'w_spear', evoName: '百鸟朝凤', evoIcon: 'w_spear_evo', evoPassive: 'tiger', hero: 'zhaoyun',
     intro: '向敌人方向突刺，贯穿路径上的所有敌人',
     levels: [
       { dmg: 1.6, cd: 1.1, count: 1, area: 50, knock: 60, desc: '向前方重刺，贯穿并击飞敌人' },
@@ -107,7 +111,64 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     ],
     evo: { dmg: 1.15, cd: 0, count: 1, area: 54, tick: 0.35, knock: 10, slow: 0.3, desc: '龙胆护体：受到伤害降低20%，每秒回复1%生命' },
   },
-};
+} as Record<WeaponId, WeaponDef>;
+
+// —— 武将专属武器 ——
+Object.assign(WEAPONS, {
+  blade: {
+    id: 'blade', name: '青龙偃月刀', icon: 'w_blade', evoName: '春秋刀法', evoIcon: 'w_blade_evo', evoPassive: 'tiger', hero: 'guanyu',
+    intro: '向前方大范围横扫，击退敌人',
+    levels: [
+      { dmg: 2.3, cd: 1.5, count: 1, area: 44, arc: 1.2, knock: 80, desc: '向前方半月横扫' },
+      { dmg: 2.8, cd: 1.5, count: 1, area: 46, arc: 1.3, knock: 80, desc: '伤害与横扫角度提升' },
+      { dmg: 2.8, cd: 1.4, count: 2, area: 48, arc: 1.3, knock: 85, desc: '拖刀计：同时向身后横扫' },
+      { dmg: 3.4, cd: 1.3, count: 2, area: 54, arc: 1.4, knock: 90, desc: '范围与伤害提升' },
+      { dmg: 3.9, cd: 1.2, count: 2, area: 58, arc: 1.5, knock: 95, desc: '伤害提升，冷却缩短' },
+    ],
+    evo: { dmg: 4.6, cd: 1.0, count: 2, area: 68, arc: Math.PI, knock: 110, desc: '春秋刀法：周身连环大回旋，刀气纵横' },
+  },
+  snake: {
+    id: 'snake', name: '丈八蛇矛', icon: 'w_snake', evoName: '万人敌', evoIcon: 'w_snake_evo', evoPassive: 'armor', hero: 'zhangfei',
+    intro: '周身横扫，有几率眩晕敌人',
+    levels: [
+      { dmg: 1.8, cd: 1.5, count: 1, area: 32, stun: 0.3, knock: 70, desc: '蛇矛横扫周身，眩晕敌人' },
+      { dmg: 2.2, cd: 1.4, count: 1, area: 34, stun: 0.4, knock: 70, desc: '伤害与眩晕时间提升' },
+      { dmg: 2.2, cd: 1.3, count: 1, area: 38, stun: 0.5, knock: 80, desc: '横扫范围提升' },
+      { dmg: 2.7, cd: 1.2, count: 1, area: 40, stun: 0.5, knock: 85, desc: '伤害提升，冷却缩短' },
+      { dmg: 3.1, cd: 1.1, count: 1, area: 44, stun: 0.6, knock: 90, desc: '范围与伤害大幅提升' },
+    ],
+    evo: { dmg: 3.8, cd: 0.8, count: 1, area: 54, stun: 0.9, knock: 110, desc: '万人敌：每次横扫都震出冲击波' },
+  },
+  fan: {
+    id: 'fan', name: '羽扇', icon: 'w_fan', evoName: '八阵图', evoIcon: 'w_fan_evo', evoPassive: 'book', hero: 'zhuge',
+    intro: '扇出追踪敌人的风刃',
+    levels: [
+      { dmg: 1.1, cd: 1.2, count: 2, area: 0, pierce: 2, speed: 150, knock: 10, desc: '扇出两道追踪风刃' },
+      { dmg: 1.1, cd: 1.15, count: 3, area: 0, pierce: 2, speed: 160, knock: 10, desc: '风刃+1' },
+      { dmg: 1.4, cd: 1.1, count: 3, area: 0, pierce: 3, speed: 170, knock: 12, desc: '伤害提升，穿透+1' },
+      { dmg: 1.4, cd: 1.0, count: 4, area: 0, pierce: 3, speed: 180, knock: 12, desc: '风刃+1，冷却缩短' },
+      { dmg: 1.7, cd: 0.9, count: 5, area: 0, pierce: 3, speed: 190, knock: 14, desc: '风刃+1，伤害提升' },
+    ],
+    evo: { dmg: 2.0, cd: 0.8, count: 8, area: 0, pierce: 5, speed: 210, knock: 16, desc: '八阵图：八方风刃齐发，穿透一切' },
+  },
+  halberd: {
+    id: 'halberd', name: '方天画戟', icon: 'w_halberd', evoName: '无双乱舞', evoIcon: 'w_halberd_evo', evoPassive: 'horseshoe', hero: 'lvbu',
+    intro: '定时挥戟旋风斩，连续伤害周围敌人',
+    levels: [
+      { dmg: 0.9, cd: 2.4, count: 1, area: 36, duration: 0.8, tick: 0.2, knock: 40, desc: '旋风斩，连续伤害周围敌人' },
+      { dmg: 1.1, cd: 2.3, count: 1, area: 38, duration: 0.9, tick: 0.2, knock: 40, desc: '伤害与持续时间提升' },
+      { dmg: 1.1, cd: 2.1, count: 1, area: 42, duration: 1.0, tick: 0.18, knock: 45, desc: '范围提升，攻速加快' },
+      { dmg: 1.35, cd: 2.0, count: 1, area: 44, duration: 1.1, tick: 0.18, knock: 50, desc: '伤害提升' },
+      { dmg: 1.55, cd: 1.8, count: 1, area: 48, duration: 1.2, tick: 0.16, knock: 55, desc: '全面强化' },
+    ],
+    evo: { dmg: 1.6, cd: 0, count: 1, area: 58, duration: 9999, tick: 0.2, knock: 50, desc: '无双乱舞：画戟永不停歇，横扫八方' },
+  },
+} as Record<string, WeaponDef>);
+
+/** 武将可用的武器：通用武器 + 自己的专属武器 */
+export function weaponsForHero(hero: string): WeaponId[] {
+  return (Object.keys(WEAPONS) as WeaponId[]).filter((id) => !WEAPONS[id].hero || WEAPONS[id].hero === hero);
+}
 
 export interface PassiveDef {
   id: PassiveId;

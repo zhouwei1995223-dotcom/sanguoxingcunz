@@ -110,6 +110,87 @@ const ICONS: Record<string, () => PixelImage> = {
     p.set(2, 2, 'R'); p.set(11, 11, 'R'); p.set(11, 2, 'R'); p.set(2, 11, 'R');
     return p.outline();
   },
+  w_blade: () => art([
+    '.......SSSS',
+    '......SwwSS',
+    '.....SwwSS.',
+    '....SwSSG..',
+    '...U.GGG...',
+    '..U..G.....',
+    '.U.........',
+    'U..........',
+  ]),
+  w_blade_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'G');
+    p.ring(7.5, 7.5, 5, 'g');
+    p.blit(PixelImage.fromRows(['....SSS', '...SwwS', '..SwSS.', '.UGG...', 'U......']), 4, 5);
+    return p.outline();
+  },
+  w_snake: () => art([
+    '........S.',
+    '.......SwS',
+    '......S.S.',
+    '.....S....',
+    '....S.....',
+    '...U......',
+    '..U.......',
+    '.U........',
+    'U.........',
+  ]),
+  w_snake_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'R');
+    p.ring(7.5, 7.5, 4, 'r');
+    p.line(2, 13, 12, 3, 'U');
+    p.line(12, 3, 14, 1, 'w'); p.set(13, 3, 'S'); p.set(11, 1, 'S');
+    return p.outline();
+  },
+  w_fan: () => art([
+    '..wwww..',
+    '.wwSSww.',
+    'wwSwwSww',
+    'wSwwwwSw',
+    '.wwwwww.',
+    '..wwww..',
+    '...UU...',
+    '...UU...',
+  ]),
+  w_fan_evo: () => {
+    const p = new PixelImage(16, 16);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      p.line(8, 8, Math.round(8 + Math.cos(a) * 7), Math.round(8 + Math.sin(a) * 7), i % 2 ? 'B' : 'c');
+    }
+    p.disc(8, 8, 3, 'w'); p.set(8, 8, 'b');
+    return p.outline();
+  },
+  w_halberd: () => art([
+    '.......YY..',
+    '......YYwY.',
+    '.....YYY...',
+    '....YUYY...',
+    '...U..Y....',
+    '..U........',
+    '.U.........',
+    'U..........',
+  ]),
+  w_halberd_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'R');
+    p.ring(7.5, 7.5, 6, 'o');
+    p.line(3, 12, 12, 3, 'Y'); p.rect(10, 2, 3, 3, 'y'); p.set(13, 1, 'w'); p.set(4, 4, 'R'); p.set(11, 11, 'R');
+    return p.outline();
+  },
+  shard: () => art([
+    '...y...',
+    '..yYy..',
+    '.yYwYy.',
+    'yYYYYoy',
+    '.yYYoy.',
+    '..yoy..',
+    '...y...',
+  ]),
   // —— 被动 ——
   p_horseshoe: () => art([
     '.NN..NN.',

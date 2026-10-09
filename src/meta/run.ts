@@ -1,7 +1,7 @@
 import { ChapterDef } from '../data/chapters';
 import { weighted } from '../core/math';
 import { save, markDirty } from './save';
-import { newItem, randomItemTemplate, progressTask } from './ops';
+import { newItem, randomItemTemplate, progressTask, grantHero, grantShards } from './ops';
 import type { EquipItem } from './save';
 import { getPlatform } from '../platform';
 
@@ -24,6 +24,8 @@ export interface RunResult {
   yuanbao: number;
   items: EquipItem[];
   newBest: boolean;
+  heroReward?: string;
+  shardReward?: { hero: string; n: number };
 }
 
 export function settleRun(ch: ChapterDef, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number): RunResult {
@@ -48,6 +50,11 @@ export function settleRun(ch: ChapterDef, win: boolean, t: number, coins: number
   // 新手首局：无论胜负都赠送兵器，保证装备引导可以进行
   if (save.guide === 0 && !save.items.some((i) => i.tid === 'yajiao')) items.push(newItem('yajiao', 1));
   if (win && ch.id > save.maxCleared) save.maxCleared = ch.id;
+  // 武将奖励：第2章首通送关羽；其后首通送碎片
+  let heroReward: string | undefined;
+  let shardReward: { hero: string; n: number } | undefined;
+  if (firstClear && ch.id === 2) { grantHero('guanyu'); heroReward = 'guanyu'; }
+  else if (firstClear && ch.id >= 3) { shardReward = { hero: ch.id >= 4 ? 'lvbu' : 'zhuge', n: 10 }; grantShards(shardReward.hero, shardReward.n); }
   const newBest = t >= (save.chapterBest[ch.id] || 0);
   save.gold += gold;
   save.iron += iron;
@@ -59,7 +66,7 @@ export function settleRun(ch: ChapterDef, win: boolean, t: number, coins: number
   const score = (win ? ch.id : ch.id - 1) * 10000 + Math.floor(progress * ch.duration);
   getPlatform().submitScore('score', Math.max(score, bestScore()));
   markDirty();
-  return { win, firstClear, gold, iron, yuanbao, items, newBest };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward };
 }
 
 export function bestScore(): number {

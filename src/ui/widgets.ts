@@ -2,6 +2,7 @@ import { C, UI } from './ui';
 import { EQUIP_BY_ID, QUALITY_COLORS, QUALITY_NAMES, Reward } from '../data/meta';
 import type { EquipItem } from '../meta/save';
 import { fmtNum, easeOutBack } from '../core/math';
+import { HERO_BY_ID } from '../data/heroes';
 
 // 通用界面组件
 
@@ -14,6 +15,8 @@ export interface RewardEntry {
 
 export function rewardEntries(r: Reward, items: EquipItem[] = []): RewardEntry[] {
   const out: RewardEntry[] = [];
+  if (r.hero) out.push({ icon: `hero_${r.hero}_0`, count: '', frame: '#feae34', label: HERO_BY_ID[r.hero].name });
+  if (r.shards) out.push({ icon: `hero_${r.shards.hero}_0`, count: '×' + r.shards.n, frame: '#b55088', label: HERO_BY_ID[r.shards.hero].name + '碎片' });
   if (r.gold) out.push({ icon: 'gold', count: fmtNum(r.gold), label: '金币' });
   if (r.yuanbao) out.push({ icon: 'yuanbao', count: fmtNum(r.yuanbao), label: '元宝' });
   if (r.iron) out.push({ icon: 'iron', count: fmtNum(r.iron), label: '玄铁' });

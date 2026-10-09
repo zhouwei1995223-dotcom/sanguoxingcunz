@@ -13,6 +13,7 @@ import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
 import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene } from './homeScene';
+import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer } from '../ui/guide';
 
 const LEVELUP_AD_LIMIT = 5;
@@ -321,11 +322,11 @@ export class ResultDialog implements Dialog {
     const u = ui.u;
     const b = this.scene.battle;
     const t = this.t || 0;
-    const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length;
+    const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
     const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
-    if (this.win) ui.text(this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
+    if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');
     y += 60 * u;
     ui.text(`第${b.chapter.id}章 · ${b.chapter.name}`, ui.W / 2, y, 26, C.textDim);
@@ -344,7 +345,7 @@ export class ResultDialog implements Dialog {
     ui.text(this.doubled ? '奖励（已翻倍）' : '战利品', ui.W / 2, y, 28, C.gold);
     y += 40 * u;
     const mul = this.doubled ? 2 : 1;
-    const entries = rewardEntries({ gold: this.res.gold * mul, iron: this.res.iron * mul, yuanbao: this.res.yuanbao }, this.res.items);
+    const entries = rewardEntries({ gold: this.res.gold * mul, iron: this.res.iron * mul, yuanbao: this.res.yuanbao, hero: this.res.heroReward, shards: this.res.shardReward }, this.res.items);
     rewardRow(ui, entries, ui.W / 2, y, 110 * u, t);
     y += entries.length > 5 ? 380 * u : 210 * u;
     const bw = w - 140 * u;

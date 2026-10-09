@@ -321,13 +321,13 @@ export class BattleScene implements Scene {
     g.strokeStyle = full ? '#fee761' : b.rageLock > 0 ? '#5a6988' : '#e43b44';
     g.beginPath(); g.arc(cx, cy, r - 6 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (full ? 1 : ratio)); g.stroke();
     const pulse = full ? 1 + 0.08 * Math.sin(ui.time * 10) : 1;
-    ui.icon('w_spear_evo', cx, cy - 10 * u, r * 1.05 * pulse, full ? 1 : 0.45);
-    if (full) ui.text('龙胆', cx, cy + r * 0.55, 30, '#fee761', 'center', '#3a0d12');
+    ui.icon(WEAPONS[b.hero.weapon].evoIcon, cx, cy - 10 * u, r * 1.05 * pulse, full ? 1 : 0.45);
+    if (full) ui.text(b.hero.ultName.split('·')[0], cx, cy + r * 0.55, 28, '#fee761', 'center', '#3a0d12');
     else if (b.rageLock > 0) ui.text(`${Math.ceil(b.rageLock)}s`, cx, cy + r * 0.55, 24, '#c0cbdc');
     else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#fff');
     if (ui.clicked('ult_btn', cx - r, cy - r, r * 2, r * 2, false)) {
       if (full) this.tryUlt();
-      else ui.toast(b.rageLock > 0 ? '龙胆之力恢复中' : '击败敌人积攒怒气');
+      else ui.toast(b.rageLock > 0 ? '大招恢复中' : '击败敌人积攒怒气');
     }
     // 看视频充满怒气（每局 2 次）
     if (!full && !b.ult && b.adRageUsed < 2) {
@@ -342,7 +342,7 @@ export class BattleScene implements Scene {
     }
     // 首次满怒提示
     if (full && b.ultCasts === 0 && save.stats.runs < 3 && !game.dialogs.length) {
-      guideHint(ui, '怒气已满！点击右下角释放「七进七出」', cy - r - 140 * u);
+      guideHint(ui, `怒气已满！点击右下角释放「${b.hero.ultName}」`, cy - r - 140 * u);
     }
   }
 

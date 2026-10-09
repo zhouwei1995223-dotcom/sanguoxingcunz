@@ -19,6 +19,7 @@ import { playSfx, refreshMusic } from '../audio/sound';
 import { GAME_INFO } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
+import { HERO_BY_ID } from '../data/heroes';
 
 function statLines(s: StatBlock): string[] {
   const out: string[] = [];
@@ -69,7 +70,7 @@ export class SigninDialog implements Dialog {
       const today = i === idx && can;
       ui.pixRect(x + 6 * u, y, cw - 12 * u, ch, today ? '#feae34' : '#120d0c');
       ui.pixRect(x + 10 * u, y + 4 * u, cw - 20 * u, ch - 8 * u, big ? '#5a3a14' : '#3a2c2a');
-      ui.text(`第${i + 1}天`, x + cw / 2, y + 28 * u, 22, today ? '#fee761' : '#fff4d6');
+      ui.text(r.hero ? `第${i + 1}天·${HERO_BY_ID[r.hero].name}` : `第${i + 1}天`, x + cw / 2, y + 28 * u, 22, today ? '#fee761' : '#fff4d6');
       const e = rewardEntries(r)[0];
       ui.qualityFrame(x + cw / 2 - 45 * u, y + 52 * u, 90 * u, e.frame || '#8b9bb4');
       ui.icon(e.icon, x + cw / 2, y + 97 * u, 56 * u);
@@ -316,7 +317,7 @@ export class ItemDialog implements Dialog {
 
 export class ChestResultDialog implements Dialog {
   t?: number;
-  constructor(private it: EquipItem, private gold: boolean) { playSfx('chest'); }
+  constructor(private it: EquipItem, private gold: boolean, private shards?: { hero: string; n: number }) { playSfx('chest'); }
   draw(ui: UI) {
     const u = ui.u;
     const t = this.t || 0;
@@ -345,6 +346,12 @@ export class ChestResultDialog implements Dialog {
     ui.text(tpl.name, ui.W / 2, cy + 170 * u, 44, col);
     ui.text(`${QUALITY_NAMES[this.it.q]} · ${SLOT_NAMES[tpl.slot]}`, ui.W / 2, cy + 226 * u, 28, '#fff4d6');
     statLines(itemStats(this.it)).slice(0, 3).forEach((l, i) => ui.text(l, ui.W / 2, cy + 280 * u + i * 40 * u, 24, '#d9c6a0'));
+    if (this.shards) {
+      const sy = cy - 260 * u;
+      ui.qualityFrame(ui.W / 2 - 180 * u, sy - 50 * u, 100 * u, '#b55088');
+      ui.icon(`hero_${this.shards.hero}_0`, ui.W / 2 - 130 * u, sy, 90 * u);
+      ui.text(`${HERO_BY_ID[this.shards.hero].name}碎片 ×${this.shards.n}`, ui.W / 2 - 60 * u, sy, 28, '#dc9be9', 'left');
+    }
     const bw = 300 * u;
     if (t > 1.3 && ui.button('cr_ok', ui.W / 2 - bw / 2, cy + 420 * u, bw, 96 * u, '确定', C.btnGold)) return false;
   }

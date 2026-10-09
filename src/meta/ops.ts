@@ -5,12 +5,14 @@ import {
   TALENTS, talentCost, Reward, STAMINA, PATROL, CHESTS, ChestDef, DAILY_TASKS, TaskKind, ACTIVITY_REWARDS, SIGNIN, Slot, SLOTS,
 } from '../data/meta';
 import { dayKey, weighted, pick } from '../core/math';
+import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS } from '../data/heroes';
 
 // 局外养成的所有操作（纯逻辑，UI 调用）
 
 export interface HeroStats extends Required<StatBlock> {
   revive: number;
   reroll: number;
+  hero: string;
 }
 
 function addStats(into: StatBlock, add: StatBlock, mul = 1) {
@@ -33,8 +35,18 @@ export function itemStats(it: EquipItem): StatBlock {
   return out;
 }
 
-export function computeStats(): HeroStats {
-  const s: StatBlock = { atk: HERO.baseAtk + HERO.atkPerLv * (save.heroLv - 1), hp: HERO.baseHp + HERO.hpPerLv * (save.heroLv - 1) };
+/** 武将自身（等级 + 星级）的攻击与生命 */
+export function heroBase(id: string): { atk: number; hp: number } {
+  const h = HERO_BY_ID[id];
+  const st = save.heroes[id];
+  const lv = st ? st.lv : 1;
+  const mul = 1 + STAR_BONUS * Math.max(0, (st ? st.star : 1) - 1);
+  return { atk: Math.round((h.baseAtk + h.atkPerLv * (lv - 1)) * mul), hp: Math.round((h.baseHp + h.hpPerLv * (lv - 1)) * mul) };
+}
+
+export function computeStats(heroId = save.hero): HeroStats {
+  const hb = heroBase(heroId);
+  const s: StatBlock = { atk: hb.atk, hp: hb.hp };
   for (const slot of SLOTS) {
     const it = getEquipped(slot);
     if (it) addStats(s, itemStats(it));
@@ -49,7 +61,7 @@ export function computeStats(): HeroStats {
   }
   const full: HeroStats = {
     atk: 0, hp: 0, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0,
-    revive, reroll,
+    revive, reroll, hero: heroId,
   };
   addStats(full, s);
   full.atk = Math.round(full.atk);
@@ -164,12 +176,14 @@ export function equipBest() {
   markDirty();
 }
 
-export function upgradeHero(): string | null {
-  if (save.heroLv >= HERO.maxLevel) return '已达等级上限';
-  const c = heroLevelCost(save.heroLv);
+export function upgradeHero(id = save.hero): string | null {
+  const st = save.heroes[id];
+  if (!st.owned) return '尚未获得该武将';
+  if (st.lv >= HERO.maxLevel) return '已达等级上限';
+  const c = heroLevelCost(st.lv);
   if (save.gold < c) return '金币不足';
   save.gold -= c;
-  save.heroLv++;
+  st.lv++;
   progressTask('upgrade', 1);
   markDirty();
   return null;
@@ -189,6 +203,66 @@ export function upgradeTalent(id: string): string | null {
   return null;
 }
 
+// —— 武将 ——
+export function grantShards(hero: string, n: number) {
+  save.heroes[hero].shards += n;
+  markDirty();
+}
+
+/** 获得武将：已拥有则转为 20 碎片 */
+export function grantHero(hero: string): 'new' | 'shards' {
+  const st = save.heroes[hero];
+  if (st.owned) { st.shards += 20; markDirty(); return 'shards'; }
+  st.owned = true;
+  st.star = 1;
+  markDirty();
+  return 'new';
+}
+
+export function unlockHero(id: string): string | null {
+  const st = save.heroes[id];
+  const def = HERO_BY_ID[id];
+  if (st.owned) return '已拥有';
+  if (st.shards < def.unlockShards) return `碎片不足（${st.shards}/${def.unlockShards}）`;
+  st.shards -= def.unlockShards;
+  st.owned = true;
+  st.star = 1;
+  markDirty();
+  return null;
+}
+
+export function starUpHero(id: string): string | null {
+  const st = save.heroes[id];
+  if (!st.owned) return '尚未获得该武将';
+  if (st.star >= MAX_STAR) return '已达最高星级';
+  const cost = STAR_COST[st.star - 1];
+  if (st.shards < cost) return `碎片不足（${st.shards}/${cost}）`;
+  st.shards -= cost;
+  st.star++;
+  progressTask('upgrade', 1);
+  markDirty();
+  return null;
+}
+
+export function heroRedDot(id: string): boolean {
+  const st = save.heroes[id];
+  const def = HERO_BY_ID[id];
+  if (!st.owned) return def.unlockShards > 0 && st.shards >= def.unlockShards;
+  return (st.star < MAX_STAR && st.shards >= STAR_COST[st.star - 1]) || (st.lv < HERO.maxLevel && save.gold >= heroLevelCost(st.lv));
+}
+
+export function anyHeroRedDot(): boolean {
+  return HEROES.some((h) => heroRedDot(h.id));
+}
+
+/** 随机碎片：偏向需要碎片解锁的诸葛亮与吕布 */
+export function randomShardHero(rare: boolean): string {
+  const w: Record<string, number> = rare
+    ? { zhuge: 35, lvbu: 40, guanyu: 10, zhangfei: 10, zhaoyun: 5 }
+    : { zhuge: 50, lvbu: 10, guanyu: 15, zhangfei: 15, zhaoyun: 10 };
+  return weighted(Object.keys(w), (k) => w[k]);
+}
+
 // —— 奖励 ——
 export interface GrantResult {
   reward: Reward;
@@ -202,6 +276,8 @@ export function grantReward(r: Reward, mul = 1): GrantResult {
   if (r.iron) save.iron += Math.round(r.iron * mul);
   if (r.stamina) save.stamina += Math.round(r.stamina * mul);
   if (r.equip) for (let i = 0; i < mul; i++) items.push(newItem(r.equip.id || randomItemTemplate(), r.equip.q));
+  if (r.shards) grantShards(r.shards.hero, r.shards.n * mul);
+  if (r.hero) grantHero(r.hero);
   markDirty();
   return { reward: r, items };
 }
@@ -239,7 +315,12 @@ export function collectPatrol(mul = 1) {
 }
 
 // —— 宝箱 ——
-export function openChest(def: ChestDef): EquipItem {
+export interface ChestResult {
+  item: EquipItem;
+  shards?: { hero: string; n: number };
+}
+
+export function openChest(def: ChestDef): ChestResult {
   let q = weighted([0, 1, 2, 3, 4, 5], (i) => def.weights[i]);
   if (def.pity) {
     save.goldChestCount++;
@@ -247,7 +328,12 @@ export function openChest(def: ChestDef): EquipItem {
     else if (save.goldChestCount >= def.pity) { q = 3; save.goldChestCount = 0; }
   }
   progressTask('chest', 1);
-  return newItem(randomItemTemplate(), q);
+  const item = newItem(randomItemTemplate(), q);
+  let shards: ChestResult['shards'];
+  if (def.id === 'gold') shards = { hero: randomShardHero(true), n: 5 + Math.floor(Math.random() * 6) };
+  else if (Math.random() < 0.4) shards = { hero: randomShardHero(false), n: 2 + Math.floor(Math.random() * 3) };
+  if (shards) grantShards(shards.hero, shards.n);
+  return { item, shards };
 }
 
 export function chestById(id: string) {

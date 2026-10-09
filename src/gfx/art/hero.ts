@@ -45,7 +45,7 @@ export function spear(len: number, shaft: string, head: string, tassel: string):
 /** 组合骑将：马 + 鞍 + 骑手 + 兵器，返回带描边的帧 */
 export function mountedFrame(opts: {
   frame: number;
-  horse: 'white' | 'brown' | 'black' | 'ghost' | 'gold';
+  horse: 'white' | 'brown' | 'black' | 'ghost' | 'gold' | 'red' | 'cart';
   rider: PixelImage;
   cloth: string;
   trim: string;
@@ -57,8 +57,11 @@ export function mountedFrame(opts: {
   const bob = f === 1 || f === 3 ? 1 : 0;
   const canvas = new PixelImage(30, 30);
   const H = 12; // 马在画布中的纵向偏移
-  canvas.blit(horseFrame(f, opts.horse), 4, H + bob);
-  canvas.blit(saddle(opts.cloth, opts.trim), 7, H + 7 + bob);
+  if (opts.horse === 'cart') canvas.blit(cartFrame(f), 3, H + 5);
+  else {
+    canvas.blit(horseFrame(f, opts.horse), 4, H + bob);
+    canvas.blit(saddle(opts.cloth, opts.trim), 7, H + 7 + bob);
+  }
   canvas.blit(opts.rider, 7, H - 8 + bob);
   if (opts.weapon) canvas.blit(opts.weapon, opts.weaponX ?? 15, (opts.weaponY ?? H - 8) + bob);
   return canvas.outline();
@@ -68,4 +71,24 @@ export function heroFrames(): PixelImage[] {
   const rider = riderImage();
   const sp = spear(13, 'S', 'w', 'R');
   return [0, 1, 2, 3].map((f) => mountedFrame({ frame: f, horse: 'white', rider, cloth: 'G', trim: 'y', weapon: sp, weaponX: 16, weaponY: 2 }));
+}
+
+/** 诸葛亮的四轮车：车轮转动 4 帧 */
+export function cartFrame(f: number): PixelImage {
+  const img = PixelImage.fromRows([
+    '.UUUUUUUUUUUUUUUU...',
+    'UuuuuuuuuuuuuuuuuU..',
+    'UUUUUUUUUUUUUUUUUU..',
+    '.U..............U...',
+  ]);
+  const c = new PixelImage(22, 13);
+  c.blit(img, 0, 0);
+  for (const wx of [4, 15]) {
+    c.ring(wx, 8, 4, 'z');
+    c.disc(wx, 8, 1, 'U');
+    const a = (f * Math.PI) / 4;
+    c.line(Math.round(wx - Math.cos(a) * 3), Math.round(8 - Math.sin(a) * 3), Math.round(wx + Math.cos(a) * 3), Math.round(8 + Math.sin(a) * 3), 'u');
+    c.line(Math.round(wx + Math.sin(a) * 3), Math.round(8 - Math.cos(a) * 3), Math.round(wx - Math.sin(a) * 3), Math.round(8 + Math.cos(a) * 3), 'u');
+  }
+  return c;
 }

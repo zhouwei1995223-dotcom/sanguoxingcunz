@@ -1,6 +1,6 @@
 import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
-import { heroFrames } from './art/hero';
+import { heroFramesFor, HERO_IDS } from './art/heroes';
 import { soldierFrames, generalFrames } from './art/units';
 import { SOLDIER_STYLES, GENERAL_STYLES } from './art/roster';
 import * as I from './art/items';
@@ -97,7 +97,7 @@ function addUnit(name: string, frames: PixelImage[]) {
 }
 
 export function buildAtlas() {
-  addUnit('hero', heroFrames());
+  for (const id of HERO_IDS) addUnit('hero_' + id, heroFramesFor(id));
   for (const k in SOLDIER_STYLES) addUnit('u_' + k, soldierFrames(SOLDIER_STYLES[k]));
   for (const k in GENERAL_STYLES) addUnit('u_' + k, generalFrames(GENERAL_STYLES[k]));
 
@@ -113,6 +113,7 @@ export function buildAtlas() {
   addSprite('cart', I.cart(), 'bottom');
   addSprite('arrow', I.arrow());
   addSprite('bolt', I.bolt());
+  addSprite('bolt_evo', I.bolt().recolor({ U: 'y', S: 'Y' }));
   addSprite('fsword', I.flyingSword());
   addSprite('pot', I.firePot());
   I.flameFrames().forEach((c, i) => addSprite('flame' + i, c, 'bottom'));

@@ -3,7 +3,10 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
 import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily } from '../meta/save';
+import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR } from '../data/heroes';
+import { WEAPONS, PASSIVES } from '../data/skills';
 import {
+  heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
   canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask,
 } from '../meta/ops';
@@ -103,9 +106,9 @@ export class HomeScene implements Scene {
     // 头像与战力
     const av = 92 * u;
     ui.qualityFrame(16 * u, y, av, '#feae34');
-    ui.icon('hero_0', 16 * u + av / 2, y + av / 2, av * 0.9);
+    ui.icon(`hero_${save.hero}_0`, 16 * u + av / 2, y + av / 2, av * 0.9);
     ui.pixRect(16 * u, y + av - 4 * u, av, 30 * u, '#120d0c');
-    ui.text('Lv.' + save.heroLv, 16 * u + av / 2, y + av + 11 * u, 18, '#fff');
+    ui.text('Lv.' + save.heroes[save.hero].lv, 16 * u + av / 2, y + av + 11 * u, 18, '#fff');
     ui.text('战力', 124 * u, y + 24 * u, 20, C.textDim, 'left');
     const pc = this.flashPower > 0 ? (Math.floor(this.flashPower * 10) % 2 ? '#fee761' : '#fff') : '#fee761';
     ui.text(fmtNum(power), 124 * u, y + 62 * u, 34, pc, 'left');
@@ -143,7 +146,7 @@ export class HomeScene implements Scene {
       const isz = (big ? 78 : 60) * u * (active ? 1.1 : 1);
       ui.icon(t.icon, x + tw / 2, y + (big ? 52 : 56) * u - (active ? 6 * u : 0), isz);
       ui.text(t.name, x + tw / 2, y + h - 26 * u, active ? 28 : 24, active ? C.gold : C.textDim);
-      const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && save.gold >= heroLevelCost(save.heroLv) && save.heroLv < HERO.maxLevel);
+      const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && anyHeroRedDot());
       if (dot) ui.redDot(x + tw - 22 * u, y + 18 * u);
       if (ui.clicked('nav_' + t.id, x, y, tw, h)) {
         this.tab = t.id;
@@ -256,8 +259,8 @@ export class HomeScene implements Scene {
     // 人物
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ui.ctx.fillRect(ui.W / 2 - 150 * u, top + 60 * u, 300 * u, 330 * u);
-    ui.icon('hero_' + (Math.floor(ui.time * 6) % 4), ui.W / 2, top + 230 * u, 280 * u);
-    ui.text('赵云 · Lv.' + save.heroLv, ui.W / 2, top + 50 * u, 28, C.gold);
+    ui.icon(`hero_${save.hero}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, top + 230 * u, 280 * u);
+    ui.text(`${HERO_BY_ID[save.hero].name} · Lv.${save.heroes[save.hero].lv}`, ui.W / 2, top + 50 * u, 28, C.gold);
     const st = computeStats();
     ui.text(`攻击 ${fmtNum(st.atk)}`, ui.W / 2 - 80 * u, top + 425 * u, 26, '#ffb070');
     ui.text(`生命 ${fmtNum(st.hp)}`, ui.W / 2 + 80 * u, top + 425 * u, 26, '#9be37a');
@@ -345,48 +348,102 @@ export class HomeScene implements Scene {
   }
 
   // —— 武将页 ——
+  private viewHero = '';
   private drawHeroTab(ui: UI) {
     const u = ui.u;
     const top = this.contentTop(ui);
-    const ph = this.contentBottom(ui) - top - 10 * u;
-    ui.panel(16 * u, top, ui.W - 32 * u, ph, 'wood');
-    ui.ribbon(ui.W / 2, top + 10 * u, 360 * u, HERO.title);
+    if (!this.viewHero) this.viewHero = save.hero;
+    // 武将列表
+    const cw = (ui.W - 40 * u) / HEROES.length;
+    HEROES.forEach((h, i) => {
+      const st = save.heroes[h.id];
+      const x = 20 * u + i * cw, y = top;
+      const sz = cw - 12 * u;
+      const sel = this.viewHero === h.id;
+      ui.qualityFrame(x + 6 * u, y, sz, sel ? '#feae34' : st.owned ? '#8b9bb4' : '#3a3040');
+      ui.icon(`hero_${h.id}_${sel ? Math.floor(ui.time * 6) % 4 : 0}`, x + 6 * u + sz / 2, y + sz / 2, sz * 0.9, st.owned ? 1 : 0.35);
+      if (!st.owned) ui.icon('lock', x + 6 * u + sz - 18 * u, y + 20 * u, 26 * u);
+      ui.text(h.name, x + cw / 2, y + sz + 18 * u, 22, sel ? C.gold : st.owned ? '#fff4d6' : '#888');
+      if (st.owned) for (let k = 0; k < st.star; k++) ui.icon('star', x + cw / 2 - (st.star - 1) * 8 * u + k * 16 * u, y + sz - 12 * u, 16 * u);
+      if (save.hero === h.id) { ui.pixRect(x + 6 * u, y, 56 * u, 26 * u, '#a22633'); ui.text('出战', x + 34 * u, y + 13 * u, 16, '#fff', 'center', null); }
+      if (heroRedDot(h.id)) ui.redDot(x + cw - 10 * u, y + 6 * u);
+      if (ui.clicked('hero_pick_' + h.id, x, y, cw, sz + 30 * u)) this.viewHero = h.id;
+    });
+    const h = HERO_BY_ID[this.viewHero];
+    const st = save.heroes[h.id];
+    const py = top + cw + 30 * u;
+    const ph = this.contentBottom(ui) - py - 10 * u;
+    ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
+    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, 1060 * u);
+    let y = py + 20 * u + off;
+    // 立绘区
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ui.ctx.fillRect(60 * u, top + 70 * u, ui.W - 120 * u, 360 * u);
-    ui.icon('hero_' + (Math.floor(ui.time * 6) % 4), ui.W / 2, top + 250 * u, 330 * u);
-    ui.text(`「${HERO.quote}」`, ui.W / 2, top + 460 * u, 26, '#fff4d6');
-    let y = top + 520 * u;
-    const st = computeStats();
-    ui.text(`等级 ${save.heroLv}/${HERO.maxLevel}`, 60 * u, y, 28, C.gold, 'left');
-    ui.text(`攻击 ${HERO.baseAtk + HERO.atkPerLv * (save.heroLv - 1)}  (+${HERO.atkPerLv}/级)`, 60 * u, y + 50 * u, 24, '#fff', 'left');
-    ui.text(`生命 ${HERO.baseHp + HERO.hpPerLv * (save.heroLv - 1)}  (+${HERO.hpPerLv}/级)`, 60 * u, y + 90 * u, 24, '#fff', 'left');
-    ui.text(`总战力 ${fmtNum(combatPower(st))}`, ui.W - 60 * u, y, 26, '#fee761', 'right');
-    y += 140 * u;
-    ui.text('武将天赋', 60 * u, y, 26, C.gold, 'left');
-    ui.wrapText(HERO.passive, 60 * u, y + 20 * u, ui.W - 120 * u, 22, '#d9c6a0');
-    ui.text('初始武器：龙胆枪', 60 * u, y + 100 * u, 22, '#d9c6a0', 'left');
-    y += 150 * u;
-    // 升级
-    const cost = heroLevelCost(save.heroLv);
-    const bw = 400 * u;
-    if (save.heroLv < HERO.maxLevel) {
-      if (ui.button('hero_up', ui.W / 2 - bw / 2, y, bw, 110 * u, `升级  ${fmtNum(cost)}`, save.gold >= cost ? C.btnGold : C.btnGray, { icon: 'gold', size: 32 })) {
-        const err = upgradeHero();
+    ui.ctx.fillRect(50 * u, y, ui.W - 100 * u, 260 * u);
+    ui.icon(`hero_${h.id}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, y + 130 * u, 250 * u, st.owned ? 1 : 0.5);
+    ui.text(h.title, ui.W / 2, y + 290 * u, 34, h.color);
+    ui.text(`「${h.quote}」`, ui.W / 2, y + 334 * u, 22, '#fff4d6');
+    ui.pixRect(60 * u, y + 14 * u, 140 * u, 40 * u, '#231917');
+    ui.text(h.role, 130 * u, y + 34 * u, 20, h.color, 'center', null);
+    if (st.owned) for (let k = 0; k < 5; k++) ui.icon('star', ui.W - 90 * u - (4 - k) * 30 * u, y + 34 * u, 26 * u, k < st.star ? 1 : 0.2);
+    y += 370 * u;
+    const hb = heroBase(h.id);
+    const lx = 50 * u;
+    ui.text(`等级 ${st.lv}/${HERO.maxLevel}`, lx, y, 26, C.gold, 'left');
+    ui.text(`攻击 ${hb.atk}`, lx + 230 * u, y, 24, '#ffb070', 'left');
+    ui.text(`生命 ${hb.hp}`, lx + 400 * u, y, 24, '#9be37a', 'left');
+    y += 40 * u;
+    ui.text(`移速 ${h.moveSpeed}   星级加成 +${Math.round((st.owned ? st.star - 1 : 0) * 12)}%`, lx, y, 20, C.textDim, 'left');
+    y += 50 * u;
+    const row = (icon: string, title: string, desc: string) => {
+      ui.qualityFrame(lx, y, 84 * u, '#5a6988');
+      ui.icon(icon, lx + 42 * u, y + 42 * u, 56 * u);
+      ui.text(title, lx + 104 * u, y + 20 * u, 24, C.gold, 'left');
+      ui.wrapText(desc, lx + 104 * u, y + 36 * u, ui.W - lx * 2 - 110 * u, 20, '#d9c6a0');
+      y += 108 * u;
+    };
+    const wd = WEAPONS[h.weapon];
+    row('star', '天赋', h.passive);
+    row(wd.icon, `专属武器 · ${wd.name}`, `${wd.intro}。满级后搭配「${PASSIVES[wd.evoPassive].name}」进化为「${wd.evoName}」`);
+    row(wd.evoIcon, `大招 · ${h.ultName}`, h.ultDesc);
+    y += 10 * u;
+    // 操作按钮
+    const bw = (ui.W - 140 * u) / 3, bh = 96 * u;
+    if (st.owned) {
+      const cost = heroLevelCost(st.lv);
+      const maxLv = st.lv >= HERO.maxLevel;
+      if (ui.button('hero_up', lx, y, bw, bh, maxLv ? '满级' : '升级', save.gold >= cost && !maxLv ? C.btnGold : C.btnGray, { size: 28, disabled: maxLv, sub: maxLv ? undefined : `${fmtNum(cost)}金` })) {
+        const err = upgradeHero(h.id);
         if (err) ui.toast(err); else playSfx('levelup');
       }
-    } else ui.text('已达等级上限', ui.W / 2, y + 50 * u, 30, '#9be37a');
-    y += 150 * u;
-    // 后续武将
-    if (y + 160 * u < top + ph) {
-      ui.text('更多名将 · 敬请期待', ui.W / 2, y, 24, C.textDim);
-      const names = ['关羽', '张飞', '马超', '黄忠'];
-      names.forEach((n, i) => {
-        const x = ui.W / 2 - 2 * 140 * u + i * 140 * u + 10 * u;
-        ui.qualityFrame(x, y + 24 * u, 120 * u, '#3a3040');
-        ui.icon('lock', x + 60 * u, y + 76 * u, 50 * u, 0.6);
-        ui.text(n, x + 60 * u, y + 128 * u, 20, '#888');
-      });
+      const maxStar = st.star >= MAX_STAR;
+      const sc = maxStar ? 0 : STAR_COST[st.star - 1];
+      if (ui.button('hero_star', lx + bw + 20 * u, y, bw, bh, maxStar ? '满星' : '升星', st.shards >= sc && !maxStar ? C.btnPurple : C.btnGray, { size: 28, disabled: maxStar, sub: maxStar ? undefined : `碎片 ${st.shards}/${sc}` })) {
+        const err = starUpHero(h.id);
+        if (err) ui.toast(err); else { playSfx('evolve'); ui.toast(`${h.name}升至${st.star}星！`); flushSave(true); }
+      }
+      const on = save.hero === h.id;
+      if (ui.button('hero_use', lx + bw * 2 + 40 * u, y, bw, bh, on ? '出战中' : '出战', on ? C.btnGray : C.btnRed, { size: 28, disabled: on })) {
+        save.hero = h.id;
+        markDirty();
+        playSfx('boss');
+        ui.toast(`${h.name}出战！`);
+      }
+    } else {
+      ui.text(h.unlockText, ui.W / 2, y + 10 * u, 22, '#ff8a80');
+      if (h.unlockShards > 0) {
+        ui.icon('shard', lx + 20 * u, y + 60 * u, 36 * u);
+        ui.bar(lx + 50 * u, y + 46 * u, ui.W - lx * 2 - 300 * u, 28 * u, st.shards / h.unlockShards, '#feae34');
+        ui.text(`${st.shards}/${h.unlockShards}`, lx + 50 * u + (ui.W - lx * 2 - 300 * u) / 2, y + 60 * u, 18, '#fff');
+        const can = st.shards >= h.unlockShards;
+        if (ui.button('hero_unlock', ui.W - lx - 220 * u, y + 30 * u, 220 * u, 86 * u, '解锁', can ? C.btnGold : C.btnGray, { size: 28, disabled: !can })) {
+          const err = unlockHero(h.id);
+          if (err) ui.toast(err);
+          else { playSfx('victory'); save.hero = h.id; flushSave(true); ui.toast(`获得武将：${h.name}！`); }
+        }
+      }
     }
+    if (st.owned && st.shards > 0) ui.text(`持有碎片 ${st.shards}`, ui.W / 2, y + bh + 30 * u, 20, C.textDim);
+    ui.endScroll();
   }
 
   // —— 商店页 ——
@@ -394,7 +451,7 @@ export class HomeScene implements Scene {
     const u = ui.u;
     const top = this.contentTop(ui);
     const gh = this.contentBottom(ui) - top - 10 * u;
-    const off = ui.beginScroll('shop', 0, top, ui.W, gh, 1500 * u);
+    const off = ui.beginScroll('shop', 0, top, ui.W, gh, 1820 * u);
     let y = top + off + 10 * u;
     // 宝箱
     ui.ribbon(ui.W / 2, y + 30 * u, 360 * u, '宝箱');
@@ -430,6 +487,8 @@ export class HomeScene implements Scene {
       { id: 'gift', icon: 'gold', name: '每日礼包', desc: `金币×${SHOP_DAILY.freeGift.gold}`, left: save.daily.freeGift ? 0 : 1, limit: 1, free: true, on: () => { save.daily.freeGift = true; save.gold += SHOP_DAILY.freeGift.gold; ui.toast(`获得金币×${SHOP_DAILY.freeGift.gold}`); playSfx('coin'); } },
       { id: 'yb', icon: 'yuanbao', name: '元宝', desc: `元宝×${SHOP_DAILY.adYuanbao.amount}`, left: SHOP_DAILY.adYuanbao.limit - save.daily.adYuanbao, limit: SHOP_DAILY.adYuanbao.limit, on: () => { save.daily.adYuanbao++; save.yuanbao += SHOP_DAILY.adYuanbao.amount; ui.toast(`获得元宝×${SHOP_DAILY.adYuanbao.amount}`); playSfx('coin'); } },
       { id: 'gold', icon: 'chest', name: '军饷', desc: '2小时巡营金币', left: SHOP_DAILY.adGold.limit - save.daily.adGold, limit: SHOP_DAILY.adGold.limit, on: () => { save.daily.adGold++; const g = Math.floor(SHOP_DAILY.adGold.minutes * (3 + save.maxCleared * 3)); save.gold += g; ui.toast(`获得金币×${g}`); playSfx('coin'); } },
+      { id: 'shards', icon: 'shard', name: '武将碎片', desc: `随机武将碎片×${SHOP_DAILY.adShards.amount}`, left: SHOP_DAILY.adShards.limit - save.daily.adShards, limit: SHOP_DAILY.adShards.limit, on: () => { save.daily.adShards++; const h = randomShardHero(true); grantShards(h, SHOP_DAILY.adShards.amount); ui.toast(`获得${HERO_BY_ID[h].name}碎片×${SHOP_DAILY.adShards.amount}`); playSfx('chest'); } },
+      { id: 'stamina', icon: 'stamina', name: '体力', desc: `体力×${STAMINA.adGain}`, left: STAMINA.adDailyLimit - save.daily.adStamina, limit: STAMINA.adDailyLimit, on: () => { save.daily.adStamina++; save.stamina += STAMINA.adGain; ui.toast(`体力+${STAMINA.adGain}`); playSfx('coin'); } },
       { id: 'iron', icon: 'iron', name: '玄铁兑换', desc: '50元宝换10玄铁', left: 99, limit: 99, free: true, on: () => { if (save.yuanbao < 50) { ui.toast('元宝不足'); return; } save.yuanbao -= 50; save.iron += 10; ui.toast('获得玄铁×10'); playSfx('coin'); } },
     ];
     const cw = (ui.W - 72 * u) / 2, chh = 300 * u;
@@ -455,10 +514,10 @@ export class HomeScene implements Scene {
   }
 
   private openChestNow(id: string) {
-    const it = openChest(chestById(id));
+    const r = openChest(chestById(id));
     markDirty();
     flushSave(true);
-    game.openDialog(new ChestResultDialog(it, id === 'gold'));
+    game.openDialog(new ChestResultDialog(r.item, id === 'gold', r.shards));
   }
 
   // —— 新手引导 ——

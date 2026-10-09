@@ -22,6 +22,10 @@ export function updateWeapons(b: Battle, dt: number) {
       case 'horse': horse(b, w, L, dt); break;
       case 'fire': fire(b, w, L, dt); break;
       case 'aura': aura(b, w, L, dt); break;
+      case 'blade': blade(b, w, L, dt); break;
+      case 'snake': snake(b, w, L, dt); break;
+      case 'fan': fan(b, w, L, dt); break;
+      case 'halberd': halberd(b, w, L, dt); break;
     }
   }
 }
@@ -224,4 +228,109 @@ function aura(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     b.damage(e, dmg, dx / (d || 1), dy / (d || 1), L.knock || 0, { noCrit: true });
   }
   b.hitBreakables(p.x, p.y, R * 0.8);
+}
+
+/** 扇形 / 圆形范围内伤害，返回命中数 */
+function sweep(b: Battle, cx: number, cy: number, R: number, dir: number, arc: number, dmg: number, knock: number, stun = 0): number {
+  let hits = 0;
+  b.grid.query(cx, cy, R + 16, near);
+  for (const e of near) {
+    if (e.dead) continue;
+    const dx = e.x - cx, dy = e.y - 4 * e.scale - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > R + e.r) continue;
+    if (arc < Math.PI) {
+      let da = Math.atan2(dy, dx) - dir;
+      while (da > Math.PI) da -= TAU;
+      while (da < -Math.PI) da += TAU;
+      if (Math.abs(da) > arc + e.r / d) continue;
+    }
+    b.damage(e, dmg, dx / d, dy / d, knock);
+    if (stun) { e.slow = 1; e.slowT = Math.max(e.slowT, e.boss ? stun * 0.3 : stun); }
+    if (hits++ < 8) b.fx.push({ kind: 'spark', x: e.x, y: e.y - 5 * e.scale, t: 0, dur: 0.18 });
+  }
+  b.hitBreakables(cx + Math.cos(dir) * R * 0.6, cy + Math.sin(dir) * R * 0.6, R * 0.5);
+  return hits;
+}
+
+/** 关羽：青龙偃月刀半月横扫 */
+function blade(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const R = L.area * b.areaMul;
+  const t = b.nearestEnemy(R * 1.6);
+  const dir = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
+  const arc = L.arc || 1.2;
+  let hits = 0;
+  for (let i = 0; i < L.count; i++) {
+    const a = dir + i * Math.PI;
+    hits += sweep(b, p.x, p.y - 8, R, a, arc, L.dmg * b.base.atk, L.knock || 80);
+    b.fx.push({ kind: 'slash', x: p.x, y: p.y - 8, t: 0, dur: 0.25, a, r: R, w: arc, color: w.evo ? '#fee761' : '#63c74d' });
+  }
+  if (hits >= 3) { b.hooks.shake(w.evo ? 3 : 2); b.addHitStop(0.04); }
+  b.hooks.sfx('thrust');
+}
+
+/** 张飞：丈八蛇矛周身横扫 + 眩晕 */
+function snake(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const R = L.area * b.areaMul;
+  w.angle += 2.1;
+  const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 70, L.stun || 0);
+  b.fx.push({ kind: 'slash', x: p.x, y: p.y - 6, t: 0, dur: 0.28, a: w.angle, r: R, w: Math.PI, color: w.evo ? '#fee761' : '#ff8a80' });
+  if (w.evo) b.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.35, r: R * 1.4, color: '#ffffff' });
+  if (hits >= 3) { b.hooks.shake(w.evo ? 3 : 2); b.addHitStop(0.04); }
+  b.hooks.sfx('thrust');
+}
+
+/** 诸葛亮：羽扇追踪风刃 */
+function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const t = b.nearestEnemy(220);
+  const base = t ? Math.atan2(t.y - (p.y - 10), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
+  for (let i = 0; i < L.count; i++) {
+    const a = w.evo ? base + (i / L.count) * TAU : base + (i - (L.count - 1) / 2) * 0.35;
+    const pr = newProjectile('wind');
+    pr.x = p.x; pr.y = p.y - 10;
+    const sp = L.speed || 160;
+    pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
+    pr.rot = a;
+    pr.dmg = L.dmg * b.base.atk;
+    pr.pierce = L.pierce || 2;
+    pr.knock = L.knock || 10;
+    pr.r = 5 * Math.sqrt(b.areaMul);
+    pr.life = 2.2;
+    pr.t = 0.15;
+    b.projs.push(pr);
+  }
+  b.hooks.sfx('shoot');
+}
+
+/** 吕布：方天画戟旋风斩 */
+function halberd(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  const p = b.player;
+  if (!w.evo) {
+    if (w.active <= 0) {
+      w.t -= dt;
+      if (w.t <= 0) { w.active = (L.duration || 1) * b.durMul; w.t = L.cd * b.cdMul; }
+      return;
+    }
+    w.active -= dt;
+  } else w.active = 1;
+  w.angle += dt * 16;
+  w.burst -= dt;
+  if (w.burst > 0) return;
+  w.burst = L.tick || 0.2;
+  const R = L.area * b.areaMul;
+  const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 40);
+  if (hits >= 4 && Math.random() < 0.4) b.hooks.shake(1.2);
+  b.hooks.sfx('thrust');
 }

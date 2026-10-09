@@ -11,7 +11,7 @@ const hp = args[2] || 120;
 const runs = args[3] || 3;
 
 function stats(): HeroStats {
-  return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0 };
+  return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, hero: process.env.HERO || 'zhaoyun' };
 }
 
 for (let r = 0; r < runs; r++) {

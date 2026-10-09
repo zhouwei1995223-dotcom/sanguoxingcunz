@@ -2,13 +2,13 @@ import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef } from '../data/chapters';
 import { ENEMIES, BOSSES, BossDef } from '../data/enemies';
-import { HERO } from '../data/meta';
+import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import {
-  WEAPONS, PASSIVES, WeaponId, PassiveId, MAX_WEAPON_LV, MAX_PASSIVE_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
+  WEAPONS, PASSIVES, WeaponId, PassiveId, weaponsForHero, MAX_WEAPON_LV, MAX_PASSIVE_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import {
-  Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy,
+  Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
 } from './entities';
 import { updateWeapons } from './weapons';
 import { updateSpawner } from './spawner';
@@ -21,7 +21,17 @@ export type Choice =
   | { kind: 'heal' }
   | { kind: 'gold' };
 
+export interface UltRing {
+  r: number;
+  hit: Set<number>;
+}
+
 export interface UltState {
+  kind: UltKind;
+  slow: number; // 大招期间世界时间倍率
+  tickT: number;
+  rings: UltRing[];
+  spawned: number;
   idx: number; // 第几次冲杀
   t: number;
   dur: number;
@@ -116,13 +126,16 @@ export class Battle {
   cdMul = 1;
   areaMul = 1;
   durMul = 1;
-  speed = HERO.moveSpeed;
+  hero: HeroDef;
+  speed = 78;
   dmgTakenMul = 1;
   regen = 0;
-  pickupR = HERO.pickup;
+  pickupR = 40;
   expMul = 1;
   goldMul = 1;
   crit = 0.05;
+  private critBonus = 0;
+  private critDmgBonus = 0;
   critDmg = 1.5;
 
   constructor(chapter: ChapterDef, base: HeroStats, viewW: number, viewH: number) {
@@ -133,7 +146,8 @@ export class Battle {
     this.player = { x: 0, y: 0, r: 8, hp: base.hp, maxHp: base.hp, dirX: 1, dirY: 0, left: false, moving: false, anim: 0, iframe: 0, hurtFlash: 0 };
     this.rerolls = base.reroll;
     this.revives = base.revive;
-    this.addWeapon(HERO.startWeapon);
+    this.hero = HERO_BY_ID[base.hero] || HERO_BY_ID.zhaoyun;
+    this.addWeapon(this.hero.weapon);
     this.recalc();
   }
 
@@ -155,18 +169,23 @@ export class Battle {
     this.cdMul = Math.max(0.35, (1 - b.cd / 100) * (1 - 0.06 * P('book')));
     this.areaMul = 1 + b.area / 100 + 0.1 * P('flag');
     this.durMul = 1 + 0.12 * P('pouch');
-    this.speed = HERO.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe'));
-    this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1);
+    const hid = this.hero.id;
+    // 武将天赋
+    if (hid === 'guanyu') { this.critBonus = 0.08; this.critDmgBonus = 0.6; }
+    if (hid === 'zhuge') { this.cdMul *= 0.85; this.areaMul *= 1.15; }
+    if (hid === 'lvbu') this.dmgMul += 0.2;
+    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0));
+    this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1);
     const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')));
     if (newMax > this.player.maxHp) this.player.hp += newMax - this.player.maxHp;
     this.player.maxHp = newMax;
     this.player.hp = Math.min(this.player.hp, newMax);
     this.regen = b.regen + 0.3 * P('lingzhi') + (auraEvo ? newMax * 0.01 : 0);
-    this.pickupR = HERO.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl'));
+    this.pickupR = this.hero.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl'));
     this.expMul = 1 + b.exp / 100 + 0.08 * P('seal');
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
-    this.crit = b.crit / 100;
-    this.critDmg = 1 + b.critDmg / 100;
+    this.crit = b.crit / 100 + this.critBonus;
+    this.critDmg = 1 + b.critDmg / 100 + this.critDmgBonus;
   }
 
   addWeapon(id: WeaponId) {
@@ -179,24 +198,25 @@ export class Battle {
     const p = this.player;
     let dt = rawDt;
     // 大招期间：赵云正常速度冲杀，其余一切慢动作
-    if (this.ult) {
-      this.updateUlt(rawDt);
-      dt = rawDt * 0.12;
-    }
+    if (this.ult) dt = rawDt * this.updateUlt(rawDt);
     this.t += dt;
     this.hitStopCd = Math.max(0, this.hitStopCd - rawDt);
     this.updateRage(dt);
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
 
     // 移动
-    let mx = this.ult ? 0 : this.moveX, my = this.ult ? 0 : this.moveY;
+    const dashing = !!this.ult && this.ult.kind === 'dragon';
+    let mx = dashing ? 0 : this.moveX, my = dashing ? 0 : this.moveY;
     const ml = Math.hypot(mx, my);
     if (ml > 1) { mx /= ml; my /= ml; }
-    p.moving = ml > 0.05 || !!this.ult;
-    if (this.ult) p.anim += rawDt * 16;
+    p.moving = ml > 0.05 || dashing;
+    // 天下无双期间移速提升；其他大招慢动作时赵云以外的武将正常移动
+    const moveDt = this.ult && this.ult.kind !== 'dragon' ? rawDt : dt;
+    const spd = this.speed * (this.ult && this.ult.kind === 'whirl' ? 1.5 : 1);
+    if (dashing) p.anim += rawDt * 16;
     else if (p.moving) {
-      p.x += mx * this.speed * dt;
-      p.y += my * this.speed * dt;
+      p.x += mx * spd * moveDt;
+      p.y += my * spd * moveDt;
       const l = Math.hypot(mx, my);
       p.dirX = mx / l;
       p.dirY = my / l;
@@ -306,7 +326,7 @@ export class Battle {
         e.x += dx * spd * mv * dt;
         e.y += dy * spd * mv * dt;
         e.shootT -= dt;
-        if (e.shootT <= 0 && d < range + 40) {
+        if (e.shootT <= 0 && d < range + 40 && e.slow < 1) {
           e.shootT = e.def!.shootCd || 3;
           this.enemyShoot(e.x, e.y - 6, dx, dy, 90, e.dmg, e.def!.proj || 'arrow');
         }
@@ -372,6 +392,7 @@ export class Battle {
     const v = Math.max(1, dmg * this.dmgTakenMul);
     p.hp -= v;
     p.iframe = 0.12;
+    if (this.hero.id === 'zhangfei' && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + 3);
     p.hurtFlash = 0.2;
     this.hooks.sfx('hurt');
     this.hooks.vibrate();
@@ -382,7 +403,7 @@ export class Battle {
   damage(e: Enemy, base: number, kx = 0, ky = 0, knock = 0, opts: { noCrit?: boolean } = {}): boolean {
     if (e.dead) return false;
     let dmg = base * this.dmgMul;
-    if (this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
+    if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (e.boss) dmg *= 1 + this.base.bossDmg / 100;
     let crit = false;
     if (!opts.noCrit && Math.random() < this.crit) { dmg *= this.critDmg; crit = true; }
@@ -505,6 +526,32 @@ export class Battle {
         }
         continue;
       }
+      if (pr.kind === 'tornado') {
+        if (pr.life <= 0) { this.projs.splice(i, 1); continue; }
+        this.updateTornado(pr, dt, near);
+        continue;
+      }
+      if (pr.kind === 'wind') {
+        // 追踪：缓慢转向最近的敌人
+        pr.t -= dt;
+        if (pr.t <= 0) {
+          pr.t = 0.12;
+          this.grid.query(pr.x, pr.y, 90, near);
+          let best: Enemy | null = null, bd = 1e9;
+          for (const e of near) { if (e.dead || pr.hitSet.has(e.uid)) continue; const d = (e.x - pr.x) ** 2 + (e.y - 6 - pr.y) ** 2; if (d < bd) { bd = d; best = e; } }
+          if (best) { pr.tx = best.x; pr.ty = best.y - 6; }
+        }
+        if (pr.tx || pr.ty) {
+          const sp = Math.hypot(pr.vx, pr.vy) || 1;
+          const want = Math.atan2(pr.ty - pr.y, pr.tx - pr.x), cur = Math.atan2(pr.vy, pr.vx);
+          let da = want - cur;
+          while (da > Math.PI) da -= TAU;
+          while (da < -Math.PI) da += TAU;
+          const na = cur + clamp(da, -6 * dt, 6 * dt);
+          pr.vx = Math.cos(na) * sp; pr.vy = Math.sin(na) * sp;
+        }
+        pr.rot = Math.atan2(pr.vy, pr.vx);
+      }
       pr.x += pr.vx * dt;
       pr.y += pr.vy * dt;
       if (pr.life <= 0) { this.projs.splice(i, 1); continue; }
@@ -522,6 +569,31 @@ export class Battle {
         if (pr.pierce <= 0) { this.projs.splice(i, 1); removed = true; break; }
       }
       if (!removed) this.hitBreakables(pr.x, pr.y, pr.r);
+    }
+  }
+
+  private updateTornado(pr: Projectile, dt: number, near: Enemy[]) {
+    // 游走：随机转向，并略微追向敌群
+    pr.rot += dt * 14;
+    if (Math.random() < dt * 1.5) { const a = rand(TAU); pr.vx = pr.vx * 0.5 + Math.cos(a) * 30; pr.vy = pr.vy * 0.5 + Math.sin(a) * 30; }
+    pr.x += pr.vx * dt;
+    pr.y += pr.vy * dt;
+    pr.t -= dt;
+    this.grid.query(pr.x, pr.y, pr.r * 1.8, near);
+    for (const e of near) {
+      if (e.dead || e.boss) continue;
+      const dx = pr.x - e.x, dy = pr.y - e.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < pr.r * 1.8) { e.x += (dx / d) * 50 * dt; e.y += (dy / d) * 50 * dt; }
+    }
+    if (pr.t <= 0) {
+      pr.t = pr.tick;
+      for (const e of near) {
+        if (e.dead) continue;
+        if ((e.x - pr.x) ** 2 + (e.y - pr.y) ** 2 > (pr.r + e.r) ** 2) continue;
+        this.damage(e, pr.dmg, 0, 0, 0, { noCrit: true });
+      }
+      this.hitBreakables(pr.x, pr.y, pr.r);
     }
   }
 
@@ -723,11 +795,20 @@ export class Battle {
     this.rage = 0;
     this.rageLock = 18;
     this.ultCasts++;
-    this.hooks.banner('龙胆 · 七进七出', '#fee761');
+    const kind = this.hero.ult;
+    this.hooks.banner(this.hero.ultName.replace('·', ' · '), this.hero.color);
     this.hooks.sfx('evolve');
     this.hooks.vibrate(true);
-    this.ult = { idx: -1, t: 0, dur: 0, x0: 0, y0: 0, x1: 0, y1: 0, finale: 0 };
-    this.nextDash();
+    const p = this.player;
+    const st: UltState = { kind, slow: 1, tickT: 0, rings: [], spawned: 0, idx: -1, t: 0, dur: 0, x0: p.x, y0: p.y, x1: 0, y1: 0, finale: 0 };
+    this.ult = st;
+    switch (kind) {
+      case 'dragon': st.slow = 0.12; this.nextDash(); break;
+      case 'crescent': st.slow = 0.25; st.dur = 1.35; break;
+      case 'roar': st.slow = 0.2; st.dur = 0.7; this.doRoar(); break;
+      case 'tornado': st.slow = 0.3; st.dur = 0.5; this.spawnTornados(); break;
+      case 'whirl': st.slow = 1; st.dur = 5; break;
+    }
     return true;
   }
 
@@ -772,10 +853,12 @@ export class Battle {
     this.hooks.sfx('horse');
   }
 
-  private updateUlt(dt: number) {
+  /** 返回世界时间倍率 */
+  private updateUlt(dt: number): number {
     const u = this.ult!;
     const p = this.player;
     p.iframe = Math.max(p.iframe, 0.6);
+    if (u.kind !== 'dragon') return this.updateOtherUlt(u, dt);
     if (u.finale > 0) {
       u.finale -= dt;
       if (u.finale <= 0) {
@@ -796,14 +879,121 @@ export class Battle {
         this.ult = null;
         p.iframe = 1;
       }
-      return;
+      return u.slow;
     }
     u.t += dt;
     const k = Math.min(1, u.t / u.dur);
     p.x = u.x0 + (u.x1 - u.x0) * k;
     p.y = u.y0 + (u.y1 - u.y0) * k;
-    this.fx.push({ kind: 'ghost', x: p.x, y: p.y, t: 0, dur: 0.3, sprite: `hero_${Math.floor(p.anim) % 4}${p.left ? '_L' : ''}` });
+    this.fx.push({ kind: 'ghost', x: p.x, y: p.y, t: 0, dur: 0.3, sprite: `${this.heroSprite}_${Math.floor(p.anim) % 4}${p.left ? '_L' : ''}` });
     if (k >= 1) this.nextDash();
+    return u.slow;
+  }
+
+  get heroSprite() {
+    return 'hero_' + this.hero.id;
+  }
+
+  private ultEnd(u: UltState) {
+    if (this.ult === u) { this.ult = null; this.player.iframe = Math.max(this.player.iframe, 0.8); }
+  }
+
+  private updateOtherUlt(u: UltState, dt: number): number {
+    const p = this.player;
+    const atk = this.base.atk;
+    u.t += dt;
+    switch (u.kind) {
+      case 'crescent': {
+        // 关羽：三道巨型刀气环向外扩散
+        const R = Math.hypot(this.viewW, this.viewH) * 0.55;
+        while (u.spawned < 3 && u.t >= u.spawned * 0.35) {
+          u.rings.push({ r: 0, hit: new Set() });
+          u.spawned++;
+          this.hooks.shake(5);
+          this.hooks.sfx('thrust');
+          this.hooks.sfx('explode');
+        }
+        for (const ring of u.rings) {
+          if (ring.r > R) continue;
+          ring.r += (R / 0.55) * dt;
+          for (const e of this.enemies) {
+            if (e.dead || ring.hit.has(e.uid)) continue;
+            const dx = e.x - p.x, dy = e.y - p.y;
+            const d = Math.hypot(dx, dy) || 1;
+            if (d <= ring.r + e.r) { ring.hit.add(e.uid); this.damage(e, atk * 9, dx / d, dy / d, 140); }
+          }
+        }
+        if (u.t >= u.dur) this.ultEnd(u);
+        return u.slow;
+      }
+      case 'roar':
+        if (u.t >= u.dur) this.ultEnd(u);
+        return u.slow;
+      case 'tornado':
+        if (u.t >= u.dur) this.ultEnd(u);
+        return u.slow;
+      case 'whirl': {
+        // 吕布：5 秒无敌旋风
+        u.tickT -= dt;
+        if (u.tickT <= 0) {
+          u.tickT = 0.12;
+          const R = 62;
+          this.grid.query(p.x, p.y, R + 16, this.tmp);
+          for (const e of this.tmp) {
+            if (e.dead) continue;
+            const dx = e.x - p.x, dy = e.y - p.y;
+            const d = Math.hypot(dx, dy) || 1;
+            if (d < R + e.r) this.damage(e, atk * 2.6, dx / d, dy / d, 90);
+          }
+          this.hitBreakables(p.x, p.y, R);
+          if (Math.random() < 0.3) this.hooks.shake(1.5);
+          this.hooks.sfx('thrust');
+        }
+        if (u.t >= u.dur) this.ultEnd(u);
+        return 1;
+      }
+    }
+    return 1;
+  }
+
+  /** 张飞：据水断桥，全屏震退眩晕 */
+  private doRoar() {
+    const p = this.player;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      if (Math.abs(e.x - p.x) > this.viewW * 0.6 || Math.abs(e.y - p.y) > this.viewH * 0.6) continue;
+      const dx = e.x - p.x, dy = e.y - p.y;
+      const d = Math.hypot(dx, dy) || 1;
+      e.slow = 1;
+      e.slowT = e.boss ? 1.5 : 4;
+      this.damage(e, this.base.atk * 6, dx / d, dy / d, 220);
+    }
+    this.shots.length = 0;
+    for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.1 + i * 0.05, r: Math.max(this.viewW, this.viewH) * (0.5 + i * 0.15), color: '#ffffff' });
+    this.fx.push({ kind: 'text', x: p.x, y: p.y - 40, t: 0, dur: 0.5, text: '燕人张翼德在此！', color: '#ff8a80' });
+    this.hooks.shake(10);
+    this.hooks.sfx('boss');
+  }
+
+  /** 诸葛亮：借东风，召出火焰龙卷 */
+  private spawnTornados() {
+    const p = this.player;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * TAU + rand(-0.3, 0.3);
+      const pr = newProjectile('tornado');
+      pr.x = p.x + Math.cos(a) * 30;
+      pr.y = p.y + Math.sin(a) * 30;
+      pr.vx = Math.cos(a) * 40;
+      pr.vy = Math.sin(a) * 40;
+      pr.r = 26;
+      pr.dmg = this.base.atk * 1.6;
+      pr.pierce = 99999;
+      pr.life = 6.5;
+      pr.tick = 0.2;
+      this.projs.push(pr);
+    }
+    this.hooks.shake(4);
+    this.hooks.sfx('fire');
   }
 
   /** 看视频直接充满怒气 */
@@ -838,7 +1028,7 @@ export class Battle {
     for (const w of this.weapons) if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id: w.id, lv: w.lv + 1, isNew: false }, w: 3 });
     for (const p of this.passives) if (p.lv < MAX_PASSIVE_LV) pool.push({ c: { kind: 'passive', id: p.id, lv: p.lv + 1, isNew: false }, w: 2.2 });
     if (this.weapons.length < WEAPON_SLOTS)
-      for (const id of Object.keys(WEAPONS) as WeaponId[]) if (!this.weapon(id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 2.2 });
+      for (const id of weaponsForHero(this.hero.id)) if (!this.weapon(id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 2.2 });
     if (this.passives.length < PASSIVE_SLOTS)
       for (const id of Object.keys(PASSIVES) as PassiveId[]) if (!this.passiveLv(id)) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: 1.4 });
     const out: Choice[] = [];

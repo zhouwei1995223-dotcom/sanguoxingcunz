@@ -12,6 +12,13 @@ export interface EquipItem {
   lv: number;
 }
 
+export interface HeroState {
+  owned: boolean;
+  lv: number;
+  star: number;
+  shards: number;
+}
+
 export interface DailyState {
   day: string;
   progress: Record<string, number>;
@@ -25,6 +32,7 @@ export interface DailyState {
   sidebar: boolean;
   patrolQuick: number;
   levelupAds: number;
+  adShards: number;
 }
 
 export interface SaveData {
@@ -35,7 +43,9 @@ export interface SaveData {
   iron: number;
   stamina: number;
   staminaTs: number;
-  heroLv: number;
+  heroLv: number; // 旧版字段，迁移到 heroes.zhaoyun.lv
+  heroes: Record<string, HeroState>;
+  hero: string; // 当前出战武将
   talents: Record<string, number>;
   items: EquipItem[];
   equipped: Record<Slot, number>;
@@ -62,8 +72,14 @@ const VERSION = 1;
 function freshDaily(): DailyState {
   return {
     day: dayKey(), progress: {}, claimed: {}, boxes: {}, adYuanbao: 0, adGold: 0, adStamina: 0,
-    chestAd: {}, freeGift: false, sidebar: false, patrolQuick: 0, levelupAds: 0,
+    chestAd: {}, freeGift: false, sidebar: false, patrolQuick: 0, levelupAds: 0, adShards: 0,
   };
+}
+
+function freshHeroes(): Record<string, HeroState> {
+  const h: Record<string, HeroState> = {};
+  for (const id of ['zhaoyun', 'guanyu', 'zhangfei', 'zhuge', 'lvbu']) h[id] = { owned: id === 'zhaoyun', lv: 1, star: id === 'zhaoyun' ? 1 : 0, shards: 0 };
+  return h;
 }
 
 function freshSave(): SaveData {
@@ -79,6 +95,8 @@ function freshSave(): SaveData {
     stamina: NEW_PLAYER.stamina,
     staminaTs: now,
     heroLv: 1,
+    heroes: freshHeroes(),
+    hero: 'zhaoyun',
     talents: {},
     items: [],
     equipped,
@@ -115,6 +133,12 @@ export function loadSave() {
       save.stats = Object.assign(base.stats, data.stats || {});
       save.daily = Object.assign(freshDaily(), data.daily || {});
       save.equipped = Object.assign(base.equipped, data.equipped || {});
+      // 旧存档迁移：只有赵云时等级存在 heroLv
+      save.heroes = Object.assign(freshHeroes(), data.heroes || {});
+      if (!data.heroes) save.heroes.zhaoyun.lv = data.heroLv || 1;
+      if (!save.heroes[save.hero] || !save.heroes[save.hero].owned) save.hero = 'zhaoyun';
+      // 已通关第2章的老玩家直接获得关羽
+      if (save.maxCleared >= 2 && !save.heroes.guanyu.owned) { save.heroes.guanyu.owned = true; save.heroes.guanyu.star = 1; }
     } catch (e) {
       save = freshSave();
     }
@@ -123,6 +147,7 @@ export function loadSave() {
   if (DEBUG.rich) { save.gold = Math.max(save.gold, 999999); save.yuanbao = Math.max(save.yuanbao, 99999); save.iron = Math.max(save.iron, 9999); save.stamina = Math.max(save.stamina, 99); }
   if (DEBUG.chapter) save.maxCleared = Math.max(save.maxCleared, DEBUG.chapter - 1);
   if (DEBUG.skipGuide) { save.guide = 99; save.agreedPrivacy = true; }
+  if (DEBUG.allHeroes) for (const id in save.heroes) if (!save.heroes[id].owned) { save.heroes[id].owned = true; save.heroes[id].star = 1; }
   rolloverDaily();
   tickStamina();
 }
