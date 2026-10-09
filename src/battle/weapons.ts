@@ -336,7 +336,7 @@ function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (w.t > 0) return;
   w.t = L.cd * b.cdMul;
   const p = b.player;
-  const t = b.nearestEnemy(220);
+  const t = b.nearestEnemy(150);
   const base = t ? Math.atan2(t.y - (p.y - 10), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   for (let i = 0; i < L.count; i++) {
     const a = w.evo ? base + (i / L.count) * TAU : base + (i - (L.count - 1) / 2) * 0.35;
@@ -349,7 +349,7 @@ function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     pr.pierce = L.pierce || 2;
     pr.knock = L.knock || 10;
     pr.r = 5 * Math.sqrt(b.areaMul);
-    pr.life = 2.2;
+    pr.life = 1.6;
     pr.t = 0.15;
     b.projs.push(pr);
   }
@@ -531,6 +531,10 @@ function caltrop(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t = L.cd * b.cdMul;
   const p = b.player;
   const life = (L.duration || 4) * b.durMul;
+  // 同时存在的铁蒺藜有上限，避免越叠越多
+  const max = w.evo ? 8 : 2 + w.lv;
+  const mine = b.pools.filter((f) => f.kind === 'caltrop');
+  if (mine.length >= max) b.pools.splice(b.pools.indexOf(mine[0]), 1);
   b.pools.push({
     kind: 'caltrop', x: p.x - p.dirX * 10 + rand(-4, 4), y: p.y - p.dirY * 8 + rand(-3, 3), r: L.area * b.areaMul,
     dmg: L.dmg * b.base.atk, tick: L.tick || 0.4, tickT: 0, life, maxLife: life, slow: L.slow || 0.3,

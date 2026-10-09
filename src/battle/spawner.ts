@@ -28,6 +28,7 @@ function updateEndless(b: Battle, dt: number) {
   for (const p of ENDLESS_POOLS) if (t >= p.from) pool = p.pool;
   if (b.mods?.pool) pool = b.mods.pool;
   const density = Math.min(300, 18 + m * 20) * (1 + 0.4 * b.crowdRamp()) * b.densityMul;
+  b.targetDensity = density;
   b.spawnT -= dt;
   if (b.spawnT <= 0) {
     b.spawnT = 0.42;
@@ -81,6 +82,7 @@ export function updateSpawner(b: Battle, dt: number) {
     if (b.finalBoss) density *= 0.55;
     // 后期敌人更多、单个更脆：割草感更强
     density *= (1 + 0.6 * b.crowdRamp()) * b.densityMul;
+    b.targetDensity = density;
     b.spawnT -= dt;
     if (b.spawnT <= 0) {
       b.spawnT = seg.interval;

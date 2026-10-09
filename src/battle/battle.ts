@@ -160,6 +160,11 @@ export class Battle {
   banishes = 2;
   /** 刷怪密度倍率（低端机自动下调） */
   densityMul = 1;
+  /** 当前目标同屏敌人数（刷怪器写入） */
+  targetDensity = 0;
+  /** 动态难度：屏幕长时间被清空时，新敌人血量逐步提高（1～2 倍） */
+  director = 1;
+  private directorT = 0;
 
   constructor(chapter: ChapterDef, base: HeroStats, viewW: number, viewH: number) {
     this.chapter = chapter;
@@ -195,8 +200,9 @@ export class Battle {
     this.durMul = 1 + 0.12 * P('pouch');
     const hid = this.hero.id;
     // 武将天赋
-    if (hid === 'guanyu') { this.critBonus = 0.08; this.critDmgBonus = 0.6; }
-    if (hid === 'zhuge') { this.cdMul *= 0.85; this.areaMul *= 1.15; }
+    if (hid === 'guanyu') { this.critBonus = 0.08; this.critDmgBonus = 0.4; }
+    if (hid === 'zhuge') this.cdMul *= 0.9;
+    if (hid === 'zhaoyun') this.dmgMul += 0.1;
     if (hid === 'lvbu') this.dmgMul += 0.2;
     const qianli = this.weapon('horse')?.link && hid === 'guanyu';
     this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (qianli ? 0.2 : 0));
@@ -269,6 +275,7 @@ export class Battle {
     for (const e of this.enemies) if (!e.dead) this.grid.insert(e);
 
     updateSpawner(this, dt);
+    this.updateDirector(dt);
     this.updateEnemies(dt);
     updateWeapons(this, dt);
     this.updateProjectiles(dt);
@@ -288,6 +295,18 @@ export class Battle {
   }
 
   // —— 敌人 ——
+  /** 普通敌人从出生到被击杀的平均秒数（指数平均） */
+  killAge = 8;
+
+  private updateDirector(dt: number) {
+    this.directorT -= dt;
+    if (this.directorT > 0) return;
+    this.directorT = 1;
+    // 敌人从屏幕外走到身边约需 7～10 秒；平均不到 6.5 秒就被消灭，说明还没靠近就被清光了
+    if (this.killAge < 6.5 && this.t > 120) this.director = Math.min(2, this.director + 0.03);
+    else if (this.killAge > 8.5) this.director = Math.max(1, this.director - 0.04);
+  }
+
   /** 后期人海程度：4 分钟起逐步提高，10 分钟达到最大 */
   crowdRamp(): number {
     return clamp((this.t - 240) / 360, 0, 1);
@@ -299,9 +318,10 @@ export class Battle {
     const ch = this.chapter;
     const minute = this.t / 60;
     // 无尽模式：二次曲线成长，后期压力越来越大
-    const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute;
-    // 敌人变多的同时单个变脆，总压力基本不变
-    const hpScale = (ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1)) / (1 + 0.4 * this.crowdRamp());
+    const late = Math.max(0, minute - 4);
+    const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.08 * late * late;
+    // 后期敌人更多，同时血量再略微提高
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.6 * this.crowdRamp()) * this.director;
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -311,9 +331,11 @@ export class Battle {
     e.speed = d.speed * rand(0.92, 1.08) * (opts.elite ? 0.9 : 1);
     e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + 0.012 * minute * minute : 1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
-    e.exp = d.exp * (opts.elite ? 20 : 1);
+    // 敌人变多后单个经验相应减少，升级节奏不变（大军压境的弱兵经验减半）
+    e.exp = (d.exp * (opts.elite ? 20 : 1) * (opts.hpMul || 1)) / (opts.elite ? 1 : 1 + this.crowdRamp());
     e.sprite = 'u_' + d.sprite;
     e.elite = !!opts.elite;
+    e.born = this.t;
     e.scale = opts.elite ? 2 : 1;
     if (opts.elite) e.r = d.radius * 1.8;
     this.enemies.push(e);
@@ -486,6 +508,7 @@ export class Battle {
     this.combo++;
     this.comboT = 2.5;
     if (e.def) this.killsBy[e.def.id] = (this.killsBy[e.def.id] || 0) + 1;
+    if (!e.boss && !e.elite && !e.fixedDir) this.killAge += (this.t - e.born - this.killAge) * 0.01;
     if (e.boss) this.bossesKilled.push(e.boss.id);
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
     if (this.combo === 100 || this.combo === 300 || this.combo === 500 || this.combo % 1000 === 0) {
@@ -1207,7 +1230,6 @@ export class Battle {
       } else if (c.kind === 'passive') {
         const helps = this.evoTargets(c.id).length > 0;
         s += c.isNew ? 25 + (helps ? 35 : 0) : 30 + (helps ? 12 : 0);
-        if (c.id === 'map') s += 20;
       }
       if (s > bs) { bs = s; best = i; }
     });

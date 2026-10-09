@@ -5,6 +5,7 @@ import { CHAPTERS, DIFFICULTIES, ENDLESS } from '../src/data/chapters';
 import { resetSpawner } from '../src/battle/spawner';
 import type { HeroStats } from '../src/meta/ops';
 import { weaponLink } from '../src/data/skills';
+import { HERO_BY_ID } from '../src/data/heroes';
 
 const args = process.argv.slice(2).map(Number);
 const chId = Number.isNaN(args[0]) ? 1 : args[0];
@@ -12,7 +13,18 @@ const atk = args[1] || 20;
 const hp = args[2] || 120;
 const runs = args[3] || 3;
 
+// POWER=0.7 表示按章节推荐战力的 70% 换算攻击与生命（按武将攻血比例）
+function powerStats(): { atk: number; hp: number } {
+  const P = Number(process.env.POWER);
+  if (!P || chId === 0) return { atk, hp };
+  const h = HERO_BY_ID[process.env.HERO || 'zhaoyun'];
+  const ratio = h.baseHp / h.baseAtk;
+  const a = (CHAPTERS[chId - 1].power * P) / (10.25 + 2 * ratio);
+  return { atk: Math.round(a), hp: Math.round(a * ratio) };
+}
+
 function stats(): HeroStats {
+  const { atk, hp } = powerStats();
   return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, hero: process.env.HERO || 'zhaoyun', cleared: Number(process.env.UNLOCK ?? 10) };
 }
 
@@ -27,6 +39,7 @@ for (let r = 0; r < runs; r++) {
   let ang = 0;
   const log: string[] = [];
   let maxEnemies = 0;
+  let lateNear = 0, lateScreen = 0, lateN = 0;
   const t0 = Date.now();
   while (!b.dead && !b.won && b.t < (chId === 0 ? 3600 : 720)) {
     // 走位：危险时躲避，安全时去捡经验、贴近敌人输出
@@ -53,6 +66,16 @@ for (let r = 0; r < runs; r++) {
     const l = Math.hypot(fx, fy) || 1;
     b.moveX = fx / l; b.moveY = fy / l;
     b.update(dt);
+    // 后期压力：6~10 分钟里，玩家周围 100 像素内平均有多少敌人
+    if (b.t > 360 && b.t < 600) {
+      let near = 0, onScreen = 0;
+      for (const e of b.enemies) {
+        if (e.dead) continue;
+        if (Math.abs(e.x - b.player.x) < 100 && Math.abs(e.y - b.player.y) < 100) near++;
+        if (Math.abs(e.x - b.player.x) < 140 && Math.abs(e.y - b.player.y) < 280) onScreen++;
+      }
+      lateNear += near; lateScreen += onScreen; lateN++;
+    }
     if (b.rageFull) b.castUlt();
     maxEnemies = Math.max(maxEnemies, b.enemies.length);
     while (b.pendingLevelUps > 0) {
@@ -74,7 +97,7 @@ for (let r = 0; r < runs; r++) {
     if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) log.push(`${b.t.toFixed(0)}s lv${b.level} hp${Math.round(b.player.hp)}/${b.player.maxHp} kills${b.kills} enemies${b.enemies.filter(e=>!e.dead).length}`);
     if (b.dead && b.revives > 0) { b.revives--; b.revive(); log.push(`${b.t.toFixed(0)}s 复活`); }
   }
-  console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 耗时${Date.now() - t0}ms`);
+  console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 耗时${Date.now() - t0}ms`);
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));
 }

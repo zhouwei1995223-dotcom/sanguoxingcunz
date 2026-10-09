@@ -30,9 +30,11 @@ function measure(id: WeaponId, mode: 'lv5' | 'evo' | 'link', hero: string, crowd
   b.damage = (e, base, kx, ky, knock, opts) => { const hp = e.hp; const r = orig(e, base, kx, ky, knock, opts); total += hp - Math.max(0, e.hp); return r; };
   const spawn = (n: number) => {
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, d = crowd === 1 ? 40 : 20 + Math.random() * 130;
+      const a = Math.random() * Math.PI * 2, d = crowd === 1 ? 30 : 20 + Math.random() * 130;
       const e = b.spawnEnemy('wei_spear', b.player.x + Math.cos(a) * d, b.player.y + Math.sin(a) * d);
       e.maxHp = e.hp = 1e12;
+      // 单体：模拟首领（体型大、不被击退、贴身）
+      if (crowd === 1) { e.mass = 1e9; e.r = 14; e.scale = 2; e.speed = 20; }
     }
   };
   spawn(crowd);

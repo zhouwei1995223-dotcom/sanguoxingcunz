@@ -34,14 +34,14 @@ export interface HeroDef {
 export const HEROES: HeroDef[] = [
   {
     id: 'zhaoyun', name: '赵云', title: '常山赵子龙', quote: '吾乃常山赵子龙也！', role: '均衡突进',
-    passive: '一身是胆：生命低于30%时，伤害提升30%',
+    passive: '一身是胆：伤害+10%，生命低于30%时再提升30%',
     baseAtk: 20, baseHp: 120, atkPerLv: 2, hpPerLv: 10, moveSpeed: 78, pickup: 40,
     weapon: 'spear', ult: 'dragon', ultName: '龙胆·七进七出', ultDesc: '化身白龙在敌阵中连冲七次，最后全屏冲击',
     unlockText: '初始武将', unlockShards: 0, color: '#c0cbdc',
   },
   {
     id: 'guanyu', name: '关羽', title: '武圣关云长', quote: '关某在此，谁敢一战！', role: '重击近战',
-    passive: '武圣：暴击率+8%，暴击伤害+60%',
+    passive: '武圣：暴击率+8%，暴击伤害+40%',
     baseAtk: 24, baseHp: 130, atkPerLv: 2.4, hpPerLv: 11, moveSpeed: 72, pickup: 40,
     weapon: 'blade', ult: 'crescent', ultName: '青龙出水', ultDesc: '连挥三道巨型青龙刀气，横扫整个战场',
     unlockText: '通关第2章获得', unlockShards: 50, color: '#63c74d',
@@ -55,8 +55,8 @@ export const HEROES: HeroDef[] = [
   },
   {
     id: 'zhuge', name: '诸葛亮', title: '卧龙诸葛孔明', quote: '略施小计，便叫你灰飞烟灭。', role: '远程法术',
-    passive: '卧龙：技能冷却-15%，技能范围+15%',
-    baseAtk: 22, baseHp: 95, atkPerLv: 2.2, hpPerLv: 8, moveSpeed: 76, pickup: 50,
+    passive: '卧龙：技能冷却-10%',
+    baseAtk: 20, baseHp: 95, atkPerLv: 2.0, hpPerLv: 8, moveSpeed: 76, pickup: 40,
     weapon: 'fan', ult: 'tornado', ultName: '借东风', ultDesc: '召来五道火焰龙卷，卷走并灼烧敌军',
     unlockText: '收集50个碎片解锁（宝箱、商店、活跃度）', unlockShards: 50, color: '#2ce8f5',
   },
