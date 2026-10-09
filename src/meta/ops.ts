@@ -16,6 +16,8 @@ export interface HeroStats extends Required<StatBlock> {
   revive: number;
   reroll: number;
   hero: string;
+  /** 已通关章节数（决定局内技能池） */
+  cleared?: number;
 }
 
 function addStats(into: StatBlock, add: StatBlock, mul = 1) {
@@ -70,7 +72,7 @@ export function computeStats(heroId = save.hero): HeroStats {
   }
   const full: HeroStats = {
     atk: 0, hp: 0, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0,
-    revive, reroll, hero: heroId,
+    revive, reroll, hero: heroId, cleared: save.maxCleared,
   };
   addStats(full, s);
   full.atk = Math.round(full.atk);

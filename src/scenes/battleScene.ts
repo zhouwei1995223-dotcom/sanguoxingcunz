@@ -11,14 +11,14 @@ import { currentWeekly, recordCodex, heroSpriteName } from '../meta/goals';
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
 import type { WeaponId } from '../data/skills';
-import { WEAPONS, PASSIVES, MAX_WEAPON_LV, MAX_PASSIVE_LV } from '../data/skills';
+import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
 import { BossDef } from '../data/enemies';
 import { computeStats } from '../meta/ops';
 import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog } from './battleDialogs';
+import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
@@ -67,6 +67,7 @@ export class BattleScene implements Scene {
     const stats = computeStats();
     if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
+    infoHero = this.battle.hero.id;
     if (this.weekly) {
       this.battle.mods = this.weekly;
       if (this.weekly.enemyHp) this.battle.enemyHpMul *= this.weekly.enemyHp;
@@ -181,6 +182,7 @@ export class BattleScene implements Scene {
       if (keys && keys[' ']) this.tryUlt();
       save.stats.playSec += dt;
       this.tutorialT += dt;
+      this.adaptDensity(dt);
     }
 
     // 待处理事件：升级 / 宝箱 / 死亡 / 胜利
@@ -225,6 +227,10 @@ export class BattleScene implements Scene {
     if (this.chapter.endless) return '无尽战场';
     return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
   }
+
+  /** 测试用：直接打开指定选项的升级弹窗 / 进化表 */
+  openLevelUpForTest(choices: Choice[]) { game.openDialog(new LevelUpDialog(this, choices)); }
+  openEvoTableForTest() { game.openDialog(new EvoTableDialog(this.battle)); }
 
   /** 选择技能后调用 */
   choose(c: Choice) {
@@ -375,6 +381,23 @@ export class BattleScene implements Scene {
     const b = this.battle;
     if (b.rageFull && !b.ult) this.tryUlt();
     else game.ui.toast(b.rageLock > 0 ? '大招恢复中' : '击败敌人积攒怒气');
+  }
+
+  // 性能保护：持续掉帧时减少同屏敌人，流畅后再慢慢恢复
+  private frameAvg = 1 / 60;
+  private slowT = 0;
+  private fastT = 0;
+  private adaptDensity(dt: number) {
+    if (DEBUG.speed > 1) return;
+    this.frameAvg += (dt - this.frameAvg) * 0.05;
+    const b = this.battle;
+    if (this.frameAvg > 1 / 40) {
+      this.slowT += dt; this.fastT = 0;
+      if (this.slowT > 2) { this.slowT = 0; b.densityMul = Math.max(0.5, b.densityMul - 0.1); }
+    } else if (this.frameAvg < 1 / 55) {
+      this.fastT += dt; this.slowT = 0;
+      if (this.fastT > 6) { this.fastT = 0; b.densityMul = Math.min(1, b.densityMul + 0.05); }
+    } else { this.slowT = 0; this.fastT = 0; }
   }
 
   private comboPulse = 0;
@@ -546,6 +569,9 @@ export class BattleScene implements Scene {
   }
 }
 
+/** 当前出战武将（技能卡片显示专属联动的名字） */
+let infoHero = '';
+
 export function choiceInfo(c: Choice): { icon: string; name: string; desc: string; lv: number; max: number; isNew: boolean; evo: boolean } {
   switch (c.kind) {
     case 'weapon': {
@@ -554,11 +580,12 @@ export function choiceInfo(c: Choice): { icon: string; name: string; desc: strin
     }
     case 'passive': {
       const d = PASSIVES[c.id];
-      return { icon: d.icon, name: d.name, desc: d.desc, lv: c.lv, max: MAX_PASSIVE_LV, isNew: c.isNew, evo: false };
+      return { icon: d.icon, name: d.name, desc: d.desc, lv: c.lv, max: passiveMax(c.id), isNew: c.isNew, evo: false };
     }
     case 'evo': {
       const d = WEAPONS[c.id];
-      return { icon: d.evoIcon, name: d.evoName, desc: d.evo.desc, lv: 0, max: 0, isNew: false, evo: true };
+      const link = weaponLink(c.id, infoHero);
+      return { icon: d.evoIcon, name: link ? link.name : d.evoName, desc: link ? link.desc : d.evo.desc, lv: 0, max: 0, isNew: false, evo: true };
     }
     case 'heal':
       return { icon: 'bun', name: '肉包子', desc: '回复30%生命', lv: 0, max: 0, isNew: false, evo: false };

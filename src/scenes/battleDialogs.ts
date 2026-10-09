@@ -4,8 +4,8 @@ import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries } from '../ui/widgets';
 import type { BattleScene } from './battleScene';
 import { choiceInfo } from './battleScene';
-import type { Choice } from '../battle/battle';
-import { WEAPONS, PASSIVES, MAX_WEAPON_LV, MAX_PASSIVE_LV } from '../data/skills';
+import type { Battle, Choice } from '../battle/battle';
+import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, WeaponId } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
 import { settleRun, settleEndless, settleWeeklyRun, RunResult } from '../meta/run';
@@ -19,79 +19,160 @@ import { guidePointer } from '../ui/guide';
 
 const LEVELUP_AD_LIMIT = 5;
 
+interface CardExtra {
+  /** 推荐选择 */
+  rec?: boolean;
+  /** 选后即可在宝箱中进化 */
+  evoReady?: boolean;
+  /** 武将专属联动 */
+  link?: boolean;
+  /** 进化配方提示 */
+  recipe?: string;
+  recipeOk?: boolean;
+  /** 封禁模式：可封禁 / 不可封禁 */
+  banish?: 'yes' | 'no';
+}
+
+/** 进化配方与标签：让玩家在选技能时就能看到搭配 */
+export function cardExtra(b: Battle, c: Choice): CardExtra {
+  const ex: CardExtra = { evoReady: b.completesEvo(c) };
+  if (c.kind === 'weapon') {
+    const d = WEAPONS[c.id];
+    const link = weaponLink(c.id, b.hero.id);
+    ex.link = !!link;
+    const has = b.passiveLv(d.evoPassive) > 0;
+    ex.recipe = `进化：满级 + ${PASSIVES[d.evoPassive].name} → ${link ? '★' + link.name : d.evoName}`;
+    ex.recipeOk = has;
+  } else if (c.kind === 'passive') {
+    const helps = b.evoTargets(c.id);
+    if (helps.length) {
+      ex.recipe = '可助进化：' + helps.map((id) => weaponLink(id, b.hero.id)?.name || WEAPONS[id].evoName).join('、');
+      ex.recipeOk = true;
+    } else {
+      const ws = weaponsForHero(b.hero.id, b.cleared).filter((id) => WEAPONS[id].evoPassive === c.id).map((id) => WEAPONS[id].name);
+      if (ws.length) ex.recipe = '进化搭配：' + ws.join('、');
+    }
+  }
+  return ex;
+}
+
+function tag(ui: UI, x: number, y: number, text: string, color: string): number {
+  const u = ui.u;
+  const w = ui.measure(text, 20) + 20 * u;
+  ui.pixRect(x, y, w, 32 * u, color);
+  ui.text(text, x + w / 2, y + 16 * u, 20, '#fff', 'center', null);
+  return w + 8 * u;
+}
+
 /** 技能卡片 */
-function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: number, h: number, highlight = false): boolean {
+function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: number, h: number, highlight = false, ex: CardExtra = {}): boolean {
   const u = ui.u;
   const info = choiceInfo(c);
   const pressed = ui.isPressed(id);
   const off = pressed ? 4 * u : 0;
-  const border = info.evo ? '#feae34' : info.isNew ? '#2ce8f5' : '#c89b5c';
+  const border = info.evo || ex.evoReady ? '#feae34' : ex.link ? '#fee761' : info.isNew ? '#2ce8f5' : '#c89b5c';
   ui.pixRect(x, y + off, w, h, '#120d0c');
   ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
-  ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, info.evo ? '#5a3a14' : '#3a2c2a');
-  if (highlight) {
-    ui.ctx.globalAlpha = 0.15 + 0.1 * Math.sin(ui.time * 6);
+  ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, info.evo ? '#5a3a14' : ex.link ? '#4a3418' : '#3a2c2a');
+  if (highlight || ex.rec) {
+    ui.ctx.globalAlpha = (highlight ? 0.15 : 0.08) + 0.08 * Math.sin(ui.time * 6);
     ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#fee761');
     ui.ctx.globalAlpha = 1;
   }
-  const isz = h - 40 * u;
+  const isz = h - 70 * u;
   ui.qualityFrame(x + 20 * u, y + 20 * u + off, isz, border);
   ui.icon(info.icon, x + 20 * u + isz / 2, y + 20 * u + isz / 2 + off, isz * 0.66);
   const tx = x + 40 * u + isz;
   ui.text(info.name, tx, y + 42 * u + off, 32, info.evo ? '#fee761' : '#fff4d6', 'left');
   let tagX = tx + ui.measure(info.name, 32) + 14 * u;
-  if (info.isNew) { ui.pixRect(tagX, y + 26 * u + off, 60 * u, 32 * u, '#0099db'); ui.text('新', tagX + 30 * u, y + 42 * u + off, 20, '#fff', 'center', null); tagX += 70 * u; }
-  if (info.evo) { ui.pixRect(tagX, y + 26 * u + off, 80 * u, 32 * u, '#e43b44'); ui.text('进化', tagX + 40 * u, y + 42 * u + off, 20, '#fff', 'center', null); }
+  const ty = y + 26 * u + off;
+  if (ex.rec) tagX += tag(ui, tagX, ty, '推荐', '#c96d17');
+  if (info.isNew) tagX += tag(ui, tagX, ty, '新', '#0099db');
+  if (info.evo) tagX += tag(ui, tagX, ty, '进化', '#e43b44');
+  if (ex.evoReady) tagX += tag(ui, tagX, ty, '可进化', '#e43b44');
+  if (ex.link) tagX += tag(ui, tagX, ty, '★专属', '#a2611a');
   // 等级星
   if (info.max) {
     for (let i = 0; i < info.max; i++) {
       const sx = x + w - 30 * u - (info.max - i) * 26 * u, sy = y + 30 * u + off;
+      if (sx < tagX) continue;
       ui.pixRect(sx, sy, 20 * u, 20 * u, i < info.lv ? (i === info.lv - 1 ? '#fee761' : '#feae34') : '#231917', 4 * u);
     }
   }
   ui.wrapText(info.desc, tx, y + 64 * u + off, w - (tx - x) - 24 * u, 24, '#d9c6a0');
+  if (ex.recipe) {
+    ui.pixRect(x + 20 * u, y + h - 50 * u + off, w - 40 * u, 34 * u, 'rgba(0,0,0,0.3)');
+    ui.text(ex.recipe, x + 34 * u, y + h - 33 * u + off, 20, ex.recipeOk ? '#9be37a' : ex.link ? '#fee761' : '#a89a86', 'left');
+  }
+  if (ex.banish) {
+    ui.ctx.globalAlpha = ex.banish === 'yes' ? 0.35 + 0.1 * Math.sin(ui.time * 8) : 0.55;
+    ui.pixRect(x, y + off, w, h, ex.banish === 'yes' ? '#a22633' : '#120d0c');
+    ui.ctx.globalAlpha = 1;
+    if (ex.banish === 'yes') ui.text('点击封禁', x + w - 100 * u, y + h / 2 + off, 30, '#fff');
+  }
   return ui.clicked(id, x, y, w, h);
 }
 
 export class LevelUpDialog implements Dialog {
   constructor(private scene: BattleScene, private choices: Choice[]) {}
+  private banishMode = false;
   draw(ui: UI) {
     const u = ui.u;
     const b = this.scene.battle;
     const t = this.t || 0;
     ui.ribbon(ui.W / 2, ui.H * 0.2, 420 * u, `升级！Lv.${b.level}`, '#3e8948');
     ui.text('选择一项强化', ui.W / 2, ui.H * 0.2 + 64 * u, 26, C.textDim);
-    const cw = ui.W - 70 * u, ch = 190 * u;
+    const cw = ui.W - 70 * u, ch = 220 * u;
     let y = ui.H * 0.2 + 110 * u;
+    const tutorial = save.guide === 0 && b.level === 2;
+    const rec = tutorial ? -1 : b.recommend(this.choices);
+    if (this.banishMode) ui.text('选择要封禁的新技能（本局不再出现）', ui.W / 2, y - 14 * u, 24, '#ff8a80');
     for (let i = 0; i < this.choices.length; i++) {
+      const c = this.choices[i];
       const k = Math.max(0, Math.min(1, (t - i * 0.07) * 5));
       const x = ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
-      if (choiceCard(ui, 'lv_choice_' + i, this.choices[i], x, y, cw, ch, save.guide === 0 && i === 0 && b.level === 2) && t > 0.25) {
-        this.scene.choose(this.choices[i]);
+      const ex = cardExtra(b, c);
+      ex.rec = i === rec;
+      if (this.banishMode) ex.banish = (c.kind === 'weapon' || c.kind === 'passive') && c.isNew ? 'yes' : 'no';
+      if (choiceCard(ui, 'lv_choice_' + i, c, x, y, cw, ch, tutorial && i === 0, ex) && t > 0.25) {
+        if (this.banishMode) {
+          if (ex.banish === 'yes' && b.banish(this.choices, i)) { this.banishMode = false; playSfx('hurt'); }
+          else ui.toast('只能封禁新技能');
+          continue;
+        }
+        this.scene.choose(c);
         return false;
       }
       y += ch + 20 * u;
     }
-    // 刷新
-    const bw = 300 * u, bh = 92 * u;
+    // 刷新 / 封禁
+    const bh = 92 * u;
     y += 10 * u;
+    const showBanish = !tutorial && b.banishes > 0;
+    const bw = showBanish ? 300 * u : 300 * u;
+    const rx = showBanish ? ui.W / 2 - bw - 12 * u : ui.W / 2 - bw / 2;
     if (b.rerolls > 0) {
-      if (ui.button('lv_reroll', ui.W / 2 - bw / 2, y, bw, bh, `刷新(${b.rerolls})`, C.btnBlue)) {
+      if (ui.button('lv_reroll', rx, y, bw, bh, `刷新(${b.rerolls})`, C.btnBlue)) {
         b.rerolls--;
         this.choices = b.rollChoices();
+        this.banishMode = false;
         this.t = 0.2;
       }
     } else {
       const left = LEVELUP_AD_LIMIT - save.daily.levelupAds;
-      if (adButton(ui, 'lv_reroll_ad', ui.W / 2 - bw / 2, y, bw, bh, '刷新', { disabled: left <= 0, sub: `今日剩余${Math.max(0, left)}次` })) {
+      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: `今日剩余${Math.max(0, left)}次` })) {
         getPlatform().showRewardedAd('levelup_reroll').then((ok) => {
           if (!ok) return;
           save.daily.levelupAds++;
           progressTask('ad', 1);
           this.choices = b.rollChoices();
+          this.banishMode = false;
           this.t = 0.2;
         });
       }
+    }
+    if (showBanish && ui.button('lv_banish', ui.W / 2 + 12 * u, y, bw, bh, this.banishMode ? '取消封禁' : `封禁(${b.banishes})`, this.banishMode ? C.btnGray : C.btnRed)) {
+      this.banishMode = !this.banishMode;
     }
     if (save.guide === 0 && b.level === 2) guidePointer(ui, ui.W / 2 - cw / 2, ui.H * 0.2 + 110 * u, cw, ch);
   }
@@ -141,7 +222,8 @@ export class ChestDialog implements Dialog {
     }
     ui.ctx.restore();
     ui.icon('chest_open', ui.W / 2, cy, 200 * u);
-    ui.ribbon(ui.W / 2, cy - 180 * u, 380 * u, hasEvo ? '神兵进化！' : '获得宝物', hasEvo ? '#c96d17' : '#a22633');
+    const linkEvo = this.rewards.some((r) => r.kind === 'evo' && weaponLink(r.id, this.scene.battle.hero.id));
+    ui.ribbon(ui.W / 2, cy - 180 * u, 420 * u, linkEvo ? '★专属联动觉醒！' : hasEvo ? '神兵进化！' : '获得宝物', linkEvo ? '#a2611a' : hasEvo ? '#c96d17' : '#a22633');
     const cw = ui.W - 70 * u, chh = 150 * u;
     let y = cy + 140 * u;
     this.rewards.forEach((r, i) => {
@@ -200,13 +282,13 @@ export class PauseDialog implements Dialog {
       const ix = x + i * (isz + 12 * u);
       ui.qualityFrame(ix, y, isz, '#3a4466');
       ui.icon(PASSIVES[ps.id].icon, ix + isz / 2, y + isz / 2, isz * 0.6);
-      ui.text(`${ps.lv}/${MAX_PASSIVE_LV}`, ix + isz / 2, y + isz + 18 * u, 18, '#fff');
+      ui.text(`${ps.lv}/${passiveMax(ps.id)}`, ix + isz / 2, y + isz + 18 * u, 18, '#fff');
     });
     if (!b.passives.length) ui.text('尚未习得兵法', x, y + 30 * u, 22, C.textDim, 'left');
     y += isz + 56 * u;
-    // 进化提示
-    ui.text('进化秘诀：武器满级 + 对应兵法，开启宝箱即可进化', ui.W / 2, y, 20, '#9be37a');
-    y += 50 * u;
+    // 进化表
+    if (ui.button('p_evo', ui.W / 2 - 180 * u, y - 30 * u, 360 * u, 64 * u, '查看进化表', C.btnGreen, { size: 24 })) game.openDialog(new EvoTableDialog(b));
+    y += 60 * u;
     const stats: [string, string][] = [
       ['攻击', String(b.base.atk)], ['生命', `${Math.ceil(b.player.hp)}/${b.player.maxHp}`],
       ['伤害加成', `${Math.round((b.dmgMul - 1) * 100)}%`], ['冷却缩减', `${Math.round((1 - b.cdMul) * 100)}%`],
@@ -355,6 +437,7 @@ export class ResultDialog implements Dialog {
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');
     y += 60 * u;
     ui.text(this.scene.label, ui.W / 2, y, 26, this.scene.diff.id ? this.scene.diff.color : C.textDim);
+    if (this.res.newSkills) ui.text('解锁新技能：' + this.res.newSkills.join('、'), ui.W / 2, y + 34 * u, 20, '#9be37a');
     y += 60 * u;
     const rows: [string, string][] = [['坚守时间', fmtTime(b.t)], ['击败敌军', fmtNum(b.kills)], ['武将等级', 'Lv.' + b.level], ['斩获敌将', String(b.bossKills)]];
     rows.forEach((r, i) => {
@@ -412,5 +495,54 @@ export class ResultDialog implements Dialog {
       game.setScene(new HomeScene());
       return false;
     }
+  }
+}
+
+/** 局内进化表：本局可用武器的进化配方，专属联动高亮 */
+export class EvoTableDialog implements Dialog {
+  t?: number;
+  constructor(private b: Battle) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const b = this.b;
+    const w = ui.W - 50 * u, h = Math.min(ui.H - 200 * u - ui.safeTop, 1300 * u);
+    const f = dialogFrame(ui, w, h, '进化表', this.t, 'evo_close');
+    if (f.close) return false;
+    ui.text('武器升满级 + 拥有对应兵法，开宝箱即可进化', ui.W / 2, f.y + 80 * u, 22, '#9be37a');
+    const ids = weaponsForHero(b.hero.id, b.cleared);
+    // 专属武器与联动排在前面
+    const rank = (id: WeaponId) => (WEAPONS[id].hero ? 0 : weaponLink(id, b.hero.id) ? 1 : 2);
+    ids.sort((a, c) => rank(a) - rank(c));
+    const rh = 120 * u;
+    const top = f.y + 110 * u, vh = h - 140 * u;
+    const off = ui.beginScroll('evo_table', f.x + 20 * u, top, w - 40 * u, vh, ids.length * (rh + 10 * u));
+    ids.forEach((id, i) => {
+      const d = WEAPONS[id];
+      const link = weaponLink(id, b.hero.id);
+      const y = top + i * (rh + 10 * u) + off;
+      if (y + rh < top || y > top + vh) return;
+      const own = b.weapon(id);
+      ui.pixRect(f.x + 24 * u, y, w - 48 * u, rh, link || d.hero ? '#4a3418' : '#2a2030');
+      const isz = 84 * u, iy = y + (rh - isz) / 2;
+      let x = f.x + 40 * u;
+      const cell = (icon: string, name: string, col: string, active: boolean) => {
+        ui.qualityFrame(x, iy, isz, active ? '#feae34' : '#5a6988');
+        ui.icon(icon, x + isz / 2, iy + isz / 2, isz * 0.66, active ? 1 : 0.7);
+        ui.text(name, x + isz / 2, iy + isz + 2 * u, 16, col);
+        x += isz;
+      };
+      cell(d.icon, d.name, '#fff4d6', !!own);
+      ui.text('+', x + 22 * u, iy + isz / 2, 34, C.gold);
+      x += 44 * u;
+      cell(PASSIVES[d.evoPassive].icon, PASSIVES[d.evoPassive].name, '#fff4d6', b.passiveLv(d.evoPassive) > 0);
+      ui.text('→', x + 26 * u, iy + isz / 2, 34, C.gold);
+      x += 52 * u;
+      cell(d.evoIcon, '', '#fff', !!own?.evo);
+      const tx = x + 20 * u;
+      ui.text(link ? link.name : d.evoName, tx, iy + 20 * u, 28, link ? '#fee761' : '#fff4d6', 'left');
+      const sub = link ? '★' + b.hero.name + '专属联动' : d.hero ? '★专属武器' : own?.evo ? '已进化' : own ? `已拥有 Lv.${own.lv}` : '';
+      ui.text(sub, tx, iy + 60 * u, 20, link || d.hero ? '#feae34' : '#9be37a', 'left');
+    });
+    ui.endScroll();
   }
 }

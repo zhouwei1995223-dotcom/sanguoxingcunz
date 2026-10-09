@@ -1,3 +1,4 @@
+import { skillsUnlockedAt } from '../data/skills';
 import { ChapterDef, DifficultyDef } from '../data/chapters';
 import { weighted } from '../core/math';
 import { save, markDirty } from './save';
@@ -53,6 +54,8 @@ function dropQuality(chId: number, shift: number): number {
 export interface RunResult {
   win: boolean;
   firstClear: boolean;
+  /** 本次通关新解锁的局内技能 */
+  newSkills?: string[];
   gold: number;
   iron: number;
   yuanbao: number;
@@ -84,7 +87,11 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   }
   // 新手首局：无论胜负都赠送兵器，保证装备引导可以进行
   if (save.guide === 0 && !save.items.some((i) => i.tid === 'yajiao')) items.push(newItem('yajiao', 1));
-  if (win && d === 0 && ch.id > save.maxCleared) save.maxCleared = ch.id;
+  let newSkills: string[] | undefined;
+  if (win && d === 0 && ch.id > save.maxCleared) {
+    for (let c = save.maxCleared + 1; c <= ch.id; c++) newSkills = [...(newSkills || []), ...skillsUnlockedAt(c)];
+    save.maxCleared = ch.id;
+  }
   // 武将奖励：第2章首通送关羽；其后首通送碎片（高难度送吕布碎片）
   let heroReward: string | undefined;
   let shardReward: { hero: string; n: number } | undefined;
@@ -105,7 +112,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   if (bossKills) progressTask('boss', bossKills);
   getPlatform().submitScore('score', bestScore());
   markDirty();
-  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined };
 }
 
 /** 无尽模式结算：按坚持时间发奖励，每 5 分钟额外送碎片 */

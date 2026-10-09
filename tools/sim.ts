@@ -4,6 +4,7 @@ import { Battle } from '../src/battle/battle';
 import { CHAPTERS, DIFFICULTIES, ENDLESS } from '../src/data/chapters';
 import { resetSpawner } from '../src/battle/spawner';
 import type { HeroStats } from '../src/meta/ops';
+import { weaponLink } from '../src/data/skills';
 
 const args = process.argv.slice(2).map(Number);
 const chId = Number.isNaN(args[0]) ? 1 : args[0];
@@ -12,7 +13,7 @@ const hp = args[2] || 120;
 const runs = args[3] || 3;
 
 function stats(): HeroStats {
-  return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, hero: process.env.HERO || 'zhaoyun' };
+  return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, hero: process.env.HERO || 'zhaoyun', cleared: Number(process.env.UNLOCK ?? 10) };
 }
 
 for (let r = 0; r < runs; r++) {
@@ -57,14 +58,16 @@ for (let r = 0; r < runs; r++) {
     while (b.pendingLevelUps > 0) {
       b.pendingLevelUps--;
       const ch = b.rollChoices();
-      // 优先：已有武器升级 > 新武器 > 被动
-      const pickC = ch.find((c) => c.kind === 'weapon' && !c.isNew) || ch.find((c) => c.kind === 'weapon') || ch[0];
+      // 按游戏内「推荐」标签选择（不动脑玩家的路线）
+      const pickC = process.env.PICK === 'weapon'
+        ? ch.find((c) => c.kind === 'weapon' && !c.isNew) || ch.find((c) => c.kind === 'weapon') || ch[0]
+        : ch[Math.max(0, b.recommend(ch))];
       b.applyChoice(pickC);
     }
     while (b.pendingChests.length) {
       const c = b.pendingChests.shift()!;
       for (const ch of b.rollChest(c.boss)) {
-        if (ch.kind === 'evo') log.push(`${b.t.toFixed(0)}s 进化 ${ch.id}`);
+        if (ch.kind === 'evo') log.push(`${b.t.toFixed(0)}s 进化 ${ch.id}${weaponLink(ch.id, b.hero.id) ? '(专属)' : ''}`);
         b.applyChoice(ch);
       }
     }

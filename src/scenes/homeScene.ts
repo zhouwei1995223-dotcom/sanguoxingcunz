@@ -4,7 +4,7 @@ import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
 import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily } from '../meta/save';
 import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR } from '../data/heroes';
-import { WEAPONS, PASSIVES } from '../data/skills';
+import { WEAPONS, PASSIVES, heroLinks } from '../data/skills';
 import {
   heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
@@ -420,7 +420,7 @@ export class HomeScene implements Scene {
     const py = top + cw + 30 * u;
     const ph = this.contentBottom(ui) - py - 10 * u;
     ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
-    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, 1290 * u);
+    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1290 + 108 * heroLinks(this.viewHero || save.hero).length) * u);
     let y = py + 20 * u + off;
     // 立绘区
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -451,6 +451,10 @@ export class HomeScene implements Scene {
     row('star', '天赋', h.passive);
     row(wd.icon, `专属武器 · ${wd.name}`, `${wd.intro}。满级后搭配「${PASSIVES[wd.evoPassive].name}」进化为「${wd.evoName}」`);
     row(wd.evoIcon, `大招 · ${h.ultName}`, h.ultDesc);
+    for (const { weapon, link } of heroLinks(h.id)) {
+      const d = WEAPONS[weapon];
+      row(d.evoIcon, `专属联动 · ${link.name}`, `「${d.name}」搭配「${PASSIVES[d.evoPassive].name}」进化时，变为专属形态：${link.desc.replace(/^.*?：/, '')}`);
+    }
     y += 10 * u;
     // 操作按钮
     const bw = (ui.W - 140 * u) / 3, bh = 96 * u;

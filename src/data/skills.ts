@@ -1,7 +1,11 @@
 // 局内技能：武器（主动）与兵法（被动）。所有数值都在这里调整。
 
-export type WeaponId = 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd';
-export type PassiveId = 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal';
+export type WeaponId =
+  | 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd'
+  | 'rock' | 'knife' | 'catapult' | 'thunder' | 'caltrop' | 'drum';
+export type PassiveId =
+  | 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal'
+  | 'map' | 'mirror' | 'wine' | 'ration' | 'horn' | 'whetstone';
 
 export interface WeaponLevel {
   dmg: number; // 伤害倍率（× 攻击力）
@@ -31,6 +35,21 @@ export interface WeaponDef {
   hero?: string;
   levels: WeaponLevel[]; // 1..5 级
   evo: WeaponLevel; // 进化形态
+  /** 通关第几章后才会出现在升级选项里（不填为一开始就有） */
+  unlockCh?: number;
+  /** 受「舆图」数量加成 */
+  countable?: boolean;
+  /** 武将专属联动：该武将进化此武器时变为专属形态 */
+  links?: WeaponLink[];
+}
+
+export interface WeaponLink {
+  hero: string;
+  name: string;
+  icon?: string;
+  desc: string;
+  /** 覆盖进化形态的数值 */
+  evo: Partial<WeaponLevel>;
 }
 
 export const MAX_WEAPON_LV = 5;
@@ -165,9 +184,142 @@ Object.assign(WEAPONS, {
   },
 } as Record<string, WeaponDef>);
 
+// —— 扩充的通用武器（随章节解锁） ——
+Object.assign(WEAPONS, {
+  knife: {
+    id: 'knife', name: '回旋飞刀', icon: 'w_knife', evoName: '飞刀如雨', evoIcon: 'w_knife_evo', evoPassive: 'map', unlockCh: 1, countable: true,
+    intro: '掷出飞刀后飞回手中，去程回程都造成伤害',
+    levels: [
+      { dmg: 1.2, cd: 1.6, count: 1, area: 90, speed: 200, knock: 15, desc: '掷出回旋飞刀，往返穿透敌人' },
+      { dmg: 1.2, cd: 1.6, count: 2, area: 90, speed: 200, knock: 15, desc: '飞刀+1' },
+      { dmg: 1.5, cd: 1.5, count: 2, area: 100, speed: 210, knock: 18, desc: '伤害与射程提升' },
+      { dmg: 1.5, cd: 1.4, count: 3, area: 100, speed: 210, knock: 18, desc: '飞刀+1，冷却缩短' },
+      { dmg: 1.9, cd: 1.3, count: 4, area: 110, speed: 220, knock: 20, desc: '飞刀+1，伤害提升' },
+    ],
+    evo: { dmg: 2.4, cd: 1.1, count: 8, area: 120, speed: 240, knock: 24, desc: '飞刀如雨：八方飞刀往复不休' },
+  },
+  thunder: {
+    id: 'thunder', name: '天雷', icon: 'w_thunder', evoName: '太平要术', evoIcon: 'w_thunder_evo', evoPassive: 'seal', unlockCh: 1, countable: true,
+    intro: '天雷劈中敌人，并在附近敌人之间连锁跳跃',
+    levels: [
+      { dmg: 1.6, cd: 2.2, count: 1, area: 60, pierce: 3, desc: '天雷劈中敌人，连锁3次' },
+      { dmg: 1.6, cd: 2.1, count: 1, area: 60, pierce: 5, desc: '连锁+2' },
+      { dmg: 2.0, cd: 2.0, count: 2, area: 64, pierce: 5, desc: '天雷+1，伤害提升' },
+      { dmg: 2.0, cd: 1.8, count: 2, area: 70, pierce: 7, desc: '连锁+2，冷却缩短' },
+      { dmg: 2.5, cd: 1.6, count: 3, area: 74, pierce: 8, desc: '天雷+1，伤害提升' },
+    ],
+    evo: { dmg: 3.0, cd: 1.2, count: 4, area: 90, pierce: 14, stun: 0.3, desc: '太平要术：雷霆万钧，连锁十四人并麻痹' },
+  },
+  rock: {
+    id: 'rock', name: '滚木礌石', icon: 'w_rock', evoName: '天崩地裂', evoIcon: 'w_rock_evo', evoPassive: 'armor', unlockCh: 2, countable: true,
+    intro: '礌石从天而降，砸向敌群',
+    levels: [
+      { dmg: 2.2, cd: 2.8, count: 2, area: 16, knock: 50, desc: '两块礌石砸向敌群' },
+      { dmg: 2.2, cd: 2.8, count: 3, area: 16, knock: 50, desc: '礌石+1' },
+      { dmg: 2.8, cd: 2.6, count: 3, area: 18, knock: 55, desc: '伤害与范围提升' },
+      { dmg: 2.8, cd: 2.4, count: 4, area: 18, knock: 60, desc: '礌石+1，冷却缩短' },
+      { dmg: 3.4, cd: 2.2, count: 5, area: 20, knock: 65, desc: '礌石+1，伤害提升' },
+    ],
+    evo: { dmg: 4.2, cd: 1.6, count: 8, area: 26, knock: 80, stun: 0.5, desc: '天崩地裂：八石齐落，砸晕敌军' },
+  },
+  drum: {
+    id: 'drum', name: '战鼓', icon: 'w_drum', evoName: '擂鼓震天', evoIcon: 'w_drum_evo', evoPassive: 'horn', unlockCh: 2,
+    intro: '擂响战鼓，冲击波击退周围敌人',
+    levels: [
+      { dmg: 1.4, cd: 3.0, count: 1, area: 50, knock: 120, desc: '鼓声冲击波击退周围敌人' },
+      { dmg: 1.7, cd: 2.9, count: 1, area: 54, knock: 120, desc: '伤害与范围提升' },
+      { dmg: 1.7, cd: 2.6, count: 2, area: 56, knock: 130, desc: '连擂两通鼓' },
+      { dmg: 2.2, cd: 2.5, count: 2, area: 62, knock: 140, desc: '伤害与范围提升' },
+      { dmg: 2.6, cd: 2.3, count: 3, area: 66, knock: 150, desc: '连擂三通鼓' },
+    ],
+    evo: { dmg: 3.2, cd: 2.0, count: 3, area: 80, knock: 180, stun: 0.6, desc: '擂鼓震天：鼓声所至，敌军眩晕' },
+  },
+  catapult: {
+    id: 'catapult', name: '霹雳车', icon: 'w_catapult', evoName: '霹雳炮', evoIcon: 'w_catapult_evo', evoPassive: 'whetstone', unlockCh: 3, countable: true,
+    intro: '向远处敌群抛出巨石，大范围爆炸',
+    levels: [
+      { dmg: 5.0, cd: 4.5, count: 1, area: 34, knock: 90, desc: '抛出巨石，落地大范围爆炸' },
+      { dmg: 6.0, cd: 4.5, count: 1, area: 36, knock: 90, desc: '伤害提升' },
+      { dmg: 6.0, cd: 4.2, count: 2, area: 38, knock: 95, desc: '巨石+1' },
+      { dmg: 7.5, cd: 4.0, count: 2, area: 42, knock: 100, desc: '伤害与范围提升' },
+      { dmg: 8.5, cd: 3.6, count: 3, area: 44, knock: 110, desc: '巨石+1，冷却缩短' },
+    ],
+    evo: { dmg: 10, cd: 3.0, count: 4, area: 56, knock: 140, desc: '霹雳炮：巨石落地后二次爆裂' },
+  },
+  caltrop: {
+    id: 'caltrop', name: '铁蒺藜', icon: 'w_caltrop', evoName: '天罗地网', evoIcon: 'w_caltrop_evo', evoPassive: 'pouch', unlockCh: 3,
+    intro: '在走过的路上撒下铁蒺藜，减速并伤害敌人',
+    levels: [
+      { dmg: 0.5, cd: 1.4, count: 1, area: 16, duration: 4, tick: 0.4, slow: 0.3, desc: '身后撒下铁蒺藜，减速并伤害敌人' },
+      { dmg: 0.5, cd: 1.2, count: 1, area: 18, duration: 4.5, tick: 0.4, slow: 0.3, desc: '范围与持续时间提升' },
+      { dmg: 0.7, cd: 1.1, count: 1, area: 20, duration: 5, tick: 0.35, slow: 0.35, desc: '伤害提升，减速加强' },
+      { dmg: 0.7, cd: 1.0, count: 1, area: 22, duration: 6, tick: 0.35, slow: 0.4, desc: '范围提升，持续更久' },
+      { dmg: 0.9, cd: 0.9, count: 1, area: 24, duration: 7, tick: 0.3, slow: 0.45, desc: '全面强化' },
+    ],
+    evo: { dmg: 1.2, cd: 0.6, count: 1, area: 30, duration: 9, tick: 0.28, slow: 0.6, desc: '天罗地网：铁蒺藜遍地，敌军寸步难行' },
+  },
+} as Record<string, WeaponDef>);
+
+// —— 数量加成与武将专属联动 ——
+for (const id of ['spear', 'sword', 'crossbow', 'horse', 'fire', 'fan'] as WeaponId[]) WEAPONS[id].countable = true;
+WEAPONS.sword.links = [
+  { hero: 'zhaoyun', name: '青釭剑阵', desc: '赵云专属：青釭剑出鞘，八剑环身，伤害大增', evo: { count: 8, dmg: 3.0, area: 56 } },
+];
+WEAPONS.horse.links = [
+  { hero: 'zhaoyun', name: '白马义从', desc: '赵云专属：十二骑白马义从纵横冲阵', evo: { count: 12, dmg: 6.5, cd: 2.6 } },
+  { hero: 'guanyu', name: '千里走单骑', desc: '关羽专属：骑兵冲阵伤害大增，自身移动速度+20%', evo: { dmg: 7.5, cd: 2.8 } },
+];
+WEAPONS.drum.links = [
+  { hero: 'guanyu', name: '温酒斩华雄', desc: '关羽专属：每通鼓响，四道青龙刀气斩向四方', evo: { dmg: 3.6 } },
+  { hero: 'zhangfei', name: '长坂断喝', desc: '张飞专属：鼓声化作断喝，范围大增并长时间眩晕', evo: { dmg: 3.6, area: 110, stun: 1.5, knock: 220 } },
+];
+WEAPONS.rock.links = [
+  { hero: 'zhangfei', name: '智取瓦口', desc: '张飞专属：滚木礌石倾泻而下，砸晕敌军', evo: { count: 14, cd: 1.3, stun: 1.0 } },
+];
+WEAPONS.crossbow.links = [
+  { hero: 'zhuge', name: '元戎弩', desc: '诸葛亮专属：一弩十矢扇形齐射，穿透八人', evo: { count: 10, pierce: 8, cd: 0.55, dmg: 1.6 } },
+  { hero: 'lvbu', name: '辕门射戟', desc: '吕布专属：连发巨箭，贯穿一线所有敌人', evo: { dmg: 12, cd: 0.7, pierce: 999, speed: 380 } },
+];
+WEAPONS.fire.links = [
+  { hero: 'zhuge', name: '火烧博望', desc: '诸葛亮专属：火海连片，范围与持续时间大增', evo: { count: 9, area: 40, duration: 6, slow: 0.55 } },
+];
+WEAPONS.catapult.links = [
+  { hero: 'lvbu', name: '虎牢关', desc: '吕布专属：五石齐发，砸出巨坑震飞敌军', evo: { count: 5, area: 72, dmg: 13 } },
+];
+
+/** 武将对某武器的专属联动 */
+export function weaponLink(id: WeaponId, hero: string): WeaponLink | undefined {
+  return WEAPONS[id].links?.find((l) => l.hero === hero);
+}
+
+/** 某武将的全部专属联动 */
+export function heroLinks(hero: string): { weapon: WeaponId; link: WeaponLink }[] {
+  const out: { weapon: WeaponId; link: WeaponLink }[] = [];
+  for (const id of Object.keys(WEAPONS) as WeaponId[]) {
+    const l = weaponLink(id, hero);
+    if (l) out.push({ weapon: id, link: l });
+  }
+  return out;
+}
+
 /** 武将可用的武器：通用武器 + 自己的专属武器 */
-export function weaponsForHero(hero: string): WeaponId[] {
-  return (Object.keys(WEAPONS) as WeaponId[]).filter((id) => !WEAPONS[id].hero || WEAPONS[id].hero === hero);
+export function weaponsForHero(hero: string, cleared = 99): WeaponId[] {
+  return (Object.keys(WEAPONS) as WeaponId[]).filter((id) => (!WEAPONS[id].hero || WEAPONS[id].hero === hero) && (WEAPONS[id].unlockCh || 0) <= cleared);
+}
+
+export function passivesFor(cleared = 99): PassiveId[] {
+  return (Object.keys(PASSIVES) as PassiveId[]).filter((id) => (PASSIVES[id].unlockCh || 0) <= cleared);
+}
+
+export function passiveMax(id: PassiveId): number {
+  return PASSIVES[id].max || MAX_PASSIVE_LV;
+}
+
+/** 本章通关后新出现的技能名 */
+export function skillsUnlockedAt(ch: number): string[] {
+  const w = Object.values(WEAPONS).filter((d) => d.unlockCh === ch).map((d) => d.name);
+  const p = Object.values(PASSIVES).filter((d) => d.unlockCh === ch).map((d) => d.name);
+  return [...w, ...p];
 }
 
 export interface PassiveDef {
@@ -175,6 +327,9 @@ export interface PassiveDef {
   name: string;
   icon: string;
   desc: string; // 每级效果
+  /** 最高等级（默认 5） */
+  max?: number;
+  unlockCh?: number;
 }
 
 export const PASSIVES: Record<PassiveId, PassiveDef> = {
@@ -187,6 +342,12 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   pouch: { id: 'pouch', name: '锦囊', icon: 'p_pouch', desc: '技能持续时间+12%' },
   bowl: { id: 'bowl', name: '聚宝盆', icon: 'p_bowl', desc: '拾取范围+35%，金币+10%' },
   seal: { id: 'seal', name: '玉玺', icon: 'p_seal', desc: '经验获取+8%' },
+  map: { id: 'map', name: '舆图', icon: 'p_map', desc: '飞剑、弩箭、飞刀等技能数量+1', max: 2, unlockCh: 1 },
+  wine: { id: 'wine', name: '美酒', icon: 'p_wine', desc: '暴击率+4%，暴击伤害+15%', unlockCh: 1 },
+  horn: { id: 'horn', name: '号角', icon: 'p_horn', desc: '怒气获取+15%', unlockCh: 2 },
+  whetstone: { id: 'whetstone', name: '磨刀石', icon: 'p_whetstone', desc: '对精英与首领伤害+15%', unlockCh: 2 },
+  mirror: { id: 'mirror', name: '护心镜', icon: 'p_mirror', desc: '每隔一段时间抵挡一次伤害（每级冷却-2秒）', unlockCh: 3 },
+  ration: { id: 'ration', name: '军粮', icon: 'p_ration', desc: '每击败50名敌人回复1%生命', unlockCh: 3 },
 };
 
 /** 升到下一级所需经验（参考同类游戏的曲线） */

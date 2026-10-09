@@ -121,9 +121,27 @@ export class WorldRenderer {
         else this.blit(s, wx, wy);
       }
 
-    // 火海
+    // 火海 / 铁蒺藜
     for (const f of b.pools) {
       const a = Math.min(1, f.life / 0.4, (f.maxLife - f.life) / 0.15 + 0.3);
+      if (f.kind === 'caltrop') {
+        g.globalAlpha = 0.22 * a;
+        g.fillStyle = '#5a6988';
+        this.ellipse(f.x, f.y, f.r, f.r * 0.7);
+        g.globalAlpha = a;
+        const n = Math.max(5, Math.round(f.r / 2.5));
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * TAU + hash2(i, 3, f.x | 0);
+          const rr = f.r * (0.15 + 0.8 * hash2(i, 5, f.y | 0));
+          const sx = Math.round(f.x + Math.cos(ang) * rr - this.camX), sy = Math.round(f.y + Math.sin(ang) * rr * 0.7 - this.camY);
+          g.fillStyle = '#181425';
+          g.fillRect(sx - 1, sy, 3, 1); g.fillRect(sx, sy - 1, 1, 3);
+          g.fillStyle = '#c0cbdc';
+          g.fillRect(sx, sy, 1, 1);
+        }
+        g.globalAlpha = 1;
+        continue;
+      }
       g.globalAlpha = 0.35 * a;
       g.fillStyle = '#f77622';
       this.ellipse(f.x, f.y, f.r, f.r * 0.7);
@@ -234,7 +252,24 @@ export class WorldRenderer {
 
     // 投射物
     for (const pr of b.projs) {
-      if (pr.kind === 'bolt') this.blitRot(sprite(pr.sprite), pr.x, pr.y, pr.rot);
+      if (pr.kind === 'bolt') this.blitRot(sprite(pr.sprite), pr.x, pr.y, pr.rot, pr.scale);
+      else if (pr.kind === 'knife') this.blitRot(sprite('icon_w_knife'), pr.x, pr.y, pr.rot);
+      else if (pr.kind === 'rock') {
+        if (pr.scale === 0) continue;
+        const k = Math.min(1, pr.t / pr.dur);
+        g.globalAlpha = 0.25 + 0.35 * k;
+        g.fillStyle = '#181425';
+        this.ellipse(pr.tx, pr.ty, pr.area * (0.4 + 0.6 * k), pr.area * 0.5 * (0.4 + 0.6 * k));
+        g.globalAlpha = 1;
+        this.blitScaled(sprite('stone'), pr.tx, pr.ty - (1 - k) * (1 - k) * 140, pr.scale);
+      } else if (pr.kind === 'boulder') {
+        const k = Math.min(1, pr.t / pr.dur);
+        g.globalAlpha = 0.2 + 0.3 * k;
+        g.fillStyle = '#181425';
+        this.ellipse(pr.tx, pr.ty, pr.area * 0.8, pr.area * 0.4);
+        g.globalAlpha = 1;
+        this.blitScaled(sprite('stone'), pr.x, pr.y - Math.sin(k * Math.PI) * 60, pr.scale);
+      }
       else if (pr.kind === 'pot') {
         const k = pr.t / pr.dur;
         this.blitRot(sprite('pot'), pr.x, pr.y - Math.sin(k * Math.PI) * 26, pr.rot);
@@ -278,6 +313,14 @@ export class WorldRenderer {
         this.ellipse(p.x, p.y - 6, ring.r, ring.r * 0.85, true);
         g.globalAlpha = 1;
       }
+    }
+    // 白马义从（专属）：金色光尘
+    for (const pr of b.projs) {
+      if (pr.kind !== 'horse' || !b.weapon('horse')?.link) continue;
+      g.globalAlpha = 0.5;
+      g.fillStyle = '#fee761';
+      for (let i = 0; i < 3; i++) g.fillRect(Math.round(pr.x - Math.sign(pr.vx) * (6 + i * 5) - this.camX), Math.round(pr.y - 4 + ((i * 7) % 5) - this.camY), 2, 1);
+      g.globalAlpha = 1;
     }
     // 敌方投射物
     for (const s of b.shots) this.blitRot(sprite(s.sprite), s.x, s.y, s.rot);
@@ -465,6 +508,44 @@ export class WorldRenderer {
         g.globalAlpha = 1;
         break;
       }
+      case 'lightning': {
+        const pts = f.pts!;
+        g.save();
+        g.translate(-this.camX, -this.camY);
+        for (const [col, lw, al] of [[f.color || '#8be9ff', 4, 0.45], ['#ffffff', 1.5, 1]] as [string, number, number][]) {
+          g.globalAlpha = al * (1 - k);
+          g.strokeStyle = col;
+          g.lineWidth = lw;
+          g.beginPath();
+          g.moveTo(pts[0], pts[1]);
+          for (let i = 2; i < pts.length; i += 2) {
+            const mx = (pts[i - 2] + pts[i]) / 2 + hash2(i, Math.floor(f.t * 40), 7) * 10 - 5;
+            const my = (pts[i - 1] + pts[i + 1]) / 2 + hash2(i, Math.floor(f.t * 40), 9) * 10 - 5;
+            g.lineTo(mx, my);
+            g.lineTo(pts[i], pts[i + 1]);
+          }
+          g.stroke();
+        }
+        g.restore();
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'drum': {
+        // 鼓声冲击波：实心淡环 + 亮边
+        const r = f.r! * (0.2 + 0.8 * Math.min(1, k * 1.6));
+        g.globalAlpha = 0.18 * (1 - k);
+        g.fillStyle = f.color || '#feae34';
+        this.ellipse(f.x, f.y, r, r * 0.8);
+        g.globalAlpha = 0.9 * (1 - k);
+        g.strokeStyle = f.color || '#feae34';
+        g.lineWidth = 3;
+        this.ellipse(f.x, f.y, r, r * 0.8, true);
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = 1;
+        this.ellipse(f.x, f.y, r * 0.92, r * 0.92 * 0.8, true);
+        g.globalAlpha = 1;
+        break;
+      }
       case 'puff':
         this.blitScaled(sprite('puff' + Math.min(3, Math.floor(k * 4))), f.x, f.y + 6, f.big ? 2 : 1);
         break;
@@ -566,13 +647,13 @@ export class WorldRenderer {
     this.ctx.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(x - s.ax * sc - this.camX), Math.round(y - s.ay * sc - this.camY), s.w * sc, s.h * sc);
   }
 
-  blitRot(s: Sprite, x: number, y: number, a: number) {
+  blitRot(s: Sprite, x: number, y: number, a: number, sc = 1) {
     const g = this.ctx;
     g.save();
     g.translate(Math.round(x - this.camX), Math.round(y - this.camY));
     g.rotate(a);
-    const ss = scaled(s, this.scale);
-    g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, -s.w / 2, -s.h / 2, s.w, s.h);
+    const ss = scaled(s, sc * this.scale);
+    g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, -s.w * sc / 2, -s.h * sc / 2, s.w * sc, s.h * sc);
     g.restore();
   }
 

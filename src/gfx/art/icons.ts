@@ -182,6 +182,107 @@ const ICONS: Record<string, () => PixelImage> = {
     p.line(3, 12, 12, 3, 'Y'); p.rect(10, 2, 3, 3, 'y'); p.set(13, 1, 'w'); p.set(4, 4, 'R'); p.set(11, 11, 'R');
     return p.outline();
   },
+  w_knife: () => art([
+    '......SS.',
+    '.....SwS.',
+    '....SwS..',
+    '...SwS...',
+    '..SSS....',
+    '.yy......',
+    'yUy......',
+    '.y.......',
+  ]),
+  w_knife_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'y');
+    const k = PixelImage.fromRows(['...SS', '..SwS', '.SwS.', 'yS...', 'y....']);
+    p.blit(k, 2, 2); p.blit(k.flipX(), 9, 2); p.blit(k, 9, 9); p.blit(k.flipX(), 2, 9);
+    return p.outline();
+  },
+  w_thunder: () => art([
+    '....YYY.',
+    '...YYw..',
+    '..YwY...',
+    '.YYYYYY.',
+    '....YwY.',
+    '...YwY..',
+    '..YY....',
+    '.Y......',
+  ]),
+  w_thunder_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.rect(2, 1, 12, 3, 'N'); p.rect(4, 0, 7, 1, 'N'); p.rect(3, 2, 10, 1, 's');
+    p.blit(PixelImage.fromRows(['...YY', '..Yw.', '.YYYY', '...Yw', '..Yw.', '.Y...', 'Y....']), 5, 5);
+    p.set(2, 8, 'Y'); p.set(13, 7, 'Y'); p.set(12, 11, 'Y');
+    return p.outline();
+  },
+  w_rock: () => art([
+    '...ssss...',
+    '..sSSSss..',
+    '.sSwSSsss.',
+    'sSSSSsNss.',
+    'sSSsNsssN.',
+    '.ssNssssN.',
+    '..NNNNNN..',
+  ]),
+  w_rock_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'o');
+    const r = PixelImage.fromRows(['.sss.', 'sSwss', 'sSsNs', '.sNN.']);
+    p.blit(r, 2, 3); p.blit(r, 9, 3); p.blit(r, 5, 8);
+    return p.outline();
+  },
+  w_drum: () => art([
+    '.yyyyyyyy.',
+    'yppppppppy',
+    'yRRRRRRRRy',
+    'yRyRRRRyRy',
+    'yRRyRRyRRy',
+    'yRRRyyRRRy',
+    'yrrrrrrrry',
+    '.yyyyyyyy.',
+    '.U......U.',
+  ]),
+  w_drum_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 8, 7, 'Y');
+    p.blit(PixelImage.fromRows(['.yyyyyy.', 'ypppppY', 'yRRRRRRy', 'yRYRRYRy', 'yRRYYRRy', 'yrrrrrry', '.yyyyyy.']), 4, 5);
+    return p.outline();
+  },
+  w_catapult: () => art([
+    '.........ss',
+    '........sSs',
+    '.......U.s.',
+    '......U....',
+    '.....U.....',
+    '....U......',
+    'UUUUUUUUUU.',
+    '.UuU..UuU..',
+    '..U....U...',
+  ]),
+  w_catapult_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.disc(11, 4, 3, 'o'); p.disc(11, 4, 2, 'Y'); p.set(11, 4, 'w');
+    p.line(3, 11, 9, 5, 'U'); p.rect(1, 12, 13, 1, 'U'); p.set(2, 13, 'U'); p.set(12, 13, 'U');
+    p.set(14, 1, 'o'); p.set(13, 0, 'R'); p.set(8, 2, 'o');
+    return p.outline();
+  },
+  w_caltrop: () => art([
+    '....S....',
+    '....S....',
+    '...sSs...',
+    'SSsSwSsSS',
+    '...sSs...',
+    '..S.S.S..',
+    '.S..S..S.',
+  ]),
+  w_caltrop_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'y');
+    const c = PixelImage.fromRows(['..S..', '.sSs.', 'SSwSS', '.sSs.', 'S...S']);
+    p.blit(c, 2, 2); p.blit(c, 9, 3); p.blit(c, 5, 9);
+    return p.outline();
+  },
   shard: () => art([
     '...y...',
     '..yYy..',
@@ -275,6 +376,61 @@ const ICONS: Record<string, () => PixelImage> = {
     'gGgGgGgG',
     'GGGGGGGG',
     'RRRRRRRR',
+  ]),
+  p_map: () => art([
+    'UpppppppU',
+    'UpgpppBpU',
+    'UpgRRpBpU',
+    'UppgpRppU',
+    'UpBpgpRpU',
+    'UpBppgRpU',
+    'UpppppppU',
+  ]),
+  p_wine: () => art([
+    '...UU...',
+    '..zzzz..',
+    '.uUUUUu.',
+    'uUURRUUu',
+    'uUURwUUu',
+    'uUURRUUu',
+    '.uUUUUu.',
+    '..uuuu..',
+  ]),
+  p_horn: () => art([
+    'y.......',
+    'yU......',
+    '.yUU....',
+    '..yUUU..',
+    '...yUUuu',
+    '.....uqq',
+    '......qq',
+  ]),
+  p_whetstone: () => art([
+    '......wS',
+    '.....wS.',
+    '....wS..',
+    '...SS...',
+    'NsssssN.',
+    'NsSSSsN.',
+    'NNNNNNN.',
+  ]),
+  p_mirror: () => art([
+    '..yyyy..',
+    '.ySSSSy.',
+    'ySwwSSSy',
+    'ySwSSSsy',
+    'ySSSSssy',
+    '.ySSssy.',
+    '..yyyy..',
+  ]),
+  p_ration: () => art([
+    '..q..q..',
+    '...UU...',
+    '..pppp..',
+    '.pppppp.',
+    'ppqRRqpp',
+    'ppqRRqpp',
+    '.pppppp.',
   ]),
   // —— 货币 ——
   gold: () => coinFrames()[0],

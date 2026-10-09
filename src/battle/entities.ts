@@ -1,5 +1,5 @@
 import type { EnemyDef, BossDef } from '../data/enemies';
-import type { WeaponId, PassiveId } from '../data/skills';
+import type { WeaponId, PassiveId, WeaponLevel } from '../data/skills';
 
 // 战斗实体数据结构（纯数据，逻辑在 battle.ts / weapons.ts）
 
@@ -70,6 +70,10 @@ export interface WeaponState {
   angle: number;
   burst: number; // 连发剩余
   hits: Map<number, number>; // 敌人 uid -> 下次可受伤时间
+  /** 武将专属联动形态 */
+  link: boolean;
+  /** 专属联动的进化数值 */
+  evoL?: WeaponLevel;
 }
 
 export interface PassiveState {
@@ -77,7 +81,7 @@ export interface PassiveState {
   lv: number;
 }
 
-export type ProjKind = 'bolt' | 'pot' | 'horse' | 'sword' | 'wind' | 'tornado';
+export type ProjKind = 'bolt' | 'pot' | 'horse' | 'sword' | 'wind' | 'tornado' | 'knife' | 'rock' | 'boulder';
 
 export interface Projectile {
   kind: ProjKind;
@@ -103,9 +107,18 @@ export interface Projectile {
   sprite: string;
   rot: number;
   left: boolean;
+  /** 回旋飞刀：返程中 */
+  back: boolean;
+  /** 眩晕时长（礌石） */
+  stun: number;
+  /** 绘制放大倍数 */
+  scale: number;
+  /** 霹雳炮：落地后二次爆裂 */
+  second: boolean;
 }
 
 export interface FirePool {
+  kind?: 'fire' | 'caltrop';
   x: number;
   y: number;
   r: number;
@@ -155,7 +168,7 @@ export interface Breakable {
 }
 
 export interface Fx {
-  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost';
+  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum';
   x: number;
   y: number;
   t: number;
@@ -173,6 +186,8 @@ export interface Fx {
   vx?: number;
   rot?: number;
   scale?: number;
+  /** 闪电折线顶点 x0,y0,x1,y1... */
+  pts?: number[];
 }
 
 /** 首领技能预警 */
@@ -199,6 +214,6 @@ export function newEnemy(): Enemy {
 export function newProjectile(kind: ProjKind): Projectile {
   return {
     kind, x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 0, pierce: 1, knock: 0, life: 2, hitSet: new Set(),
-    tx: 0, ty: 0, t: 0, dur: 0, area: 0, burn: 0, tick: 0.3, slow: 0, sprite: 'bolt', rot: 0, left: false,
+    tx: 0, ty: 0, t: 0, dur: 0, area: 0, burn: 0, tick: 0.3, slow: 0, sprite: 'bolt', rot: 0, left: false, back: false, stun: 0, scale: 1, second: false,
   };
 }

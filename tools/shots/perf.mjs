@@ -7,19 +7,20 @@ export default async function ({ page, wait, shot, tap }) {
   await tap(195, 722);
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(500);
-  await page.evaluate(() => {
+  await page.evaluate(([neww, atk]) => {
     const b = window.__game.scene.battle;
-    b.base.atk = 0.3; b.player.maxHp = b.player.hp = 1e9; b.base.hp = 1e9;
-    ['sword', 'crossbow', 'horse', 'fire', 'aura'].forEach((id) => b.addWeapon(id));
+    b.base.atk = atk; b.player.maxHp = b.player.hp = 1e9; b.base.hp = 1e9;
+    (neww ? ['knife', 'thunder', 'rock', 'drum', 'catapult'] : ['sword', 'crossbow', 'horse', 'fire', 'aura']).forEach((id) => b.addWeapon(id));
     b.weapons.forEach((w) => { w.lv = 5; w.evo = true; });
     b.recalc();
     b.t = 560; b.eventIdx = b.chapter.events.findIndex((e) => e.t >= 535);
-  });
-  await wait(6000);
+  }, [!!process.env.NEWW, Number(process.env.ATK || 0.3)]);
+  if (process.env.THROTTLE) { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) }); }
+  await wait(Number(process.env.SETTLE || 6000));
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   const r = await page.evaluate(() => new Promise((res) => {
     const g = window.__game; const ts = []; let last = performance.now(); let n = 0;
-    const tick = () => { const now = performance.now(); ts.push(now - last); last = now; g.dialogs.length = 0; if (++n < 180) requestAnimationFrame(tick); else res({ avg: ts.reduce((a, b) => a + b, 0) / ts.length, max: Math.max(...ts), enemies: g.scene.battle.enemies.filter(e => !e.dead).length, pickups: g.scene.battle.pickups.length, fx: g.scene.battle.fx.length }); };
+    const tick = () => { const now = performance.now(); ts.push(now - last); last = now; g.dialogs.length = 0; if (++n < 180) requestAnimationFrame(tick); else res({ avg: ts.reduce((a, b) => a + b, 0) / ts.length, max: Math.max(...ts), enemies: g.scene.battle.enemies.filter(e => !e.dead).length, pickups: g.scene.battle.pickups.length, fx: g.scene.battle.fx.length, dens: g.scene.battle.densityMul }); };
     requestAnimationFrame(tick);
   }));
   console.log(JSON.stringify(r));

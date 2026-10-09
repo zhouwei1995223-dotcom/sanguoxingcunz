@@ -5,8 +5,14 @@ import type { Battle } from './battle';
 
 // 刷怪：按时间轴维持场上敌人密度 + 触发特殊事件
 
-const MAX_ENEMIES = 380;
+const MAX_ENEMIES = 460;
+
+/** 每轮补怪数量：缺口越大补得越快，保证后期击杀再快屏幕上也是满的 */
+function refill(need: number, density: number) {
+  return Math.min(Math.ceil(need), Math.max(2 + Math.floor(density / 25), Math.ceil(need * 0.6)));
+}
 let breakableT = 20;
+let hordeIdx = 0;
 
 // 无尽模式的事件计时
 const ENDLESS_BOSSES = ['xiahouen', 'chenying', 'xuhuang', 'hanying', 'suyong', 'huaxiong', 'yanliang', 'caimao', 'zhuran', 'guohuai', 'caochun', 'baolong', 'zhanghe', 'hande', 'caozhen'];
@@ -21,7 +27,7 @@ function updateEndless(b: Battle, dt: number) {
   let pool = ENDLESS_POOLS[0].pool;
   for (const p of ENDLESS_POOLS) if (t >= p.from) pool = p.pool;
   if (b.mods?.pool) pool = b.mods.pool;
-  const density = Math.min(300, 18 + m * 20);
+  const density = Math.min(300, 18 + m * 20) * (1 + 0.4 * b.crowdRamp()) * b.densityMul;
   b.spawnT -= dt;
   if (b.spawnT <= 0) {
     b.spawnT = 0.42;
@@ -29,7 +35,7 @@ function updateEndless(b: Battle, dt: number) {
     for (const e of b.enemies) if (!e.dead && !e.boss && !e.fixedDir) alive++;
     const need = density - alive;
     if (need > 0 && b.enemies.length < MAX_ENEMIES) {
-      const n = Math.min(Math.ceil(need), 2 + Math.floor(density / 25));
+      const n = Math.min(refill(need, density), MAX_ENEMIES - b.enemies.length);
       for (let i = 0; i < n; i++) { const [x, y] = b.spawnPoint(); b.spawnEnemy(weighted(pool, (x2) => x2[1])[0], x, y); }
     }
   }
@@ -73,6 +79,8 @@ export function updateSpawner(b: Battle, dt: number) {
   if (seg) {
     let density = lerp(seg.density[0], seg.density[1], Math.min(1, (t - seg.from) / Math.max(1, Math.min(seg.to, ch.duration) - seg.from)));
     if (b.finalBoss) density *= 0.55;
+    // 后期敌人更多、单个更脆：割草感更强
+    density *= (1 + 0.6 * b.crowdRamp()) * b.densityMul;
     b.spawnT -= dt;
     if (b.spawnT <= 0) {
       b.spawnT = seg.interval;
@@ -80,13 +88,23 @@ export function updateSpawner(b: Battle, dt: number) {
       for (const e of b.enemies) if (!e.dead && !e.boss && !e.fixedDir) alive++;
       const need = density - alive;
       if (need > 0 && b.enemies.length < MAX_ENEMIES) {
-        const n = Math.min(Math.ceil(need), 2 + Math.floor(density / 25));
+        const n = Math.min(refill(need, density), MAX_ENEMIES - b.enemies.length);
         for (let i = 0; i < n; i++) {
           const id = weighted(seg.pool, (x) => x[1])[0];
           const [x, y] = b.spawnPoint();
           b.spawnEnemy(id, x, y);
         }
       }
+    }
+  }
+
+  // 大军压境：成片的弱小敌人从四面涌来
+  if (ch.duration >= 600) {
+    const at = [270, 510];
+    if (hordeIdx < at.length && t >= at[hordeIdx]) {
+      const weakest = ch.waves[0].pool[0][0] as string;
+      runEvent(b, { t, type: 'horde', enemy: weakest, count: Math.round((110 + hordeIdx * 50) * b.densityMul), text: '敌军大举压境！' });
+      hordeIdx++;
     }
   }
 
@@ -152,6 +170,20 @@ function runEvent(b: Battle, ev: ChapterEvent) {
       if (ev.text) b.hooks.banner(ev.text, '#feae34');
       break;
     }
+    case 'horde': {
+      // 四个方向各一股，略带弧形，一碰就倒
+      const n = ev.count || 120;
+      const R = Math.hypot(b.viewW, b.viewH) / 2 + 24;
+      const a0 = rand(TAU);
+      for (let i = 0; i < n; i++) {
+        const a = a0 + (i % 4) * (TAU / 4) + rand(-0.35, 0.35);
+        const d = R + rand(0, 60);
+        b.spawnEnemy(ev.enemy!, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, { hpMul: 0.5 });
+      }
+      if (ev.text) b.hooks.banner(ev.text, '#e43b44');
+      b.hooks.sfx('boss');
+      break;
+    }
     case 'lanterns':
       spawnBreakablesNear(b, 3);
       break;
@@ -171,4 +203,5 @@ function runEvent(b: Battle, ev: ChapterEvent) {
 export function resetSpawner() {
   et = { elite: 60, ring: 100, stampede: 130, swarm: 75, lantern: 40, boss: 180, bossIdx: 0 };
   breakableT = 20;
+  hordeIdx = 0;
 }

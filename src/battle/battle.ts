@@ -5,7 +5,7 @@ import { ENEMIES, BOSSES, BossDef } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
-  WEAPONS, PASSIVES, WeaponId, PassiveId, weaponsForHero, MAX_WEAPON_LV, MAX_PASSIVE_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
+  WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import {
@@ -144,6 +144,22 @@ export class Battle {
   private critBonus = 0;
   private critDmgBonus = 0;
   critDmg = 1.5;
+  /** 舆图：技能数量加成 */
+  countBonus = 0;
+  /** 号角：怒气获取倍率 */
+  rageMul = 1;
+  /** 磨刀石：对精英与首领的伤害加成 */
+  eliteDmg = 0;
+  /** 护心镜：格挡冷却（0 = 未拥有） */
+  mirrorCd = 0;
+  mirrorT = 0;
+  /** 已通关章节数：决定技能池 */
+  cleared = 99;
+  /** 本局封禁的选项（kind:id） */
+  banned = new Set<string>();
+  banishes = 2;
+  /** 刷怪密度倍率（低端机自动下调） */
+  densityMul = 1;
 
   constructor(chapter: ChapterDef, base: HeroStats, viewW: number, viewH: number) {
     this.chapter = chapter;
@@ -154,6 +170,7 @@ export class Battle {
     this.rerolls = base.reroll;
     this.revives = base.revive;
     this.hero = HERO_BY_ID[base.hero] || HERO_BY_ID.zhaoyun;
+    this.cleared = base.cleared ?? 99;
     this.addWeapon(this.hero.weapon);
     this.recalc();
   }
@@ -181,7 +198,8 @@ export class Battle {
     if (hid === 'guanyu') { this.critBonus = 0.08; this.critDmgBonus = 0.6; }
     if (hid === 'zhuge') { this.cdMul *= 0.85; this.areaMul *= 1.15; }
     if (hid === 'lvbu') this.dmgMul += 0.2;
-    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0));
+    const qianli = this.weapon('horse')?.link && hid === 'guanyu';
+    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (qianli ? 0.2 : 0));
     this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1);
     const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')));
     if (newMax > this.player.maxHp) this.player.hp += newMax - this.player.maxHp;
@@ -192,12 +210,16 @@ export class Battle {
     this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1);
     if (this.mods?.playerDmg) this.dmgMul *= this.mods.playerDmg;
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
-    this.crit = b.crit / 100 + this.critBonus;
-    this.critDmg = 1 + b.critDmg / 100 + this.critDmgBonus;
+    this.crit = b.crit / 100 + this.critBonus + 0.04 * P('wine');
+    this.critDmg = 1 + b.critDmg / 100 + this.critDmgBonus + 0.15 * P('wine');
+    this.countBonus = P('map');
+    this.rageMul = 1 + 0.15 * P('horn');
+    this.eliteDmg = 0.15 * P('whetstone');
+    this.mirrorCd = P('mirror') ? 14 - 2 * P('mirror') : 0;
   }
 
   addWeapon(id: WeaponId) {
-    this.weapons.push({ id, lv: 1, evo: false, t: 0.3, active: 0, angle: 0, burst: 0, hits: new Map() });
+    this.weapons.push({ id, lv: 1, evo: false, t: 0.3, active: 0, angle: 0, burst: 0, hits: new Map(), link: false });
   }
 
   // —— 主循环 ——
@@ -238,6 +260,7 @@ export class Battle {
       p.anim += dt * 10;
     } else p.anim = 0;
     p.iframe = Math.max(0, p.iframe - dt);
+    if (this.mirrorT > 0) this.mirrorT -= dt;
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
     if (this.regen > 0) p.hp = Math.min(p.maxHp, p.hp + this.regen * dt);
 
@@ -265,14 +288,20 @@ export class Battle {
   }
 
   // —— 敌人 ——
-  spawnEnemy(id: string, x: number, y: number, opts: { elite?: boolean } = {}): Enemy {
+  /** 后期人海程度：4 分钟起逐步提高，10 分钟达到最大 */
+  crowdRamp(): number {
+    return clamp((this.t - 240) / 360, 0, 1);
+  }
+
+  spawnEnemy(id: string, x: number, y: number, opts: { elite?: boolean; hpMul?: number } = {}): Enemy {
     const d = ENEMIES[id];
     const e = newEnemy();
     const ch = this.chapter;
     const minute = this.t / 60;
     // 无尽模式：二次曲线成长，后期压力越来越大
     const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute;
-    const hpScale = ch.hpMul * grow * this.enemyHpMul;
+    // 敌人变多的同时单个变脆，总压力基本不变
+    const hpScale = (ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1)) / (1 + 0.4 * this.crowdRamp());
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -405,10 +434,18 @@ export class Battle {
   hurtPlayer(dmg: number) {
     const p = this.player;
     if (p.iframe > 0 || this.dead || this.ult) return;
+    if (this.mirrorCd > 0 && this.mirrorT <= 0) {
+      // 护心镜：抵挡这次伤害
+      this.mirrorT = this.mirrorCd;
+      p.iframe = 0.5;
+      this.fx.push({ kind: 'ring', x: p.x, y: p.y - 8, t: 0, dur: 0.35, r: 26, color: '#c0cbdc' });
+      this.hooks.sfx('hit');
+      return;
+    }
     const v = Math.max(1, dmg * this.dmgTakenMul);
     p.hp -= v;
     p.iframe = 0.12;
-    if (this.hero.id === 'zhangfei' && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + 3);
+    if (this.hero.id === 'zhangfei' && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + 3 * this.rageMul);
     p.hurtFlash = 0.2;
     this.hooks.sfx('hurt');
     this.hooks.vibrate();
@@ -421,6 +458,7 @@ export class Battle {
     let dmg = base * this.dmgMul;
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (e.boss) dmg *= 1 + this.base.bossDmg / 100;
+    if (e.boss || e.elite) dmg *= 1 + this.eliteDmg;
     let crit = false;
     if (!opts.noCrit && Math.random() < this.crit) { dmg *= this.critDmg; crit = true; }
     dmg = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
@@ -454,7 +492,9 @@ export class Battle {
       this.hooks.banner(this.combo >= 1000 ? `${this.combo / 1000}千人斩！` : this.combo === 100 ? '百人斩！' : `${this.combo}连斩！`, '#fee761');
       this.hooks.sfx('levelup');
     }
-    if (!this.ult && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + (e.boss ? 30 : e.elite ? 12 : 0.45));
+    if (!this.ult && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + (e.boss ? 30 : e.elite ? 12 : 0.45) * this.rageMul);
+    const ration = this.passiveLv('ration');
+    if (ration) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * 0.0002 * ration);
     this.hooks.sfx('kill');
     this.spawnCorpse(e);
     // 掉落
@@ -544,6 +584,45 @@ export class Battle {
         }
         continue;
       }
+      if (pr.kind === 'rock' || pr.kind === 'boulder') {
+        pr.t += dt;
+        if (pr.kind === 'boulder') { pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.rot += dt * 6; }
+        if (pr.t >= pr.dur) {
+          this.impact(pr.tx, pr.ty, pr.area, pr.dmg, pr.knock, pr.stun);
+          if (pr.kind === 'boulder') {
+            this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.4 });
+            this.fx.push({ kind: 'ring', x: pr.tx, y: pr.ty, t: 0, dur: 0.35, r: pr.area * 1.2, color: '#feae34' });
+            this.hooks.shake(pr.scale >= 4 ? 4 : 2.5);
+            this.hooks.sfx('explode');
+            if (pr.second) {
+              // 霹雳炮：碎石二次爆裂
+              const sec = newProjectile('rock');
+              sec.tx = sec.x = pr.tx; sec.ty = sec.y = pr.ty;
+              sec.dur = 0.3; sec.area = pr.area * 0.8; sec.dmg = pr.dmg * 0.5; sec.knock = pr.knock * 0.6; sec.life = 1; sec.scale = 0;
+              this.projs.push(sec);
+            }
+          } else {
+            this.fx.push({ kind: 'puff', x: pr.tx, y: pr.ty - 2, t: 0, dur: 0.3, big: pr.scale >= 3 });
+            if (pr.scale === 0) this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.35 });
+            this.hooks.shake(pr.scale >= 3 ? 1.5 : 0.8);
+            this.hooks.sfx('hit');
+          }
+          this.projs.splice(i, 1);
+        }
+        continue;
+      }
+      if (pr.kind === 'knife') {
+        pr.t += dt;
+        pr.rot += dt * 22;
+        if (!pr.back && pr.t >= pr.dur) { pr.back = true; pr.hitSet.clear(); }
+        if (pr.back) {
+          const dx = this.player.x - pr.x, dy = this.player.y - 8 - pr.y;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d < 10) { this.projs.splice(i, 1); continue; }
+          const sp = Math.max(Math.hypot(pr.vx, pr.vy), 120);
+          pr.vx = (dx / d) * sp; pr.vy = (dy / d) * sp;
+        }
+      }
       if (pr.kind === 'tornado') {
         if (pr.life <= 0) { this.projs.splice(i, 1); continue; }
         this.updateTornado(pr, dt, near);
@@ -588,6 +667,21 @@ export class Battle {
       }
       if (!removed) this.hitBreakables(pr.x, pr.y, pr.r);
     }
+  }
+
+  /** 落点范围伤害（礌石 / 巨石） */
+  private impact(x: number, y: number, R: number, dmg: number, knock: number, stun: number) {
+    const near: Enemy[] = [];
+    this.grid.query(x, y, R + 12, near);
+    for (const e of near) {
+      if (e.dead) continue;
+      const dx = e.x - x, dy = e.y - y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d > R + e.r) continue;
+      this.damage(e, dmg, dx / d, dy / d, knock);
+      if (stun && !e.dead) { e.slow = 1; e.slowT = Math.max(e.slowT, e.boss ? stun * 0.3 : stun); }
+    }
+    this.hitBreakables(x, y, R);
   }
 
   private updateTornado(pr: Projectile, dt: number, near: Enemy[]) {
@@ -1045,12 +1139,22 @@ export class Battle {
   // —— 升级选项 ——
   rollChoices(n = 3): Choice[] {
     const pool: { c: Choice; w: number }[] = [];
+    const ok = (kind: string, id: string) => !this.banned.has(kind + ':' + id);
+    // 已有武器对应的进化兵法：出现几率更高，方便凑出进化
+    const wanted = new Set(this.weapons.filter((w) => !w.evo).map((w) => WEAPONS[w.id].evoPassive));
     for (const w of this.weapons) if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id: w.id, lv: w.lv + 1, isNew: false }, w: 3 });
-    for (const p of this.passives) if (p.lv < MAX_PASSIVE_LV) pool.push({ c: { kind: 'passive', id: p.id, lv: p.lv + 1, isNew: false }, w: 2.2 });
-    if (this.weapons.length < WEAPON_SLOTS)
-      for (const id of weaponsForHero(this.hero.id)) if (!this.weapon(id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 2.2 });
-    if (this.passives.length < PASSIVE_SLOTS)
-      for (const id of Object.keys(PASSIVES) as PassiveId[]) if (!this.passiveLv(id)) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: 1.4 });
+    for (const p of this.passives) if (p.lv < passiveMax(p.id)) pool.push({ c: { kind: 'passive', id: p.id, lv: p.lv + 1, isNew: false }, w: 2.2 });
+    // 新技能的总出现几率不随技能总数膨胀，避免已有技能升不上去
+    if (this.weapons.length < WEAPON_SLOTS) {
+      const ids = weaponsForHero(this.hero.id, this.cleared).filter((id) => !this.weapon(id) && ok('weapon', id));
+      const k = Math.min(1, 6 / Math.max(1, ids.length));
+      for (const id of ids) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: (weaponLink(id, this.hero.id) ? 2.8 : 2.2) * k });
+    }
+    if (this.passives.length < PASSIVE_SLOTS) {
+      const ids = passivesFor(this.cleared).filter((id) => !this.passiveLv(id) && ok('passive', id));
+      const k = Math.min(1, 8 / Math.max(1, ids.length));
+      for (const id of ids) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: (wanted.has(id) ? 3 : 1.4) * k });
+    }
     const out: Choice[] = [];
     const items = shuffle(pool.slice());
     while (out.length < n && items.length) {
@@ -1060,6 +1164,54 @@ export class Battle {
     }
     if (out.length === 0) { out.push({ kind: 'heal' }, { kind: 'gold' }); }
     return out;
+  }
+
+  /** 封禁一个新技能选项：本局不再出现，并换一个新的 */
+  banish(choices: Choice[], i: number): boolean {
+    const c = choices[i];
+    if (this.banishes <= 0 || (c.kind !== 'weapon' && c.kind !== 'passive') || !c.isNew) return false;
+    this.banishes--;
+    this.banned.add(c.kind + ':' + c.id);
+    const key = (x: Choice) => x.kind + ':' + ('id' in x ? x.id : '');
+    const others = new Set(choices.map(key));
+    const fresh = this.rollChoices(8).find((x) => !others.has(key(x)));
+    if (fresh) choices[i] = fresh; else choices.splice(i, 1);
+    return true;
+  }
+
+  /** 选这一项后能否凑齐进化条件 */
+  completesEvo(c: Choice): boolean {
+    if (c.kind === 'weapon') {
+      const w = this.weapon(c.id);
+      return !!w && !w.evo && c.lv >= MAX_WEAPON_LV && this.passiveLv(WEAPONS[c.id].evoPassive) > 0;
+    }
+    if (c.kind === 'passive' && c.isNew) return this.weapons.some((w) => !w.evo && w.lv >= MAX_WEAPON_LV && WEAPONS[w.id].evoPassive === c.id);
+    return false;
+  }
+
+  /** 这项兵法能帮助哪些已有武器进化 */
+  evoTargets(id: PassiveId): WeaponId[] {
+    return this.weapons.filter((w) => !w.evo && WEAPONS[w.id].evoPassive === id).map((w) => w.id);
+  }
+
+  /** 推荐选项：照着推荐点也能玩得很爽 */
+  recommend(choices: Choice[]): number {
+    let best = -1, bs = -1;
+    choices.forEach((c, i) => {
+      let s = 0;
+      if (this.completesEvo(c)) s += 100;
+      if (c.kind === 'weapon') {
+        const link = !!weaponLink(c.id, this.hero.id);
+        if (c.isNew) s += 35 + (link ? 30 : 0) - (this.weapons.length >= 4 ? 12 : 0);
+        else s += 50 + (WEAPONS[c.id].hero ? 25 : 0) + (link ? 15 : 0) + c.lv * 2;
+      } else if (c.kind === 'passive') {
+        const helps = this.evoTargets(c.id).length > 0;
+        s += c.isNew ? 25 + (helps ? 35 : 0) : 30 + (helps ? 12 : 0);
+        if (c.id === 'map') s += 20;
+      }
+      if (s > bs) { bs = s; best = i; }
+    });
+    return best;
   }
 
   applyChoice(c: Choice) {
@@ -1079,6 +1231,11 @@ export class Battle {
       case 'evo': {
         const w = this.weapon(c.id)!;
         w.evo = true;
+        const link = weaponLink(c.id, this.hero.id);
+        if (link) {
+          w.link = true;
+          w.evoL = { ...WEAPONS[c.id].evo, ...link.evo, desc: link.desc };
+        }
         this.evolved.push(c.id);
         w.t = 0;
         break;
@@ -1112,7 +1269,7 @@ export class Battle {
       }
       for (const p of this.passives) {
         const pending = out.filter((c) => c.kind === 'passive' && c.id === p.id).length;
-        if (p.lv + pending < MAX_PASSIVE_LV) pool.push({ kind: 'passive', id: p.id, lv: p.lv + pending + 1, isNew: false });
+        if (p.lv + pending < passiveMax(p.id)) pool.push({ kind: 'passive', id: p.id, lv: p.lv + pending + 1, isNew: false });
       }
       if (!pool.length) { out.push({ kind: 'gold' }); continue; }
       out.push(pick(pool));
@@ -1160,7 +1317,8 @@ export class Battle {
   spawnPoint(): [number, number] {
     const p = this.player;
     const R = Math.hypot(this.viewW, this.viewH) / 2 + 16;
-    const a = rand(TAU);
+    // 移动时四成敌人出现在前进方向，迎面撞上
+    const a = p.moving && Math.random() < 0.4 ? Math.atan2(p.dirY, p.dirX) + rand(-1.1, 1.1) : rand(TAU);
     return [p.x + Math.cos(a) * R, p.y + Math.sin(a) * R];
   }
 

@@ -8,7 +8,7 @@ export interface WaveSeg {
   interval: number; // 刷新间隔
 }
 
-export type EventType = 'elite' | 'ring' | 'stampede' | 'midboss' | 'boss' | 'swarm' | 'lanterns';
+export type EventType = 'horde' | 'elite' | 'ring' | 'stampede' | 'midboss' | 'boss' | 'swarm' | 'lanterns';
 
 export interface ChapterEvent {
   t: number;
