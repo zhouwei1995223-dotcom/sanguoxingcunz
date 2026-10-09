@@ -3,7 +3,7 @@ import { save, markDirty, tickStamina } from './save';
 import type { EquipItem } from './save';
 import {
   HERO, heroLevelCost, EQUIPS, EQUIP_BY_ID, QUALITY_MAX_LV, QUALITY_STAT_MUL, StatBlock, equipUpgradeCost,
-  TALENTS, talentCost, Reward, STAMINA, PATROL, CHESTS, ChestDef, DAILY_TASKS, TaskKind, ACTIVITY_REWARDS, SIGNIN, Slot, SLOTS,
+  TALENTS, talentCost, Reward, STAMINA, PATROL, CHESTS, ChestDef, DAILY_TASKS, TaskKind, ACTIVITY_REWARDS, SIGNIN, Slot, SLOTS, QUALITY_NAMES,
 } from '../data/meta';
 import { dayKey, weighted, pick } from '../core/math';
 import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS } from '../data/heroes';
@@ -269,10 +269,14 @@ export function anyHeroRedDot(): boolean {
 }
 
 /** 随机碎片：偏向需要碎片解锁的诸葛亮与吕布 */
+/** 武将碎片的武将分布：名将宝匣 / 其他来源 */
+export const SHARD_WEIGHTS_RARE: Record<string, number> = { zhuge: 35, lvbu: 40, guanyu: 10, zhangfei: 10, zhaoyun: 5 };
+export const SHARD_WEIGHTS_COMMON: Record<string, number> = { zhuge: 50, lvbu: 10, guanyu: 15, zhangfei: 15, zhaoyun: 10 };
+/** 军资箱附带武将碎片的概率 */
+export const WOOD_SHARD_RATE = 0.4;
+
 export function randomShardHero(rare: boolean): string {
-  const w: Record<string, number> = rare
-    ? { zhuge: 35, lvbu: 40, guanyu: 10, zhangfei: 10, zhaoyun: 5 }
-    : { zhuge: 50, lvbu: 10, guanyu: 15, zhangfei: 15, zhaoyun: 10 };
+  const w = rare ? SHARD_WEIGHTS_RARE : SHARD_WEIGHTS_COMMON;
   return weighted(Object.keys(w), (k) => w[k]);
 }
 
@@ -358,7 +362,7 @@ export function openChest(def: ChestDef): ChestResult {
       if (notOwned.length && save.heroes[id].owned) id = notOwned[Math.floor(Math.random() * notOwned.length)];
       hero = { id, got: grantHero(id) };
     } else shards = { hero: randomShardHero(true), n: 8 + Math.floor(Math.random() * 8) };
-  } else if (Math.random() < 0.4) shards = { hero: randomShardHero(false), n: 2 + Math.floor(Math.random() * 3) };
+  } else if (Math.random() < WOOD_SHARD_RATE) shards = { hero: randomShardHero(false), n: 2 + Math.floor(Math.random() * 3) };
   if (shards) grantShards(shards.hero, shards.n);
   return { item, shards, hero };
 }
@@ -433,4 +437,30 @@ export function onLogin() {
 // —— 关卡结算 ——
 export function chapterUnlocked(id: number): boolean {
   return id <= save.maxCleared + 1;
+}
+
+/** 宝箱概率公示文本（直接由配置生成，修改概率后自动同步） */
+export function chestOddsText(): string {
+  const pct = (v: number, total: number) => `${+((v / total) * 100).toFixed(2)}%`;
+  const heroDist = (w: Record<string, number>) => {
+    const total = Object.values(w).reduce((a, b) => a + b, 0);
+    return Object.keys(w).map((id) => `${HERO_BY_ID[id].name} ${pct(w[id], total)}`).join('、');
+  };
+  const lines: string[] = ['宝箱概率公示', '', '宝箱可使用游戏内元宝开启，或每日观看视频免费开启。元宝只能在游戏内免费获得，不能用人民币购买。', ''];
+  for (const c of CHESTS) {
+    const total = c.weights.reduce((a, b) => a + b, 0);
+    lines.push(`【${c.name}】`);
+    lines.push('每次开启必得 1 件装备，品质概率：');
+    c.weights.forEach((w, q) => { if (w > 0) lines.push(`  ${QUALITY_NAMES[q]}：${pct(w, total)}`); });
+    if (c.id === 'gold') {
+      lines.push(`另外：${pct(GOLD_CHEST_HERO_RATE, 1)} 概率直接获得 1 名完整武将（优先从尚未拥有的武将中等概率抽取；全部已拥有时转化为 20 个碎片）；`);
+      lines.push(`未获得武将时，必得 8～15 个武将碎片（每个数量等概率），碎片所属武将概率：${heroDist(SHARD_WEIGHTS_RARE)}。`);
+      if (c.pity) lines.push(`保底：连续 ${c.pity} 次未获得武将时，第 ${c.pity} 次必定获得武将。`);
+    } else {
+      lines.push(`另外：${pct(WOOD_SHARD_RATE, 1)} 概率附赠 2～4 个武将碎片（每个数量等概率），碎片所属武将概率：${heroDist(SHARD_WEIGHTS_COMMON)}。`);
+    }
+    lines.push('');
+  }
+  lines.push('装备的具体部位与套装在同品质装备中等概率随机。');
+  return lines.join('\n');
 }

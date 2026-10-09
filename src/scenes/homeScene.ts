@@ -8,7 +8,7 @@ import { WEAPONS, PASSIVES, heroLinks } from '../data/skills';
 import {
   heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
-  canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE,
+  canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE, chestOddsText,
 } from '../meta/ops';
 import {
   HERO, heroLevelCost, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
@@ -22,7 +22,7 @@ import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, ChapterStoryDialog, ChapterListDialog,
+  SidebarDialog, ChapterStoryDialog, ChapterListDialog, TextDialog,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
@@ -534,6 +534,7 @@ export class HomeScene implements Scene {
     let y = top + off + 10 * u;
     // 宝箱
     ui.ribbon(ui.W / 2, y + 30 * u, 360 * u, '宝箱');
+    if (ui.button('chest_odds', ui.W - 170 * u, y + 6 * u, 146 * u, 50 * u, '概率公示', C.btnBlue, { size: 20 })) game.openDialog(new TextDialog('概率公示', chestOddsText()));
     y += 80 * u;
     for (const c of CHESTS) {
       const h = 300 * u;
