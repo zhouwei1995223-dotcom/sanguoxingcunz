@@ -47,6 +47,7 @@ for (let r = 0; r < runs; r++) {
     const l = Math.hypot(fx, fy) || 1;
     b.moveX = fx / l; b.moveY = fy / l;
     b.update(dt);
+    if (b.rageFull) b.castUlt();
     maxEnemies = Math.max(maxEnemies, b.enemies.length);
     while (b.pendingLevelUps > 0) {
       b.pendingLevelUps--;

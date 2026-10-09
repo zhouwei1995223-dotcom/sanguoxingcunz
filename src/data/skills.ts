@@ -36,16 +36,16 @@ export const PASSIVE_SLOTS = 6;
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   spear: {
-    id: 'spear', name: '龙胆枪', icon: 'w_spear', evoName: '七进七出', evoIcon: 'w_spear_evo', evoPassive: 'tiger',
+    id: 'spear', name: '龙胆枪', icon: 'w_spear', evoName: '百鸟朝凤', evoIcon: 'w_spear_evo', evoPassive: 'tiger',
     intro: '向敌人方向突刺，贯穿路径上的所有敌人',
     levels: [
-      { dmg: 1.6, cd: 1.1, count: 1, area: 46, knock: 30, desc: '向前方突刺，贯穿敌人' },
-      { dmg: 2.0, cd: 1.1, count: 1, area: 48, knock: 30, desc: '伤害提升25%' },
-      { dmg: 2.0, cd: 1.0, count: 2, area: 50, knock: 30, desc: '回马枪：同时向身后突刺' },
-      { dmg: 2.5, cd: 1.0, count: 2, area: 58, knock: 35, desc: '突刺距离与伤害提升' },
-      { dmg: 2.8, cd: 0.9, count: 3, area: 62, knock: 35, desc: '三向突刺，冷却缩短' },
+      { dmg: 1.6, cd: 1.1, count: 1, area: 50, knock: 60, desc: '向前方重刺，贯穿并击飞敌人' },
+      { dmg: 2.0, cd: 1.1, count: 1, area: 52, knock: 60, desc: '伤害提升25%' },
+      { dmg: 2.0, cd: 1.0, count: 2, area: 54, knock: 65, desc: '回马枪：同时向身后突刺' },
+      { dmg: 2.5, cd: 1.0, count: 2, area: 62, knock: 70, desc: '突刺距离与伤害提升' },
+      { dmg: 2.8, cd: 0.9, count: 3, area: 66, knock: 75, desc: '三向突刺，冷却缩短' },
     ],
-    evo: { dmg: 3.4, cd: 0.75, count: 7, area: 78, knock: 45, desc: '七进七出：七向连环突刺，所向披靡' },
+    evo: { dmg: 3.4, cd: 0.75, count: 7, area: 82, knock: 90, desc: '七向连环重刺，所向披靡' },
   },
   sword: {
     id: 'sword', name: '青釭剑', icon: 'w_sword', evoName: '青釭剑阵', evoIcon: 'w_sword_evo', evoPassive: 'flag',
@@ -87,7 +87,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     id: 'fire', name: '火油罐', icon: 'w_fire', evoName: '火烧连营', evoIcon: 'w_fire_evo', evoPassive: 'pouch',
     intro: '投掷火油罐，在地面形成火海',
     levels: [
-      { dmg: 0.55, cd: 3.2, count: 1, area: 18, duration: 2.5, tick: 0.35, desc: '投掷火油罐，灼烧敌人' },
+      { dmg: 0.55, cd: 3.2, count: 1, area: 18, duration: 2.5, tick: 0.35, desc: '投掷火油罐，落地爆炸并留下火海' },
       { dmg: 0.55, cd: 3.2, count: 2, area: 18, duration: 2.5, tick: 0.35, desc: '火油罐+1' },
       { dmg: 0.7, cd: 3.0, count: 2, area: 22, duration: 2.8, tick: 0.35, desc: '火海范围与伤害提升' },
       { dmg: 0.7, cd: 2.8, count: 3, area: 22, duration: 3.2, tick: 0.33, desc: '火油罐+1，燃烧更久' },
@@ -124,7 +124,7 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   tiger: { id: 'tiger', name: '虎符', icon: 'p_tiger', desc: '伤害+10%' },
   lingzhi: { id: 'lingzhi', name: '灵芝', icon: 'p_lingzhi', desc: '生命上限+10%，每秒回复0.3生命' },
   pouch: { id: 'pouch', name: '锦囊', icon: 'p_pouch', desc: '技能持续时间+12%' },
-  bowl: { id: 'bowl', name: '聚宝盆', icon: 'p_bowl', desc: '拾取范围+25%，金币+10%' },
+  bowl: { id: 'bowl', name: '聚宝盆', icon: 'p_bowl', desc: '拾取范围+35%，金币+10%' },
   seal: { id: 'seal', name: '玉玺', icon: 'p_seal', desc: '经验获取+8%' },
 };
 

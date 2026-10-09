@@ -21,6 +21,20 @@ export type Choice =
   | { kind: 'heal' }
   | { kind: 'gold' };
 
+export interface UltState {
+  idx: number; // 第几次冲杀
+  t: number;
+  dur: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  finale: number; // 收尾冲击波计时
+}
+
+export const ULT_DASHES = 7;
+export const RAGE_MAX = 100;
+
 export interface BattleHooks {
   sfx(name: string): void;
   shake(power: number): void;
@@ -74,6 +88,22 @@ export class Battle {
   showDamage = true;
   enemyHpMul = 1;
   enemyDmgMul = 1;
+
+  // 怒气 / 大招
+  rage = 0;
+  rageLock = 0;
+  ult: UltState | null = null;
+  ultCasts = 0;
+  adRageUsed = 0;
+  // 打击感
+  hitStop = 0;
+  private hitStopCd = 0;
+  combo = 0;
+  comboT = 0;
+  bestCombo = 0;
+  // 磁石保底
+  private magnetT = 60;
+  private magnetCd = 0;
 
   grid = new SpatialGrid<Enemy>(32);
   private uidSeq = 1;
@@ -132,7 +162,7 @@ export class Battle {
     this.player.maxHp = newMax;
     this.player.hp = Math.min(this.player.hp, newMax);
     this.regen = b.regen + 0.3 * P('lingzhi') + (auraEvo ? newMax * 0.01 : 0);
-    this.pickupR = HERO.pickup * (1 + b.pickup / 100 + 0.25 * P('bowl'));
+    this.pickupR = HERO.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl'));
     this.expMul = 1 + b.exp / 100 + 0.08 * P('seal');
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
     this.crit = b.crit / 100;
@@ -144,17 +174,27 @@ export class Battle {
   }
 
   // —— 主循环 ——
-  update(dt: number) {
+  update(rawDt: number) {
     if (this.dead || this.won) return;
-    this.t += dt;
     const p = this.player;
+    let dt = rawDt;
+    // 大招期间：赵云正常速度冲杀，其余一切慢动作
+    if (this.ult) {
+      this.updateUlt(rawDt);
+      dt = rawDt * 0.12;
+    }
+    this.t += dt;
+    this.hitStopCd = Math.max(0, this.hitStopCd - rawDt);
+    this.updateRage(dt);
+    if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
 
     // 移动
-    let mx = this.moveX, my = this.moveY;
+    let mx = this.ult ? 0 : this.moveX, my = this.ult ? 0 : this.moveY;
     const ml = Math.hypot(mx, my);
     if (ml > 1) { mx /= ml; my /= ml; }
-    p.moving = ml > 0.05;
-    if (p.moving) {
+    p.moving = ml > 0.05 || !!this.ult;
+    if (this.ult) p.anim += rawDt * 16;
+    else if (p.moving) {
       p.x += mx * this.speed * dt;
       p.y += my * this.speed * dt;
       const l = Math.hypot(mx, my);
@@ -328,7 +368,7 @@ export class Battle {
 
   hurtPlayer(dmg: number) {
     const p = this.player;
-    if (p.iframe > 0 || this.dead) return;
+    if (p.iframe > 0 || this.dead || this.ult) return;
     const v = Math.max(1, dmg * this.dmgTakenMul);
     p.hp -= v;
     p.iframe = 0.12;
@@ -349,11 +389,13 @@ export class Battle {
     dmg = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
     e.hp -= dmg;
     e.flash = 0.08;
+    if (kx || ky) { e.hx = kx; e.hy = ky; }
     if (knock && !e.boss) {
       const k = knock / Math.sqrt(e.mass);
       e.kx += kx * k * 3;
       e.ky += ky * k * 3;
     }
+    if (crit && knock >= 50) this.addHitStop(0.035);
     if (this.showDamage) this.addNum(e.x + rand(-4, 4), e.y - 10 * e.scale - rand(0, 6), dmg, crit ? 'y' : 'w', crit);
     this.hooks.sfx('hit');
     if (e.hp <= 0) {
@@ -366,13 +408,22 @@ export class Battle {
   killEnemy(e: Enemy) {
     e.dead = true;
     this.kills++;
+    this.combo++;
+    this.comboT = 2.5;
+    if (this.combo > this.bestCombo) this.bestCombo = this.combo;
+    if (this.combo === 100 || this.combo === 300 || this.combo === 500 || this.combo % 1000 === 0) {
+      this.hooks.banner(this.combo >= 1000 ? `${this.combo / 1000}千人斩！` : this.combo === 100 ? '百人斩！' : `${this.combo}连斩！`, '#fee761');
+      this.hooks.sfx('levelup');
+    }
+    if (!this.ult && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + (e.boss ? 30 : e.elite ? 12 : 0.45));
     this.hooks.sfx('kill');
-    this.fx.push({ kind: 'puff', x: e.x, y: e.y - 4 * e.scale, t: 0, dur: 0.3, big: e.scale > 1 });
+    this.spawnCorpse(e);
     // 掉落
     if (e.boss) {
       this.bossKills++;
       this.equipDrops++;
-      this.hooks.shake(6);
+      this.addHitStop(0.3, true);
+      this.hooks.shake(8);
       this.hooks.vibrate(true);
       this.hooks.sfx('explode');
       this.fx.push({ kind: 'explo', x: e.x, y: e.y - 10, t: 0, dur: 0.5 });
@@ -390,12 +441,18 @@ export class Battle {
       return;
     }
     if (e.elite) {
+      this.addHitStop(0.08, true);
+      this.hooks.shake(3);
+      this.hooks.vibrate();
       this.dropPickup('chest', e.x, e.y, 1, false);
+      this.dropPickup('magnet', e.x + 12, e.y + 4, 1);
       this.dropGem(e.x + 6, e.y, e.exp);
       for (let i = 0; i < 3; i++) this.dropPickup('coin', e.x + rand(-10, 10), e.y + rand(-10, 10), 2);
       return;
     }
     if (Math.random() < 0.035) this.dropPickup('coin', e.x, e.y, 1);
+    // 小兵小概率掉磁石（有冷却，避免刷屏）
+    if (this.magnetCd <= 0 && Math.random() < 0.004) { this.dropPickup('magnet', e.x, e.y, 1); this.magnetCd = 25; }
     this.dropGem(e.x, e.y, e.exp);
   }
 
@@ -431,6 +488,17 @@ export class Battle {
         pr.y += pr.vy * dt;
         pr.rot += dt * 12;
         if (k >= 1) {
+          // 落地先爆炸，再留下火海
+          const near2: Enemy[] = [];
+          this.grid.query(pr.tx, pr.ty, pr.area + 12, near2);
+          for (const e of near2) {
+            if (e.dead) continue;
+            const dx = e.x - pr.tx, dy = e.y - pr.ty;
+            const d = Math.hypot(dx, dy) || 1;
+            if (d < pr.area + e.r) this.damage(e, pr.dmg * 4, dx / d, dy / d, 40);
+          }
+          this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.35 });
+          this.hooks.shake(1.2);
           this.pools.push({ x: pr.tx, y: pr.ty, r: pr.area, dmg: pr.dmg, tick: pr.tick, tickT: 0, life: pr.burn, maxLife: pr.burn, slow: pr.slow });
           this.hooks.sfx('fire');
           this.projs.splice(i, 1);
@@ -503,7 +571,7 @@ export class Battle {
       k.t += dt;
       const dx = p.x - k.x, dy = p.y - 6 - k.y;
       const d2 = dx * dx + dy * dy;
-      if (!k.pulled && (k.kind === 'gem' || k.kind === 'coin') && d2 < pr2) k.pulled = true;
+      if (!k.pulled && (k.kind === 'gem' || k.kind === 'coin') && (d2 < pr2 || (k.t > 9 && d2 < 220 * 220))) k.pulled = true;
       if (!k.pulled && k.kind !== 'gem' && k.kind !== 'coin' && d2 < 18 * 18) k.pulled = true;
       if (k.pulled) {
         const d = Math.sqrt(d2) || 1;
@@ -543,8 +611,11 @@ export class Battle {
         break;
       }
       case 'magnet':
-        for (const o of this.pickups) if (o.kind === 'gem' || o.kind === 'coin') o.pulled = true;
+        for (const o of this.pickups) if (o.kind === 'gem' || o.kind === 'coin') { o.pulled = true; o.t = Math.max(o.t, 1.5); }
         this.hooks.sfx('levelup');
+        this.hooks.vibrate();
+        this.hooks.banner('磁石：吸取全部经验！', '#2ce8f5');
+        this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.5, r: Math.max(this.viewW, this.viewH) * 0.7, color: '#2ce8f5' });
         break;
       case 'bomb':
         this.hooks.sfx('explode');
@@ -602,6 +673,144 @@ export class Battle {
       if (Math.abs(b.x - p.x) > this.viewW * 1.5 || Math.abs(b.y - p.y) > this.viewH * 1.5) this.breakables.splice(i, 1);
     }
     void dt;
+  }
+
+  // —— 打击感 ——
+  addHitStop(sec: number, force = false) {
+    if (this.ult) return;
+    if (!force && this.hitStopCd > 0) return;
+    this.hitStop = Math.max(this.hitStop, sec);
+    this.hitStopCd = 0.18;
+  }
+
+  private spawnCorpse(e: Enemy) {
+    if (e.boss) return;
+    let corpses = 0;
+    for (const f of this.fx) if (f.kind === 'corpse') corpses++;
+    if (corpses > 90) { this.fx.push({ kind: 'puff', x: e.x, y: e.y - 4 * e.scale, t: 0, dur: 0.3, big: e.scale > 1 }); return; }
+    let hx = e.hx, hy = e.hy;
+    if (!hx && !hy) { const dx = e.x - this.player.x, dy = e.y - this.player.y; const d = Math.hypot(dx, dy) || 1; hx = dx / d; hy = dy / d; }
+    const power = rand(110, 170) * (this.ult ? 1.6 : 1);
+    this.fx.push({
+      kind: 'corpse', x: e.x, y: e.y, t: 0, dur: 0.55, sprite: `${e.sprite}_${Math.floor(e.anim) % 4}${e.left ? '_L' : ''}`,
+      vx: hx * power, vy: -rand(90, 140) + hy * power * 0.5, rot: (hx >= 0 ? 1 : -1) * rand(10, 16), scale: e.scale,
+    });
+    this.fx.push({ kind: 'spark', x: e.x, y: e.y - 6 * e.scale, t: 0, dur: 0.18 });
+  }
+
+  // —— 怒气与大招 ——
+  private updateRage(dt: number) {
+    if (this.rageLock > 0) { this.rageLock -= dt; return; }
+    if (!this.ult) this.rage = Math.min(RAGE_MAX, this.rage + dt * 0.6);
+    // 磁石保底：场上没有磁石时，每隔一段时间在附近刷一个
+    this.magnetCd = Math.max(0, this.magnetCd - dt);
+    this.magnetT -= dt;
+    if (this.magnetT <= 0) {
+      this.magnetT = rand(65, 85);
+      if (!this.pickups.some((k) => k.kind === 'magnet')) {
+        const a = rand(TAU), d = rand(60, 100);
+        this.dropPickup('magnet', this.player.x + Math.cos(a) * d, this.player.y + Math.sin(a) * d, 1);
+      }
+    }
+  }
+
+  get rageFull() {
+    return this.rage >= RAGE_MAX;
+  }
+
+  castUlt(): boolean {
+    if (!this.rageFull || this.ult || this.dead || this.won) return false;
+    this.rage = 0;
+    this.rageLock = 18;
+    this.ultCasts++;
+    this.hooks.banner('龙胆 · 七进七出', '#fee761');
+    this.hooks.sfx('evolve');
+    this.hooks.vibrate(true);
+    this.ult = { idx: -1, t: 0, dur: 0, x0: 0, y0: 0, x1: 0, y1: 0, finale: 0 };
+    this.nextDash();
+    return true;
+  }
+
+  private nextDash() {
+    const u = this.ult!;
+    const p = this.player;
+    u.idx++;
+    if (u.idx >= ULT_DASHES) { u.finale = 0.45; return; }
+    // 冲向敌人最密集的方向，穿过去
+    let tx = 0, ty = 0;
+    const vis = this.enemies.filter((e) => !e.dead && Math.abs(e.x - p.x) < this.viewW * 0.55 && Math.abs(e.y - p.y) < this.viewH * 0.5);
+    if (vis.length) {
+      const t = vis[(Math.random() * vis.length) | 0];
+      tx = t.x - p.x; ty = t.y - p.y;
+    } else { const a = rand(TAU); tx = Math.cos(a); ty = Math.sin(a); }
+    const d = Math.hypot(tx, ty) || 1;
+    const len = clamp(d + 50, 90, Math.min(this.viewW, this.viewH) * 0.75);
+    u.x0 = p.x; u.y0 = p.y;
+    u.x1 = p.x + (tx / d) * len; u.y1 = p.y + (ty / d) * len;
+    u.t = 0;
+    u.dur = 0.13;
+    p.left = tx < 0;
+    p.dirX = tx / d; p.dirY = ty / d;
+    // 路径伤害
+    const dx = (u.x1 - u.x0) / len, dy = (u.y1 - u.y0) / len;
+    const width = 26;
+    const dmg = this.base.atk * 14;
+    const mx = (u.x0 + u.x1) / 2, my = (u.y0 + u.y1) / 2;
+    const near = this.grid.query(mx, my, len / 2 + width + 20, []);
+    for (const e of near) {
+      if (e.dead) continue;
+      const ex = e.x - u.x0, ey = e.y - u.y0;
+      const proj = ex * dx + ey * dy;
+      if (proj < -e.r || proj > len + e.r) continue;
+      if (Math.abs(ex * -dy + ey * dx) > width / 2 + e.r) continue;
+      const side = ex * -dy + ey * dx >= 0 ? 1 : -1;
+      this.damage(e, dmg, dx * 0.6 - dy * side * 0.8, dy * 0.6 + dx * side * 0.8, 120);
+    }
+    this.fx.push({ kind: 'beam', x: u.x0, y: u.y0 - 8, t: 0, dur: 0.45, a: Math.atan2(dy, dx), len, w: width });
+    this.hooks.shake(3);
+    this.hooks.sfx('thrust');
+    this.hooks.sfx('horse');
+  }
+
+  private updateUlt(dt: number) {
+    const u = this.ult!;
+    const p = this.player;
+    p.iframe = Math.max(p.iframe, 0.6);
+    if (u.finale > 0) {
+      u.finale -= dt;
+      if (u.finale <= 0) {
+        // 收尾：全屏冲击波
+        const R = Math.max(this.viewW, this.viewH) * 0.6;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const dx = e.x - p.x, dy = e.y - p.y;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d < R) this.damage(e, this.base.atk * 10, dx / d, dy / d, 150);
+        }
+        this.shots.length = 0;
+        this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: R, color: '#fee761' });
+        this.fx.push({ kind: 'explo', x: p.x, y: p.y, t: 0, dur: 0.5 });
+        this.hooks.shake(9);
+        this.hooks.vibrate(true);
+        this.hooks.sfx('explode');
+        this.ult = null;
+        p.iframe = 1;
+      }
+      return;
+    }
+    u.t += dt;
+    const k = Math.min(1, u.t / u.dur);
+    p.x = u.x0 + (u.x1 - u.x0) * k;
+    p.y = u.y0 + (u.y1 - u.y0) * k;
+    this.fx.push({ kind: 'ghost', x: p.x, y: p.y, t: 0, dur: 0.3, sprite: `hero_${Math.floor(p.anim) % 4}${p.left ? '_L' : ''}` });
+    if (k >= 1) this.nextDash();
+  }
+
+  /** 看视频直接充满怒气 */
+  fillRage() {
+    this.rage = RAGE_MAX;
+    this.rageLock = 0;
+    this.adRageUsed++;
   }
 
   // —— 特效 ——

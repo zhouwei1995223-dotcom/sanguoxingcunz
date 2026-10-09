@@ -10,8 +10,8 @@ export const HERO = {
   baseHp: 120,
   atkPerLv: 2,
   hpPerLv: 10,
-  moveSpeed: 62,
-  pickup: 26,
+  moveSpeed: 78,
+  pickup: 40,
   maxLevel: 80,
   startWeapon: 'spear' as const,
 };

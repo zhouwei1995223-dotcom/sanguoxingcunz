@@ -47,6 +47,7 @@ function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   else if (L.count === 3) offsets.push(0, (TAU / 3), -(TAU / 3));
   else for (let i = 0; i < L.count; i++) offsets.push((i * TAU) / L.count);
   const dmg = L.dmg * b.base.atk;
+  let hits = 0;
   for (const off of offsets) {
     const a = baseA + off;
     const ox = p.x, oy = p.y - 8;
@@ -62,10 +63,13 @@ function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       const perp = Math.abs(ex * -dy + ey * dx);
       if (perp > width / 2 + e.r) continue;
       b.damage(e, dmg, dx, dy, L.knock || 0);
+      if (hits++ < 8) b.fx.push({ kind: 'spark', x: e.x, y: e.y - 5 * e.scale, t: 0, dur: 0.18 });
     }
     // 可破坏物：沿枪身取样
     for (let s = 0.3; s <= 1; s += 0.35) b.hitBreakables(ox + dx * len * s, oy + dy * len * s, width / 2);
   }
+  // 一枪捅穿多人：轻震屏 + 短暂顿帧
+  if (hits >= 3) { b.hooks.shake(w.evo ? 2.5 : 1.5); b.addHitStop(0.03); }
   b.hooks.sfx('thrust');
 }
 
@@ -172,6 +176,7 @@ function horse(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     pr.sprite = 'u_baima';
     b.projs.push(pr);
   }
+  b.hooks.shake(w.evo ? 3 : 2);
   b.hooks.sfx('horse');
 }
 

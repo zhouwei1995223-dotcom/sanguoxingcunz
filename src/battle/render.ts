@@ -250,6 +250,12 @@ export class WorldRenderer {
     // 敌方投射物
     for (const s of b.shots) this.blitRot(sprite(s.sprite), s.x, s.y, s.rot);
 
+    // 大招时整体压暗，突出白龙
+    if (b.ult) {
+      g.fillStyle = 'rgba(10,6,20,0.45)';
+      g.fillRect(0, 0, this.w, this.h);
+      this.drawPlayer(b);
+    }
     // 特效
     for (const f of b.fx) this.drawFx(f, b);
 
@@ -316,19 +322,40 @@ export class WorldRenderer {
         const ext = Math.min(1, k * 4);
         const len = f.len! * ext;
         const w = f.w! * (1 - k * 0.7);
+        const gold = f.color === '#fee761';
+        // 外层气浪
+        g.globalAlpha = (1 - k) * 0.45;
+        g.fillStyle = gold ? '#f77622' : '#0099db';
+        g.beginPath();
+        g.moveTo(0, -w * 0.8);
+        g.lineTo(len + 4, -2);
+        g.lineTo(len + 12, 0);
+        g.lineTo(len + 4, 2);
+        g.lineTo(0, w * 0.8);
+        g.closePath();
+        g.fill();
+        // 枪芒
         g.globalAlpha = 1 - k;
-        g.fillStyle = f.color === '#fee761' ? '#feae34' : '#8be9ff';
+        g.fillStyle = gold ? '#feae34' : '#8be9ff';
         g.beginPath();
         g.moveTo(4, -w / 2);
-        g.lineTo(len, -1);
-        g.lineTo(len + 6, 0);
-        g.lineTo(len, 1);
+        g.lineTo(len, -1.5);
+        g.lineTo(len + 8, 0);
+        g.lineTo(len, 1.5);
         g.lineTo(4, w / 2);
         g.closePath();
         g.fill();
         g.fillStyle = f.color || '#ffffff';
-        g.fillRect(4, -1, len, 2);
-        g.fillRect(len - 2, -2, 6, 4);
+        g.fillRect(4, -1.5, len, 3);
+        g.fillRect(len - 3, -3, 9, 6);
+        // 枪尖冲击环
+        if (k < 0.5) {
+          g.strokeStyle = '#ffffff';
+          g.lineWidth = 1;
+          g.beginPath();
+          g.arc(len + 4, 0, 3 + k * 16, -1.2, 1.2);
+          g.stroke();
+        }
         g.restore();
         g.globalAlpha = 1;
         break;
@@ -336,6 +363,48 @@ export class WorldRenderer {
       case 'spark':
         this.blit(sprite('spark' + Math.min(2, Math.floor(k * 3))), f.x, f.y);
         break;
+      case 'corpse': {
+        // 被击飞：抛物线 + 旋转 + 闪白后淡出
+        const t = f.t;
+        const x = f.x + f.vx! * t;
+        const y = f.y + f.vy! * t + 420 * t * t;
+        const s = sprite(f.sprite! + (t < 0.08 ? (f.sprite!.endsWith('_L') ? 'W' : '_W') : ''));
+        g.globalAlpha = Math.min(1, (1 - k) * 2);
+        g.save();
+        g.translate(Math.round(x - this.camX), Math.round(y - this.camY - s.h * (f.scale || 1) / 2));
+        g.rotate(f.rot! * t);
+        const sc = f.scale || 1;
+        g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w * sc / 2, -s.h * sc / 2, s.w * sc, s.h * sc);
+        g.restore();
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'ghost': {
+        // 大招残影
+        g.globalAlpha = 0.55 * (1 - k);
+        this.blit(sprite(f.sprite! + (f.sprite!.endsWith('_L') ? 'W' : '_W')), f.x, f.y);
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'beam': {
+        // 白龙冲杀轨迹
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.rotate(f.a!);
+        const w = f.w! * (1 - k * 0.6);
+        g.globalAlpha = 0.5 * (1 - k);
+        g.fillStyle = '#feae34';
+        g.fillRect(0, -w / 2, f.len!, w);
+        g.globalAlpha = 0.9 * (1 - k);
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, -w / 5, f.len!, (w * 2) / 5);
+        // 龙鳞纹
+        g.fillStyle = '#fee761';
+        for (let i = 0; i < f.len!; i += 8) g.fillRect(i, Math.sin(i * 0.4 + f.t * 30) * w * 0.35 - 1, 4, 2);
+        g.restore();
+        g.globalAlpha = 1;
+        break;
+      }
       case 'puff':
         this.blitScaled(sprite('puff' + Math.min(3, Math.floor(k * 4))), f.x, f.y + 6, f.big ? 2 : 1);
         break;

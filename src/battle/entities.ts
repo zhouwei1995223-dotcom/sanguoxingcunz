@@ -35,6 +35,9 @@ export interface Enemy {
   vx: number;
   vy: number;
   life: number;
+  /** 最后一次受击方向（用于击飞） */
+  hx: number;
+  hy: number;
   // 首领状态机
   state: string;
   stateT: number;
@@ -152,7 +155,7 @@ export interface Breakable {
 }
 
 export interface Fx {
-  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring';
+  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost';
   x: number;
   y: number;
   t: number;
@@ -165,6 +168,11 @@ export interface Fx {
   color?: string;
   vy?: number;
   big?: boolean;
+  /** 击飞的尸体 / 残影 */
+  sprite?: string;
+  vx?: number;
+  rot?: number;
+  scale?: number;
 }
 
 /** 首领技能预警 */
@@ -183,7 +191,7 @@ export function newEnemy(): Enemy {
   return {
     uid: 0, def: null, boss: null, isMidBoss: false, x: 0, y: 0, r: 6, hp: 1, maxHp: 1, speed: 30, dmg: 5, mass: 1, exp: 1,
     sprite: 'u_wei_spear', scale: 1, elite: false, anim: Math.random() * 4, left: false, flash: 0, kx: 0, ky: 0, slow: 0, slowT: 0,
-    atkCd: 0, shootT: Math.random() * 2, dead: false, fixedDir: false, vx: 0, vy: 0, life: 0,
+    atkCd: 0, shootT: Math.random() * 2, dead: false, fixedDir: false, vx: 0, vy: 0, life: 0, hx: 0, hy: 0,
     state: 'move', stateT: 0, skillIdx: 0, tx: 0, ty: 0,
   };
 }

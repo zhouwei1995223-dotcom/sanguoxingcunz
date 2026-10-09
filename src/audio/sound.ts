@@ -72,8 +72,12 @@ export function unlockAudio() {
   if (currentBgm && save.settings.music) bgms[currentBgm]?.play();
 }
 
+let lastVibrate = 0;
 export function vibrate(long = false) {
   if (!save.settings.vibrate) return;
   const p = getPlatform();
+  const now = p.now();
+  if (!long && now - lastVibrate < 120) return;
+  lastVibrate = now;
   if (long) p.vibrateLong(); else p.vibrateShort();
 }

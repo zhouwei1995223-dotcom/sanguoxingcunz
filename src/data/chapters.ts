@@ -80,7 +80,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: 2, name: '取桂阳', subtitle: '义拒樊氏', theme: 'guiyang',
     story: '赤壁之后，赵云领兵三千取桂阳。太守赵范献计不成，遣陈应、鲍隆诈降……',
-    duration: 600, hpMul: 2.2, dmgMul: 1.6, growth: 0.3, goldBase: 520, power: 1500,
+    duration: 600, hpMul: 3.1, dmgMul: 2.0, growth: 0.3, goldBase: 520, power: 1500,
     waves: [
       { from: 0, to: 60, density: [10, 30], pool: [['gy_spear', 10], ['bandit', 4]], interval: 0.7 },
       { from: 60, to: 180, density: [30, 70], pool: [['gy_spear', 10], ['gy_shield', 3], ['gy_archer', 3], ['bandit', 4]], interval: 0.55 },
@@ -95,7 +95,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: 3, name: '汉水之战', subtitle: '空营退敌', theme: 'hanshui',
     story: '定军山后，曹操亲引大军争夺汉中粮草。黄忠被围，赵云引数十骑突入敌阵救出，退回营寨大开营门……',
-    duration: 600, hpMul: 4.6, dmgMul: 2.4, growth: 0.32, goldBase: 860, power: 2800,
+    duration: 600, hpMul: 6.8, dmgMul: 3.1, growth: 0.32, goldBase: 860, power: 2800,
     waves: [
       { from: 0, to: 60, density: [12, 34], pool: [['wei_spear', 10], ['wei_archer', 3]], interval: 0.65 },
       { from: 60, to: 180, density: [34, 80], pool: [['wei_spear', 8], ['wei_shield', 4], ['wei_archer', 4], ['wei_cavalry', 3]], interval: 0.5 },
@@ -110,7 +110,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: 4, name: '凤鸣山', subtitle: '老当益壮', theme: 'fengming',
     story: '诸葛亮北伐，年逾七旬的赵云请为先锋。西凉大将韩德率四子来战，赵云连斩其子……',
-    duration: 600, hpMul: 9, dmgMul: 3.6, growth: 0.34, goldBase: 1400, power: 4800,
+    duration: 600, hpMul: 13.5, dmgMul: 4.6, growth: 0.34, goldBase: 1400, power: 4800,
     waves: [
       { from: 0, to: 60, density: [14, 38], pool: [['qiang_spear', 10]], interval: 0.6 },
       { from: 60, to: 180, density: [38, 85], pool: [['qiang_spear', 8], ['qiang_club', 4], ['gy_archer', 3]], interval: 0.5 },
@@ -125,7 +125,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: 5, name: '箕谷断后', subtitle: '烧阁断道', theme: 'jigu',
     story: '街亭失守，蜀军全线撤退。赵云于箕谷亲自断后，大雪封山，曹真大军压境……',
-    duration: 600, hpMul: 17, dmgMul: 5.2, growth: 0.36, goldBase: 2200, power: 8000,
+    duration: 600, hpMul: 26, dmgMul: 6.8, growth: 0.36, goldBase: 2200, power: 8000,
     waves: [
       { from: 0, to: 60, density: [16, 40], pool: [['wei_spear', 10], ['wei_shield', 3]], interval: 0.55 },
       { from: 60, to: 180, density: [40, 90], pool: [['wei_spear', 6], ['wei_shield', 5], ['wei_archer', 4], ['wei_cavalry', 3]], interval: 0.45 },

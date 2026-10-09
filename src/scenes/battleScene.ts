@@ -14,6 +14,7 @@ import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
 import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
+import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
 
 export class BattleScene implements Scene {
@@ -123,7 +124,11 @@ export class BattleScene implements Scene {
       b.moveX = mx;
       b.moveY = my;
       // 调试加速：拆成多个小步长，保证碰撞稳定
-      for (let i = 0; i < DEBUG.speed && !b.dead && !b.won; i++) b.update(dt);
+      // 顿帧：命中瞬间画面停一下，增强打击感
+      if (b.hitStop > 0) b.hitStop -= dt;
+      else for (let i = 0; i < DEBUG.speed && !b.dead && !b.won; i++) b.update(dt);
+      const keys = (typeof window !== 'undefined' && (window as any).__keys) || null;
+      if (keys && keys[' ']) this.tryUlt();
       save.stats.playSec += dt;
       this.tutorialT += dt;
     }
@@ -138,6 +143,8 @@ export class BattleScene implements Scene {
           this.reviveShown = true;
           game.openDialog(new ReviveDialog(this));
         }
+      } else if (b.ult) {
+        // 大招期间不弹窗，结束后再处理升级与宝箱
       } else if (b.pendingChests.length) {
         const c = b.pendingChests.shift()!;
         game.openDialog(new ChestDialog(this, b.rollChest(c.boss)));
@@ -270,9 +277,120 @@ export class BattleScene implements Scene {
       ui.text('技能已全部满级 · 金币+30', ui.W / 2, ui.H * 0.62, 24, C.gold);
     }
 
+    this.drawOffscreenArrows();
+    this.drawCombo(dt);
+    this.drawUltButton();
+
     // 新手提示
     if (save.guide === 0 && this.tutorialT < 9 && !game.dialogs.length) {
       guideHint(ui, this.tutorialT < 4.5 ? '按住屏幕任意位置拖动，控制赵云移动' : '赵云会自动攻击，拾取蓝色宝石升级', ui.H * 0.72);
+    }
+  }
+
+  private comboPulse = 0;
+  private lastCombo = 0;
+
+  private tryUlt() {
+    const b = this.battle;
+    if (b.castUlt()) this.renderer.shake = Math.max(this.renderer.shake, 4);
+  }
+
+  /** 大招按钮：怒气环 + 满怒发光；未满时可看视频充满 */
+  private drawUltButton() {
+    const ui = game.ui;
+    const u = ui.u;
+    const b = this.battle;
+    const g = ui.ctx;
+    const r = 78 * u;
+    const cx = ui.W - r - 34 * u, cy = ui.H - r - 120 * u - ui.safeBottom;
+    const full = b.rageFull && !b.ult;
+    const ratio = b.rageLock > 0 ? 0 : b.rage / 100;
+    // 底盘
+    if (full) {
+      const glow = g.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 1.6);
+      glow.addColorStop(0, 'rgba(254,231,97,0.55)');
+      glow.addColorStop(1, 'rgba(254,231,97,0)');
+      g.fillStyle = glow;
+      g.beginPath(); g.arc(cx, cy, r * (1.5 + 0.1 * Math.sin(ui.time * 8)), 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = 'rgba(12,8,16,0.75)';
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 10 * u;
+    g.strokeStyle = '#3a2c2a';
+    g.beginPath(); g.arc(cx, cy, r - 6 * u, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = full ? '#fee761' : b.rageLock > 0 ? '#5a6988' : '#e43b44';
+    g.beginPath(); g.arc(cx, cy, r - 6 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (full ? 1 : ratio)); g.stroke();
+    const pulse = full ? 1 + 0.08 * Math.sin(ui.time * 10) : 1;
+    ui.icon('w_spear_evo', cx, cy - 10 * u, r * 1.05 * pulse, full ? 1 : 0.45);
+    if (full) ui.text('龙胆', cx, cy + r * 0.55, 30, '#fee761', 'center', '#3a0d12');
+    else if (b.rageLock > 0) ui.text(`${Math.ceil(b.rageLock)}s`, cx, cy + r * 0.55, 24, '#c0cbdc');
+    else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#fff');
+    if (ui.clicked('ult_btn', cx - r, cy - r, r * 2, r * 2, false)) {
+      if (full) this.tryUlt();
+      else ui.toast(b.rageLock > 0 ? '龙胆之力恢复中' : '击败敌人积攒怒气');
+    }
+    // 看视频充满怒气（每局 2 次）
+    if (!full && !b.ult && b.adRageUsed < 2) {
+      const bw = 150 * u, bh = 64 * u;
+      if (ui.button('ult_ad', cx - bw / 2, cy - r - bh - 16 * u, bw, bh, '充满', C.btnGreen, { icon: 'video', size: 22 })) {
+        getPlatform().showRewardedAd('rage_fill').then((ok) => {
+          if (!ok) return;
+          b.fillRage();
+          progressTask('ad', 1);
+        });
+      }
+    }
+    // 首次满怒提示
+    if (full && b.ultCasts === 0 && save.stats.runs < 3 && !game.dialogs.length) {
+      guideHint(ui, '怒气已满！点击右下角释放「七进七出」', cy - r - 140 * u);
+    }
+  }
+
+  /** 连斩计数 */
+  private drawCombo(dt: number) {
+    const ui = game.ui;
+    const u = ui.u;
+    const b = this.battle;
+    if (b.combo !== this.lastCombo) { if (b.combo > this.lastCombo) this.comboPulse = 0.18; this.lastCombo = b.combo; }
+    this.comboPulse = Math.max(0, this.comboPulse - dt);
+    if (b.combo < 10) return;
+    const x = ui.W - 40 * u, y = ui.H * 0.36;
+    const s = 1 + this.comboPulse * 2.2;
+    const size = Math.min(80, 40 + Math.log10(b.combo) * 14) * s;
+    const col = b.combo >= 500 ? '#ff5a5a' : b.combo >= 100 ? '#feae34' : '#fff4d6';
+    ui.ctx.globalAlpha = Math.min(1, b.comboT / 0.6);
+    ui.text(String(b.combo), x, y, size, col, 'right', '#3a0d12');
+    ui.text('连斩', x, y + size * u * 0.75, 26, col, 'right');
+    ui.ctx.globalAlpha = 1;
+  }
+
+  /** 屏幕外的磁石 / 宝箱 / 包子：在屏幕边缘画箭头 */
+  private drawOffscreenArrows() {
+    const ui = game.ui;
+    const u = ui.u;
+    const g = ui.ctx;
+    const m = 60 * u;
+    const top = ui.safeTop + 260 * u;
+    for (const k of this.battle.pickups) {
+      if (k.kind !== 'magnet' && k.kind !== 'chest' && k.kind !== 'bun') continue;
+      const [sx, sy] = this.renderer.worldToScreen(k.x, k.y);
+      if (sx > 0 && sx < ui.W && sy > top && sy < ui.H) continue;
+      const cx = ui.W / 2, cy = ui.H / 2;
+      const dx = sx - cx, dy = sy - cy;
+      const kx = (ui.W / 2 - m) / Math.abs(dx || 1e-6), ky = (ui.H / 2 - m - 140 * u) / Math.abs(dy || 1e-6);
+      const kk = Math.min(kx, ky);
+      const ax = cx + dx * kk, ay = Math.max(top, cy + dy * kk);
+      const a = Math.atan2(dy, dx);
+      const bob = Math.sin(ui.time * 6) * 6 * u;
+      g.save();
+      g.translate(ax + Math.cos(a) * bob, ay + Math.sin(a) * bob);
+      g.fillStyle = 'rgba(12,8,16,0.7)';
+      g.beginPath(); g.arc(0, 0, 36 * u, 0, Math.PI * 2); g.fill();
+      g.rotate(a);
+      g.fillStyle = k.kind === 'magnet' ? '#2ce8f5' : '#fee761';
+      g.beginPath(); g.moveTo(48 * u, 0); g.lineTo(32 * u, -12 * u); g.lineTo(32 * u, 12 * u); g.closePath(); g.fill();
+      g.restore();
+      ui.icon(k.kind === 'chest' ? (k.boss ? 'chest_gold' : 'chest') : k.kind, ax + Math.cos(a) * bob, ay + Math.sin(a) * bob, 44 * u);
     }
   }
 
