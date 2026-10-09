@@ -1,5 +1,5 @@
 import { getPlatform } from '../platform';
-import { sprite, Sprite } from '../gfx/atlas';
+import { sprite, scaled, Sprite } from '../gfx/atlas';
 import { THEMES, GroundTheme } from '../gfx/art/env';
 import { hash2, TAU } from '../core/math';
 import type { Battle } from './battle';
@@ -17,8 +17,7 @@ interface Drawable {
 }
 
 export class WorldRenderer {
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
+  ctx!: CanvasRenderingContext2D;
   w: number;
   h: number;
   scale: number;
@@ -34,17 +33,22 @@ export class WorldRenderer {
     this.scale = Math.max(2, Math.round(screenW / 280));
     this.w = Math.ceil(screenW / this.scale);
     this.h = Math.ceil(screenH / this.scale);
-    this.canvas = getPlatform().createCanvas(this.w, this.h);
-    this.ctx = this.canvas.getContext('2d')!;
     this.themeName = themeName;
     this.theme = THEMES[themeName];
     this.tile = this.buildTile();
   }
 
+  /** 地表贴图：直接按屏幕像素倍率绘制，保证清晰 */
   private buildTile(): HTMLCanvasElement {
     const S = 96;
-    const c = getPlatform().createCanvas(S, S);
-    const g = c.getContext('2d')!;
+    const K = this.scale;
+    const c = getPlatform().createCanvas(S * K, S * K);
+    const g0 = c.getContext('2d')!;
+    const g = {
+      set fillStyle(v: string) { g0.fillStyle = v; },
+      set globalAlpha(v: number) { g0.globalAlpha = v; },
+      fillRect(x: number, y: number, w: number, h: number) { g0.fillRect(x * K, y * K, w * K, h * K); },
+    };
     const th = this.theme;
     g.fillStyle = th.base;
     g.fillRect(0, 0, S, S);
@@ -74,6 +78,10 @@ export class WorldRenderer {
   }
 
   render(b: Battle, dt: number, out: CanvasRenderingContext2D) {
+    // 直接在屏幕画布上按世界坐标绘制（整体缩放 scale 倍），精灵使用预先放大的版本 1:1 贴图
+    out.save();
+    out.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    this.ctx = out;
     const g = this.ctx;
     const p = b.player;
     let cx = Math.round(p.x - this.w / 2), cy = Math.round(p.y - 8 - this.h / 2);
@@ -89,7 +97,7 @@ export class WorldRenderer {
     // 地面
     const T = 96;
     const ox = -(((cx % T) + T) % T), oy = -(((cy % T) + T) % T);
-    for (let y = oy; y < this.h; y += T) for (let x = ox; x < this.w; x += T) g.drawImage(this.tile, x, y);
+    for (let y = oy; y < this.h; y += T) for (let x = ox; x < this.w; x += T) g.drawImage(this.tile, 0, 0, T * this.scale, T * this.scale, x, y, T, T);
 
     this.list.length = 0;
     // 装饰
@@ -283,8 +291,7 @@ export class WorldRenderer {
     // 特效
     for (const f of b.fx) this.drawFx(f, b);
 
-    out.imageSmoothingEnabled = false;
-    out.drawImage(this.canvas, 0, 0, this.w, this.h, 0, 0, this.w * this.scale, this.h * this.scale);
+    out.restore();
   }
 
   private drawEnemy(e: Enemy, b: Battle) {
@@ -426,7 +433,8 @@ export class WorldRenderer {
         g.translate(Math.round(x - this.camX), Math.round(y - this.camY - s.h * (f.scale || 1) / 2));
         g.rotate(f.rot! * t);
         const sc = f.scale || 1;
-        g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w * sc / 2, -s.h * sc / 2, s.w * sc, s.h * sc);
+        const ss = scaled(s, sc * this.scale);
+        g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, -s.w * sc / 2, -s.h * sc / 2, s.w * sc, s.h * sc);
         g.restore();
         g.globalAlpha = 1;
         break;
@@ -482,7 +490,8 @@ export class WorldRenderer {
         g.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
         for (const ch of str) {
           const s = sprite(`d_${col}_${ch}`);
-          g.drawImage(s.canvas, s.x, s.y, s.w, s.h, x, y, s.w * sc, s.h * sc);
+          const ss = scaled(s, sc * this.scale);
+          g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, x, y, s.w * sc, s.h * sc);
           x += cw;
         }
         g.globalAlpha = 1;
@@ -547,12 +556,14 @@ export class WorldRenderer {
 
   // —— 基础绘制 ——
   blit(s: Sprite, x: number, y: number) {
-    this.ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h, Math.round(x - s.ax - this.camX), Math.round(y - s.ay - this.camY), s.w, s.h);
+    const ss = scaled(s, this.scale);
+    this.ctx.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(x - s.ax - this.camX), Math.round(y - s.ay - this.camY), s.w, s.h);
   }
 
   blitScaled(s: Sprite, x: number, y: number, sc: number) {
     if (sc === 1) return this.blit(s, x, y);
-    this.ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h, Math.round(x - s.ax * sc - this.camX), Math.round(y - s.ay * sc - this.camY), s.w * sc, s.h * sc);
+    const ss = scaled(s, sc * this.scale);
+    this.ctx.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(x - s.ax * sc - this.camX), Math.round(y - s.ay * sc - this.camY), s.w * sc, s.h * sc);
   }
 
   blitRot(s: Sprite, x: number, y: number, a: number) {
@@ -560,7 +571,8 @@ export class WorldRenderer {
     g.save();
     g.translate(Math.round(x - this.camX), Math.round(y - this.camY));
     g.rotate(a);
-    g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w / 2, -s.h / 2, s.w, s.h);
+    const ss = scaled(s, this.scale);
+    g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, -s.w / 2, -s.h / 2, s.w, s.h);
     g.restore();
   }
 

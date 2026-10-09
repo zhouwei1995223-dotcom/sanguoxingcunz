@@ -1,5 +1,4 @@
-import { getPlatform } from '../platform';
-import { sprite } from '../gfx/atlas';
+import { sprite, scaled } from '../gfx/atlas';
 import { hash2 } from '../core/math';
 import { save } from '../meta/save';
 import { heroSpriteName } from '../meta/goals';
@@ -7,8 +6,7 @@ import { heroSpriteName } from '../meta/goals';
 // 主城背景：低分辨率像素风动态场景（黄昏战场、远山、旌旗、奔驰的赵云）
 
 export class HomeBackground {
-  private c: HTMLCanvasElement;
-  private g: CanvasRenderingContext2D;
+  private g!: CanvasRenderingContext2D;
   private w: number;
   private h: number;
   private scale: number;
@@ -18,12 +16,14 @@ export class HomeBackground {
     this.scale = Math.max(3, Math.round(W / 150));
     this.w = Math.ceil(W / this.scale);
     this.h = Math.ceil(H / this.scale);
-    this.c = getPlatform().createCanvas(this.w, this.h);
-    this.g = this.c.getContext('2d')!;
   }
 
   draw(out: CanvasRenderingContext2D, dt: number, groundY = 0.62) {
     this.t += dt;
+    // 直接在屏幕上按 scale 倍绘制（整数坐标的色块天然清晰）
+    out.save();
+    out.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    this.g = out;
     const g = this.g, w = this.w, h = this.h, t = this.t;
     const gy = Math.round(h * groundY);
     // 天空分层（像素风不做平滑渐变）
@@ -84,10 +84,10 @@ export class HomeBackground {
     g.imageSmoothingEnabled = false;
     g.fillStyle = 'rgba(0,0,0,0.3)';
     g.fillRect(Math.round(w * 0.5 - 22), gy + 17, 44, 3);
-    g.drawImage(hero.canvas, hero.x, hero.y, hero.w, hero.h, Math.round(w * 0.5 - hero.ax * hs), Math.round(gy + 18 - hero.ay * hs), hero.w * hs, hero.h * hs);
+    const hz = scaled(hero, hs * this.scale);
+    g.drawImage(hz.canvas, hz.x, hz.y, hz.w, hz.h, Math.round(w * 0.5 - hero.ax * hs), Math.round(gy + 18 - hero.ay * hs), hero.w * hs, hero.h * hs);
 
-    out.imageSmoothingEnabled = false;
-    out.drawImage(this.c, 0, 0, w, h, 0, 0, w * this.scale, h * this.scale);
+    out.restore();
   }
 
   private mountains(gy: number, color: string, amp: number, base: number, scroll: number, seed: number) {

@@ -77,6 +77,16 @@ function gong(out, t0, vol = 0.4) {
     tone(out, t0, 0.2, { type: 'sine', f0: 110 * m, f1: 106 * m, vol: vol * v, a: 0.005, d: 0.2, s: 0.5, r: 2.2, vib: 0.004, vibRate: 3 });
 }
 
+/** 二阶低通（两次一阶），削掉刺耳的高频 */
+function lowpass(out, cutoff) {
+  const a = 1 - Math.exp((-2 * Math.PI * cutoff) / SR);
+  for (let pass = 0; pass < 2; pass++) {
+    let y = 0;
+    for (let i = 0; i < out.length; i++) { y += a * (out[i] - y); out[i] = y; }
+  }
+  return out;
+}
+
 function normalize(out, peak = 0.9) {
   let m = 0;
   for (const v of out) m = Math.max(m, Math.abs(v));
@@ -105,14 +115,14 @@ function exportMp3(name, data, kbps = 48) {
 
 // —— 音效 ——
 const sfx = {
-  click() { const o = buf(0.08); tone(o, 0, 0.03, { type: 'square', f0: 900, f1: 1200, vol: 0.4, r: 0.03 }); return o; },
-  hit() { const o = buf(0.08); tone(o, 0, 0.03, { type: 'noise', vol: 0.5, r: 0.03 }); tone(o, 0, 0.04, { type: 'square', f0: 260, f1: 120, vol: 0.25, r: 0.02 }); return o; },
+  click() { const o = buf(0.08); tone(o, 0, 0.03, { type: 'sine', f0: 660, f1: 880, vol: 0.4, a: 0.003, r: 0.04 }); return o; },
+  hit() { const o = buf(0.1); tone(o, 0, 0.03, { type: 'noise', vol: 0.25, a: 0.003, r: 0.03 }); tone(o, 0, 0.05, { type: 'sine', f0: 220, f1: 110, vol: 0.45, a: 0.002, r: 0.03 }); return o; },
   kill() { const o = buf(0.14); tone(o, 0, 0.06, { type: 'noise', vol: 0.45, r: 0.06 }); tone(o, 0, 0.08, { type: 'tri', f0: 200, f1: 70, vol: 0.4, r: 0.04 }); return o; },
-  gem() { const o = buf(0.12); tone(o, 0, 0.04, { type: 'square', f0: noteFreq(84), vol: 0.22, r: 0.02 }); tone(o, 0.04, 0.05, { type: 'square', f0: noteFreq(91), vol: 0.22, r: 0.03 }); return o; },
-  coin() { const o = buf(0.2); tone(o, 0, 0.05, { type: 'square', f0: noteFreq(88), vol: 0.25, r: 0.02 }); tone(o, 0.05, 0.1, { type: 'square', f0: noteFreq(93), vol: 0.25, r: 0.05 }); return o; },
+  gem() { const o = buf(0.12); tone(o, 0, 0.04, { type: 'tri', f0: noteFreq(84), vol: 0.22, r: 0.02 }); tone(o, 0.04, 0.05, { type: 'tri', f0: noteFreq(91), vol: 0.22, r: 0.03 }); return o; },
+  coin() { const o = buf(0.2); tone(o, 0, 0.05, { type: 'tri', f0: noteFreq(88), vol: 0.25, r: 0.02 }); tone(o, 0.05, 0.1, { type: 'tri', f0: noteFreq(93), vol: 0.25, r: 0.05 }); return o; },
   levelup() {
     const o = buf(0.9);
-    [72, 74, 76, 79, 81, 84].forEach((n, i) => tone(o, i * 0.07, 0.12, { type: 'square', f0: noteFreq(n), vol: 0.22, r: 0.1 }));
+    [72, 74, 76, 79, 81, 84].forEach((n, i) => tone(o, i * 0.07, 0.12, { type: 'tri', f0: noteFreq(n), vol: 0.22, r: 0.1 }));
     tone(o, 0.42, 0.3, { type: 'tri', f0: noteFreq(84), vol: 0.3, r: 0.2, vib: 0.01 });
     pluck(o, 0.42, noteFreq(72), 0.3); pluck(o, 0.42, noteFreq(79), 0.25);
     return o;
@@ -120,31 +130,31 @@ const sfx = {
   evolve() {
     const o = buf(1.6);
     gong(o, 0, 0.5);
-    [60, 64, 67, 72, 76, 79, 84].forEach((n, i) => tone(o, 0.1 + i * 0.06, 0.15, { type: 'square', f0: noteFreq(n), vol: 0.18, r: 0.12 }));
-    tone(o, 0.55, 0.5, { type: 'saw', f0: noteFreq(72), vol: 0.15, r: 0.4, vib: 0.01 });
+    [60, 64, 67, 72, 76, 79, 84].forEach((n, i) => tone(o, 0.1 + i * 0.06, 0.15, { type: 'tri', f0: noteFreq(n), vol: 0.18, r: 0.12 }));
+    tone(o, 0.55, 0.5, { type: 'tri', f0: noteFreq(72), vol: 0.15, r: 0.4, vib: 0.01 });
     return o;
   },
   chest() {
     const o = buf(0.8);
-    for (let i = 0; i < 8; i++) tone(o, i * 0.05, 0.05, { type: 'square', f0: noteFreq(76 + (i % 4) * 3 + Math.floor(i / 4) * 12), vol: 0.15, r: 0.04 });
+    for (let i = 0; i < 8; i++) tone(o, i * 0.05, 0.05, { type: 'tri', f0: noteFreq(76 + (i % 4) * 3 + Math.floor(i / 4) * 12), vol: 0.15, r: 0.04 });
     pluck(o, 0.4, noteFreq(84), 0.3);
     return o;
   },
   boss() {
     const o = buf(2.2);
     taiko(o, 0, 1); taiko(o, 0.35, 0.9); taiko(o, 0.7, 1);
-    tone(o, 0.9, 0.9, { type: 'saw', f0: noteFreq(50), f1: noteFreq(52), vol: 0.25, a: 0.08, r: 0.4, vib: 0.01 });
-    tone(o, 0.9, 0.9, { type: 'square', f0: noteFreq(57), f1: noteFreq(59), vol: 0.15, a: 0.08, r: 0.4 });
+    tone(o, 0.9, 0.9, { type: 'tri', f0: noteFreq(50), f1: noteFreq(52), vol: 0.25, a: 0.08, r: 0.4, vib: 0.01 });
+    tone(o, 0.9, 0.9, { type: 'tri', f0: noteFreq(57), f1: noteFreq(59), vol: 0.15, a: 0.08, r: 0.4 });
     return o;
   },
-  hurt() { const o = buf(0.2); tone(o, 0, 0.12, { type: 'square', f0: 300, f1: 90, vol: 0.4, r: 0.05 }); tone(o, 0, 0.05, { type: 'noise', vol: 0.3 }); return o; },
+  hurt() { const o = buf(0.2); tone(o, 0, 0.12, { type: 'tri', f0: 300, f1: 90, vol: 0.4, r: 0.05 }); tone(o, 0, 0.05, { type: 'noise', vol: 0.3 }); return o; },
   explode() { const o = buf(0.8); tone(o, 0, 0.5, { type: 'noise', vol: 0.7, a: 0.002, d: 0.2, s: 0.4, r: 0.3 }); tone(o, 0, 0.3, { type: 'sine', f0: 90, f1: 30, vol: 0.8, r: 0.2 }); return o; },
   thrust() { const o = buf(0.12); tone(o, 0, 0.07, { type: 'noise', vol: 0.3, a: 0.01, d: 0.04, s: 0.3, r: 0.04 }); tone(o, 0, 0.06, { type: 'tri', f0: 600, f1: 1400, vol: 0.12, r: 0.03 }); return o; },
   shoot() { const o = buf(0.1); tone(o, 0, 0.04, { type: 'tri', f0: 1100, f1: 500, vol: 0.25, r: 0.04 }); return o; },
   horse() {
     const o = buf(0.5);
     [0, 0.09, 0.2, 0.29].forEach((t) => tone(o, t, 0.03, { type: 'noise', vol: 0.35, r: 0.03 }));
-    tone(o, 0.05, 0.3, { type: 'saw', f0: 700, f1: 500, vol: 0.12, vib: 0.05, vibRate: 22, r: 0.1 });
+    tone(o, 0.05, 0.3, { type: 'tri', f0: 700, f1: 500, vol: 0.12, vib: 0.05, vibRate: 22, r: 0.1 });
     return o;
   },
   fire() { const o = buf(0.4); tone(o, 0, 0.3, { type: 'noise', vol: 0.35, a: 0.03, d: 0.1, s: 0.5, r: 0.1 }); return o; },
@@ -153,7 +163,7 @@ const sfx = {
     gong(o, 0, 0.3);
     const mel = [[67, 0.15], [69, 0.15], [72, 0.3], [74, 0.15], [76, 0.15], [79, 0.6], [81, 0.3], [84, 0.8]];
     let t = 0.1;
-    for (const [n, d] of mel) { tone(o, t, d, { type: 'square', f0: noteFreq(n), vol: 0.2, r: 0.08 }); pluck(o, t, noteFreq(n - 12), 0.2); t += d; }
+    for (const [n, d] of mel) { tone(o, t, d, { type: 'tri', f0: noteFreq(n), vol: 0.2, r: 0.08 }); pluck(o, t, noteFreq(n - 12), 0.2); t += d; }
     return o;
   },
   defeat() {
@@ -255,8 +265,9 @@ const tracks = {
   bgm_boss: () => battleBgm(150, 24, 57, true),
 };
 
-for (const [name, fn] of Object.entries(sfx)) exportMp3('sfx_' + name, normalize(fn(), 0.85), 48);
-for (const [name, fn] of Object.entries(tracks)) exportMp3(name, normalize(fn(), 0.8), 64);
+// 手机外放高频很刺耳：音效低通到 3.2kHz、峰值压低；音乐低通到 5kHz
+for (const [name, fn] of Object.entries(sfx)) exportMp3('sfx_' + name, normalize(lowpass(fn(), 3200), 0.62), 48);
+for (const [name, fn] of Object.entries(tracks)) exportMp3(name, normalize(lowpass(fn(), 5000), 0.7), 64);
 fs.rmSync(tmp, { recursive: true, force: true });
 let total = 0;
 for (const f of fs.readdirSync(OUT)) total += fs.statSync(path.join(OUT, f)).size;

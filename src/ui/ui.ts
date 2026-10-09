@@ -1,5 +1,5 @@
 import { getPlatform } from '../platform';
-import { sprite, hasSprite, Sprite } from '../gfx/atlas';
+import { sprite, hasSprite, scaled, Sprite } from '../gfx/atlas';
 import type { TouchKind, TouchPoint } from '../platform/types';
 import { playSfx } from '../audio/sound';
 
@@ -373,11 +373,16 @@ export class UI {
     const max = Math.max(s.w, s.h);
     let scale = size / max;
     if (scale >= 2) scale = Math.floor(scale);
+    else if (scale >= 1.5) scale = 2;
     const w = s.w * scale, h = s.h * scale;
     const ctx = this.ctx;
     ctx.imageSmoothingEnabled = false;
     if (alpha !== 1) ctx.globalAlpha = alpha;
-    ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h, Math.round(cx - w / 2), Math.round(cy - h / 2), Math.round(w), Math.round(h));
+    if (scale >= 2) {
+      // 整数倍放大：使用预先放大的像素图 1:1 绘制，避免手机端平滑导致模糊
+      const ss = scaled(s, scale);
+      ctx.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(cx - w / 2), Math.round(cy - h / 2), ss.w, ss.h);
+    } else ctx.drawImage(s.canvas, s.x, s.y, s.w, s.h, Math.round(cx - w / 2), Math.round(cy - h / 2), Math.round(w), Math.round(h));
     if (alpha !== 1) ctx.globalAlpha = 1;
   }
 

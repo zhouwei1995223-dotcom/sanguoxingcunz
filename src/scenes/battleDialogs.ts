@@ -219,9 +219,10 @@ export class PauseDialog implements Dialog {
     });
     y += 140 * u;
     // 设置开关
-    const tw = (w - 100 * u) / 2;
-    if (ui.button('p_music', x, y, tw, 76 * u, '音乐:' + (save.settings.music ? '开' : '关'), C.btnGray, { size: 24 })) { save.settings.music = !save.settings.music; refreshMusic(); markDirty(); }
-    if (ui.button('p_sfx', x + tw + 20 * u, y, tw, 76 * u, '音效:' + (save.settings.sfx ? '开' : '关'), C.btnGray, { size: 24 })) { save.settings.sfx = !save.settings.sfx; markDirty(); }
+    const tw = (w - 120 * u) / 3;
+    if (ui.button('p_music', x, y, tw, 76 * u, '音乐:' + (save.settings.music ? '开' : '关'), C.btnGray, { size: 22 })) { save.settings.music = !save.settings.music; refreshMusic(); markDirty(); }
+    if (ui.button('p_sfx', x + tw + 20 * u, y, tw, 76 * u, '音效:' + (save.settings.sfx ? '开' : '关'), C.btnGray, { size: 22 })) { save.settings.sfx = !save.settings.sfx; markDirty(); }
+    if (ui.button('p_ult', x + (tw + 20 * u) * 2, y, tw, 76 * u, '大招:' + (save.settings.ultRight ? '右' : '左'), C.btnGray, { size: 22 })) { save.settings.ultRight = !save.settings.ultRight; markDirty(); }
     y += 100 * u;
     const bw = (w - 100 * u) / 2;
     if (!this.confirmQuit) {

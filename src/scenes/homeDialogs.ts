@@ -376,15 +376,15 @@ export class SettingsDialog implements Dialog {
   t?: number;
   draw(ui: UI) {
     const u = ui.u;
-    const w = ui.W - 80 * u, h = 1220 * u;
+    const w = ui.W - 80 * u, h = 1320 * u;
     const f = dialogFrame(ui, w, h, '设置', this.t, 'st_close');
     if (f.close) return false;
-    const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['震动', 'vibrate'], ['伤害数字', 'dmgNum']];
+    const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['震动', 'vibrate'], ['伤害数字', 'dmgNum'], ['大招按钮位置', 'ultRight']];
     let y = f.y + 100 * u;
     for (const [name, key] of toggles) {
       ui.text(name, f.x + 60 * u, y + 40 * u, 28, '#fff4d6', 'left');
       const on = save.settings[key];
-      if (ui.button('st_' + key, f.x + w - 220 * u, y, 160 * u, 80 * u, on ? '开' : '关', on ? C.btnGreen : C.btnGray, { size: 28 })) {
+      if (ui.button('st_' + key, f.x + w - 220 * u, y, 160 * u, 80 * u, key === 'ultRight' ? (on ? '右下' : '左下') : on ? '开' : '关', key === 'ultRight' || on ? C.btnGreen : C.btnGray, { size: 28 })) {
         save.settings[key] = !on;
         if (key === 'music') refreshMusic();
         markDirty();

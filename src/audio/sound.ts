@@ -11,7 +11,7 @@ export type Bgm = 'bgm_home' | 'bgm_battle' | 'bgm_boss';
 
 const SFX_LIST: Sfx[] = ['click', 'hit', 'kill', 'gem', 'coin', 'levelup', 'evolve', 'chest', 'boss', 'hurt', 'explode', 'thrust', 'shoot', 'horse', 'fire', 'victory', 'defeat'];
 const MIN_GAP: Partial<Record<Sfx, number>> = { hit: 70, kill: 60, gem: 50, coin: 60, thrust: 90, shoot: 90, fire: 200 };
-const VOLUME: Partial<Record<Sfx, number>> = { hit: 0.35, kill: 0.4, gem: 0.35, coin: 0.5, thrust: 0.35, shoot: 0.3, fire: 0.4 };
+const VOLUME: Partial<Record<Sfx, number>> = { hit: 0.25, kill: 0.3, gem: 0.25, coin: 0.35, thrust: 0.25, shoot: 0.22, fire: 0.3, click: 0.45, hurt: 0.45, explode: 0.5 };
 
 const sounds: Partial<Record<Sfx, SoundHandle>> = {};
 const lastPlay: Partial<Record<Sfx, number>> = {};
@@ -25,7 +25,7 @@ export function initAudio() {
   const p = getPlatform();
   for (const s of SFX_LIST) {
     sounds[s] = p.createSound(base() + 'sfx_' + s + '.mp3', false);
-    sounds[s]!.setVolume(VOLUME[s] ?? 0.7);
+    sounds[s]!.setVolume(VOLUME[s] ?? 0.55);
   }
   p.onHide(() => {
     hidden = true;
@@ -56,7 +56,7 @@ export function playBgm(b: Bgm | null) {
   if (!b) return;
   if (!bgms[b]) {
     bgms[b] = getPlatform().createSound(base() + b + '.mp3', true);
-    bgms[b]!.setVolume(0.5);
+    bgms[b]!.setVolume(0.42);
   }
   if (save.settings.music && !hidden) bgms[b]!.play();
 }

@@ -116,8 +116,14 @@ export class BattleScene implements Scene {
 
   onTouch(kind: TouchKind, touches: TouchPoint[]) {
     if (kind === 'start') {
-      if (this.joyId !== null || game.dialogs.length) return;
+      if (game.dialogs.length) return;
       const t = touches[0];
+      // 另一根手指正在摇杆上时，界面层收不到这次按下，大招按钮在这里直接响应
+      if (this.joyId !== null) {
+        const ub = this.ultBtn;
+        if (ub && Math.hypot(t.x - ub.x, t.y - ub.y) < ub.r * 1.1) this.pressUlt();
+        return;
+      }
       if (game.ui.touchBlocked(t.x, t.y)) return;
       this.joyId = t.id;
       this.joyBase = { x: t.x, y: t.y };
@@ -357,6 +363,14 @@ export class BattleScene implements Scene {
     }
   }
 
+  private ultBtn: { x: number; y: number; r: number } | null = null;
+
+  private pressUlt() {
+    const b = this.battle;
+    if (b.rageFull && !b.ult) this.tryUlt();
+    else game.ui.toast(b.rageLock > 0 ? '大招恢复中' : '击败敌人积攒怒气');
+  }
+
   private comboPulse = 0;
   private lastCombo = 0;
 
@@ -372,7 +386,10 @@ export class BattleScene implements Scene {
     const b = this.battle;
     const g = ui.ctx;
     const r = 78 * u;
-    const cx = ui.W - r - 34 * u, cy = ui.H - r - 120 * u - ui.safeBottom;
+    // 默认放左下角：右手拇指控制移动时不会挡住（设置里可换到右边）
+    const right = save.settings.ultRight;
+    const cx = right ? ui.W - r - 34 * u : r + 34 * u, cy = ui.H - r - 120 * u - ui.safeBottom;
+    this.ultBtn = { x: cx, y: cy, r };
     const full = b.rageFull && !b.ult;
     const ratio = b.rageLock > 0 ? 0 : b.rage / 100;
     // 底盘
@@ -395,10 +412,7 @@ export class BattleScene implements Scene {
     if (full) ui.text(b.hero.ultName.split('·')[0], cx, cy + r * 0.55, 28, '#fee761', 'center', '#3a0d12');
     else if (b.rageLock > 0) ui.text(`${Math.ceil(b.rageLock)}s`, cx, cy + r * 0.55, 24, '#c0cbdc');
     else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#fff');
-    if (ui.clicked('ult_btn', cx - r, cy - r, r * 2, r * 2, false)) {
-      if (full) this.tryUlt();
-      else ui.toast(b.rageLock > 0 ? '大招恢复中' : '击败敌人积攒怒气');
-    }
+    if (ui.clicked('ult_btn', cx - r, cy - r, r * 2, r * 2, false)) this.pressUlt();
     // 看视频充满怒气（每局 2 次）
     if (!full && !b.ult && b.adRageUsed < 2) {
       const bw = 150 * u, bh = 64 * u;
@@ -412,7 +426,7 @@ export class BattleScene implements Scene {
     }
     // 首次满怒提示
     if (full && b.ultCasts === 0 && save.stats.runs < 3 && !game.dialogs.length) {
-      guideHint(ui, `怒气已满！点击右下角释放「${b.hero.ultName}」`, cy - r - 140 * u);
+      guideHint(ui, `怒气已满！点击${right ? '右' : '左'}下角释放「${b.hero.ultName}」`, cy - r - 140 * u);
     }
   }
 

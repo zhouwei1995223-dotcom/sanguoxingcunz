@@ -65,7 +65,7 @@ export interface SaveData {
   signinDay: string;
   daily: DailyState;
   goldChestCount: number;
-  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean };
+  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean };
   guide: number;
   stats: {
     kills: number; runs: number; bossKills: number; playSec: number; wins: number;
@@ -136,7 +136,7 @@ function freshSave(): SaveData {
     signinDay: '',
     daily: freshDaily(),
     goldChestCount: 0,
-    settings: { music: true, sfx: true, vibrate: true, dmgNum: true },
+    settings: { music: true, sfx: true, vibrate: true, dmgNum: true, ultRight: false },
     guide: 0,
     stats: { kills: 0, runs: 0, bossKills: 0, playSec: 0, wins: 0, chests: 0, upgrades: 0, ads: 0, ults: 0, evos: 0, bestCombo: 0 },
     updatedAt: now,
