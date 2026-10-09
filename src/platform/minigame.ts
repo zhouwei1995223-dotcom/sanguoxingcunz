@@ -115,6 +115,20 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     if (kind === 'wx' && api.onShareTimeline) api.onShareTimeline(() => ({ title: SHARE_CONFIG.title }));
   } catch (e) {}
 
+  // 版本更新：新版本下载完成后提示重启
+  try {
+    const um = api.getUpdateManager && api.getUpdateManager();
+    if (um) {
+      um.onUpdateReady(() => {
+        api.showModal({
+          title: '更新提示',
+          content: '新版本已经准备好，是否重启应用？',
+          success: (r: any) => { if (r.confirm) um.applyUpdate(); },
+        });
+      });
+    }
+  } catch (e) {}
+
   let openData: any = null;
   if (kind === 'wx') {
     try { openData = api.getOpenDataContext(); } catch (e) {}

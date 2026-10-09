@@ -72,6 +72,8 @@ export class Battle {
   moveX = 0;
   moveY = 0;
   showDamage = true;
+  enemyHpMul = 1;
+  enemyDmgMul = 1;
 
   grid = new SpatialGrid<Enemy>(32);
   private uidSeq = 1;
@@ -194,7 +196,7 @@ export class Battle {
     const e = newEnemy();
     const ch = this.chapter;
     const minute = this.t / 60;
-    const hpScale = ch.hpMul * (1 + ch.growth * minute);
+    const hpScale = ch.hpMul * (1 + ch.growth * minute) * this.enemyHpMul;
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -202,7 +204,7 @@ export class Battle {
     e.r = d.radius;
     e.maxHp = e.hp = Math.round(d.hp * hpScale * (opts.elite ? 14 : 1));
     e.speed = d.speed * rand(0.92, 1.08) * (opts.elite ? 0.9 : 1);
-    e.dmg = d.dmg * ch.dmgMul * (1 + 0.04 * minute) * (opts.elite ? 1.5 : 1);
+    e.dmg = d.dmg * ch.dmgMul * (1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
     e.exp = d.exp * (opts.elite ? 20 : 1);
     e.sprite = 'u_' + d.sprite;
@@ -222,9 +224,9 @@ export class Battle {
     e.x = x;
     e.y = y;
     e.r = d.radius;
-    e.maxHp = e.hp = d.hp;
+    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul);
     e.speed = d.speed;
-    e.dmg = d.dmg;
+    e.dmg = d.dmg * this.enemyDmgMul;
     e.mass = 50;
     e.exp = isFinal ? 200 : 100;
     e.sprite = 'u_' + d.sprite;

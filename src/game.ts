@@ -9,6 +9,7 @@ export interface Scene {
   exit?(): void;
   update(dt: number): void;
   onTouch?(kind: TouchKind, touches: TouchPoint[]): void;
+  onHide?(): void;
 }
 
 export interface Dialog {
@@ -38,6 +39,7 @@ class Game {
       if (!this.dialogs.length && this.scene && this.scene.onTouch) this.scene.onTouch(k, t);
       else if (this.scene && this.scene.onTouch && k === 'end') this.scene.onTouch(k, t);
     });
+    p.onHide(() => { if (this.scene && this.scene.onHide) this.scene.onHide(); });
     this.setScene(first);
     this.last = p.now();
     const loop = () => {

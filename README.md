@@ -62,6 +62,8 @@ npx http-server dist/web -p 8080
 - 健康游戏忠告：启动页已展示
 - 只走广告变现、没有内购的游戏一般不需要版号，但具体以平台审核口径为准
 - 抖音：已接入「侧边栏复访」奖励（审核常查项）、添加到桌面
+- 微信：后台「用户隐私保护指引」里需要声明好友排行榜用到的「微信朋友关系」（开放数据域 `getFriendCloudStorage`），否则排行榜可能拿不到数据
+- 微信、抖音的实名认证和防沉迷由平台统一处理，游戏内不用额外接入
 
 ## 五、游戏内容
 
@@ -129,7 +131,8 @@ npm run typecheck                      # 类型检查
 npm run audio                          # 重新合成全部音效和音乐（需要 ffmpeg）
 npm run sim -- 2 70 450 5              # 数值模拟：第2章、攻击70、生命450、跑5局
 node tools/preview.mjs hero 8          # 导出像素图预览 dist/preview.png
-node tools/shot.mjs play               # 自动试玩并截图（需要 Playwright）
+node tools/shot.mjs play               # 自动试玩并截图（需要 Playwright），另有 home / boss / newbie / perf 场景
+node tools/mock-minigame.mjs wechat    # 在模拟的微信 / 抖音环境中运行打包产物，检查小游戏代码路径
 ```
 
 ## 八、数值调整

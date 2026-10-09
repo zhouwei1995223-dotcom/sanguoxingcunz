@@ -16,6 +16,7 @@ function stats(): HeroStats {
 
 for (let r = 0; r < runs; r++) {
   const b = new Battle(CHAPTERS[chId - 1], stats(), 280, 560);
+  if (process.env.EASY) { b.enemyHpMul = 0.75; b.enemyDmgMul = 0.6; }
   const dt = 1 / 30;
   let ang = 0;
   const log: string[] = [];

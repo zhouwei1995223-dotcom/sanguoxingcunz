@@ -41,6 +41,8 @@ export class BattleScene implements Scene {
     resetSpawner();
     this.renderer = new WorldRenderer(p.width, p.height, this.chapter.theme);
     this.battle = new Battle(this.chapter, computeStats(), this.renderer.w, this.renderer.h);
+    // 新手教学局降低难度
+    if (save.guide === 0) { this.battle.enemyHpMul = 0.75; this.battle.enemyDmgMul = 0.6; }
     this.battle.showDamage = save.settings.dmgNum;
     this.battle.hooks = {
       sfx: (n) => playSfx(n as Sfx),
@@ -51,6 +53,12 @@ export class BattleScene implements Scene {
     };
     playBgm('bgm_battle');
     this.banners.push({ text: `第${this.chapter.id}章 · ${this.chapter.name}`, color: C.gold, t: 0 });
+  }
+
+  /** 切到后台时自动暂停 */
+  onHide() {
+    const b = this.battle;
+    if (!game.dialogs.length && !b.dead && !b.won) game.openDialog(new PauseDialog(this));
   }
 
   private onBoss(d: BossDef) {

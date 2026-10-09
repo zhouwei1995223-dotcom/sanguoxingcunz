@@ -470,6 +470,7 @@ export class HomeScene implements Scene {
         if (nav.equip) guidePointer(ui, ...nav.equip, '获得了新兵器，去装备看看吧');
         break;
       case 2:
+        if (!getEquipped('weapon')) { save.guide = 3; break; }
         if (this.tab === 'equip') guidePointer(ui, ...this.weaponSlotRect, '新兵器已自动穿戴，点击可以强化');
         else if (nav.equip) guidePointer(ui, ...nav.equip);
         break;

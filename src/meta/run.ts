@@ -45,6 +45,8 @@ export function settleRun(ch: ChapterDef, win: boolean, t: number, coins: number
     // 第一章首通必得兵器，引导玩家体验装备系统
     items.push(newItem(ch.id === 1 ? 'yajiao' : randomItemTemplate(), FIRST_CLEAR_Q[ch.id - 1]));
   }
+  // 新手首局：无论胜负都赠送兵器，保证装备引导可以进行
+  if (save.guide === 0 && !save.items.some((i) => i.tid === 'yajiao')) items.push(newItem('yajiao', 1));
   if (win && ch.id > save.maxCleared) save.maxCleared = ch.id;
   const newBest = t >= (save.chapterBest[ch.id] || 0);
   save.gold += gold;

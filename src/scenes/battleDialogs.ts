@@ -321,7 +321,8 @@ export class ResultDialog implements Dialog {
     const u = ui.u;
     const b = this.scene.battle;
     const t = this.t || 0;
-    const w = ui.W - 60 * u, h = 1100 * u;
+    const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length;
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.win) ui.text(this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
@@ -345,7 +346,7 @@ export class ResultDialog implements Dialog {
     const mul = this.doubled ? 2 : 1;
     const entries = rewardEntries({ gold: this.res.gold * mul, iron: this.res.iron * mul, yuanbao: this.res.yuanbao }, this.res.items);
     rewardRow(ui, entries, ui.W / 2, y, 110 * u, t);
-    y += entries.length > 4 ? 380 * u : 210 * u;
+    y += entries.length > 5 ? 380 * u : 210 * u;
     const bw = w - 140 * u;
     const bx = ui.W / 2 - bw / 2;
     if (!this.doubled) {
