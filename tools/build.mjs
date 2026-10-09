@@ -7,6 +7,10 @@ const watch = process.argv.includes('--watch');
 const sim = process.argv.includes('--sim');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
+// 平台 AppID（微信公众平台 → 开发管理 → 开发设置；抖音开发者后台）
+const WX_APPID = 'wx483a0ed3065a3de6';
+const TT_APPID = 'testappid';
+
 if (sim) {
   await build({ entryPoints: ['tools/sim.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/sim.js', logLevel: 'error' });
   await build({ entryPoints: ['tools/dps.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/dps.js', logLevel: 'error' });
@@ -60,7 +64,7 @@ function writeShells() {
     compileType: 'game',
     cloudfunctionRoot: 'cloudfunctions/',
     libVersion: '3.3.4',
-    appid: 'touristappid',
+    appid: WX_APPID,
     projectname: 'sanguo-xingcun',
     condition: {},
   }, null, 2));
@@ -74,7 +78,7 @@ function writeShells() {
     miniprogramRoot: '',
     projectname: 'sanguo-xingcun',
     description: '一骑当千：三国幸存者',
-    appid: 'testappid',
+    appid: TT_APPID,
     setting: { urlCheck: false, es6: true, postcss: false, minified: true, newFeature: true },
     compileType: 'game',
     condition: {},
