@@ -1,7 +1,7 @@
 import { getPlatform } from '../platform';
 import type { SoundHandle } from '../platform/types';
 import { save } from '../meta/save';
-import { IS_XHS } from '../data/platformConfig';
+import { IS_OFFLINE_H5 } from '../data/platformConfig';
 import { SR, synthSfx, synthTrack } from './synth';
 
 // 音频管理：音效限频、背景音乐切换、前后台切换处理
@@ -23,7 +23,7 @@ let hidden = false;
 
 const base = () => (getPlatform().name === 'web' ? 'assets/audio/' : 'assets/audio/');
 
-// —— 小红书小工具：包里不能带音频文件，用 Web Audio 现场合成 ——
+// —— 离线 H5：用 Web Audio 现场合成，包内无需音频文件 ——
 let actx: AudioContext | null = null;
 function audioCtx(): AudioContext | null {
   if (actx) return actx;
@@ -72,12 +72,12 @@ class SynthSound implements SoundHandle {
 }
 
 function createSfx(s: Sfx): SoundHandle {
-  if (IS_XHS) { const h = new SynthSound(() => synthSfx(s), false); return h; }
+  if (IS_OFFLINE_H5) { const h = new SynthSound(() => synthSfx(s), false); return h; }
   return getPlatform().createSound(base() + 'sfx_' + s + '.mp3', false);
 }
 
 function createBgm(b: Bgm): SoundHandle {
-  if (IS_XHS) return new SynthSound(() => synthTrack(b), true);
+  if (IS_OFFLINE_H5) return new SynthSound(() => synthTrack(b), true);
   return getPlatform().createSound(base() + b + '.mp3', true);
 }
 
@@ -129,7 +129,7 @@ export function refreshMusic() {
 
 /** 浏览器需要用户交互后才能播放音频 */
 export function unlockAudio() {
-  if (IS_XHS) { const c = audioCtx(); if (c && c.state === 'suspended') c.resume(); }
+  if (IS_OFFLINE_H5) { const c = audioCtx(); if (c && c.state === 'suspended') c.resume(); }
   if (currentBgm && save.settings.music) bgms[currentBgm]?.play();
 }
 

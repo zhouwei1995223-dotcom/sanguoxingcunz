@@ -3,8 +3,12 @@
 declare const process: { env: Record<string, string | undefined> };
 /** 小红书小工具版本（离线 H5，构建时注入） */
 export const IS_XHS = process.env.TARGET === 'xhs';
+/** TapTap H5 试玩版（构建时注入） */
+export const IS_TAPTAP = process.env.TARGET === 'taptap';
+/** 仅使用本机存档的 H5 版本，共用运行时合成音频与本地战绩 */
+export const IS_OFFLINE_H5 = IS_XHS || IS_TAPTAP;
 /** 无广告版本：原来看视频的地方改为免费领取、元宝兑换或直接去掉 */
-export const NO_ADS = IS_XHS;
+export const NO_ADS = IS_OFFLINE_H5;
 /** 无广告版本：元宝解锁皮肤（每次「观看」折算的元宝）与元宝复活的价格 */
 export const NO_ADS_PRICE = { skinPerAd: 60, revive: 100 };
 
