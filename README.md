@@ -190,7 +190,7 @@ npm run sim -- 2 70 450 5              # 数值模拟：第2章、攻击70、生
 node tools/preview.mjs hero 8          # 导出像素图预览 dist/preview.png
 node tools/zhaoyun-reference-preview.mjs # 赵云按认可原画生成的图片帧预览（暂停/逐帧/左右翻转）
 node tools/guanyu-preview.mjs          # 关羽独立造型与四帧动画预览（待本人确认，未接入游戏）
-node tools/guanyu-gait-preview.mjs     # 八帧小跑步态对比（需 sharp，先运行上一条，仍为独立预览）
+node tools/guanyu-gait-preview.mjs     # 早期八帧步态试验（腿型未获认可；最新单帧修正见 docs/art/guanyu-leg-review-v3.md）
 node tools/shot.mjs play               # 自动试玩并截图（需要 Playwright），另有 home / boss / newbie / perf 场景
 ROOT=dist/taptap Q='?skip=1&rich=1' node tools/shot.mjs taptap # TapTap 无广告与存档验收
 node tools/mock-minigame.mjs wechat    # 在模拟的微信 / 抖音环境中运行打包产物，检查小游戏代码路径
