@@ -110,7 +110,7 @@ const outs = [
   { ...common, outfile: 'dist/web/game.js', define: { 'process.env.TARGET': '"web"' } },
   { ...common, outfile: 'dist/wechat/game.js', define: { 'process.env.TARGET': '"wx"' } },
   { ...common, outfile: 'dist/douyin/game.js', define: { 'process.env.TARGET': '"tt"' } },
-  { ...common, outfile: 'dist/xhs/game.js', define: { 'process.env.TARGET': '"xhs"' } },
+  { ...common, target: ['es2017', 'chrome61'], outfile: 'dist/xhs/game.js', define: { 'process.env.TARGET': '"xhs"' } },
 ];
 if (watch) {
   const ctx = await context(outs[0]);

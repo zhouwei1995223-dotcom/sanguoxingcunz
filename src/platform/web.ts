@@ -1,4 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
+import { IS_XHS } from '../data/platformConfig';
 
 // 浏览器实现：用于开发调试与验收。广告用 2 秒模拟弹窗代替。
 
@@ -30,6 +31,7 @@ export function createWebPlatform(): Platform {
   document.body.style.background = '#000';
   document.body.style.overflow = 'hidden';
   document.body.style.touchAction = 'none';
+  (document.body.style as any).webkitTouchCallout = 'none';
   document.body.appendChild(canvas);
 
   // 桌面浏览器上模拟手机竖屏比例
@@ -43,6 +45,22 @@ export function createWebPlatform(): Platform {
   canvas.style.margin = '0 auto';
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
+
+  // 安全区（刘海屏 / 小红书容器）：小红书模拟器注入 --safe-area-inset-*，真机用 env()，两者组合读取
+  const safeArea = { top: 0, bottom: 0, left: 0, right: 0 };
+  try {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;'
+      + 'padding-top:var(--safe-area-inset-top, env(safe-area-inset-top, 0px));'
+      + 'padding-bottom:var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))';
+    document.body.appendChild(probe);
+    const cs = getComputedStyle(probe);
+    safeArea.top = (parseFloat(cs.paddingTop) || 0) * dpr;
+    safeArea.bottom = (parseFloat(cs.paddingBottom) || 0) * dpr;
+    probe.remove();
+  } catch (e) {}
+  // 小红书容器可能在顶部叠加按钮，至少留出一点空隙
+  if (IS_XHS) safeArea.top = Math.max(safeArea.top, 20 * dpr);
 
   const listeners: ((k: TouchKind, t: TouchPoint[]) => void)[] = [];
   const emit = (k: TouchKind, t: TouchPoint[]) => listeners.forEach((l) => l(k, t));
@@ -115,7 +133,7 @@ export function createWebPlatform(): Platform {
     width: canvas.width,
     height: canvas.height,
     dpr,
-    safeArea: { top: 0, bottom: 0, left: 0, right: 0 },
+    safeArea,
     createCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; },
     onTouch(cb) { listeners.push(cb); },
     requestFrame(cb) { requestAnimationFrame(cb); },
