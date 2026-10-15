@@ -1,4 +1,5 @@
 // 局外养成：武将、装备、军略、商店、任务、签到等配置
+import { NO_ADS } from './platformConfig';
 
 export const HERO = {
   id: 'zhaoyun',
@@ -200,7 +201,7 @@ export interface TalentDef {
   id: string;
   name: string;
   icon: string;
-  stat: keyof StatBlock | 'revive' | 'reroll';
+  stat: keyof StatBlock | 'revive' | 'reroll' | 'potion';
   per: number;
   max: number;
   baseCost: number;
@@ -211,6 +212,7 @@ export interface TalentDef {
 export const TALENTS: TalentDef[] = [
   { id: 't_atk', name: '武艺', icon: 'atk', stat: 'dmg', per: 3, max: 20, baseCost: 200, costGrowth: 1.22, unlockChapter: 0 },
   { id: 't_hp', name: '体魄', icon: 'hp', stat: 'hp', per: 15, max: 20, baseCost: 200, costGrowth: 1.22, unlockChapter: 0 },
+  { id: 't_potion', name: '金疮药', icon: 'potion', stat: 'potion', per: 1, max: 10, baseCost: 300, costGrowth: 1.3, unlockChapter: 0 },
   { id: 't_def', name: '铁壁', icon: 'def', stat: 'def', per: 1, max: 15, baseCost: 300, costGrowth: 1.25, unlockChapter: 0 },
   { id: 't_speed', name: '轻骑', icon: 'p_horseshoe', stat: 'speed', per: 1.5, max: 10, baseCost: 300, costGrowth: 1.25, unlockChapter: 0 },
   { id: 't_pickup', name: '洞察', icon: 'magnet', stat: 'pickup', per: 6, max: 10, baseCost: 250, costGrowth: 1.22, unlockChapter: 1 },
@@ -219,9 +221,15 @@ export const TALENTS: TalentDef[] = [
   { id: 't_crit', name: '破绽', icon: 'star', stat: 'crit', per: 1, max: 10, baseCost: 500, costGrowth: 1.28, unlockChapter: 2 },
   { id: 't_cd', name: '神速', icon: 'p_book', stat: 'cd', per: 1, max: 10, baseCost: 600, costGrowth: 1.28, unlockChapter: 2 },
   { id: 't_regen', name: '调息', icon: 'p_lingzhi', stat: 'regen', per: 0.2, max: 10, baseCost: 500, costGrowth: 1.26, unlockChapter: 3 },
-  { id: 't_reroll', name: '奇谋', icon: 'p_pouch', stat: 'reroll', per: 1, max: 3, baseCost: 3000, costGrowth: 2.5, unlockChapter: 3 },
+  { id: 't_reroll', name: '奇谋', icon: 'jinnang', stat: 'reroll', per: 1, max: 3, baseCost: 3000, costGrowth: 2.5, unlockChapter: 3 },
   { id: 't_revive', name: '不屈', icon: 'revive', stat: 'revive', per: 1, max: 1, baseCost: 12000, costGrowth: 1, unlockChapter: 4 },
 ];
+
+// —— 金疮药（局内主动回血，军略升级）——
+export const POTION = { heal: 0.25, healPerLv: 0.025, cd: 60, cdPerLv: 2 };
+export function potionStats(lv: number): { heal: number; cd: number } {
+  return { heal: POTION.heal + POTION.healPerLv * lv, cd: POTION.cd - POTION.cdPerLv * lv };
+}
 
 export function talentCost(t: TalentDef, lv: number): number {
   return Math.round(t.baseCost * Math.pow(t.costGrowth, lv));
@@ -290,7 +298,7 @@ export const DAILY_TASKS: TaskDef[] = [
   { id: 'd_battle', kind: 'battle', name: '完成2次征战', target: 2, points: 20 },
   { id: 'd_kill', kind: 'kill', name: '累计击败500名敌人', target: 500, points: 20 },
   { id: 'd_boss', kind: 'boss', name: '击败1名敌将', target: 1, points: 15 },
-  { id: 'd_ad', kind: 'ad', name: '观看2次视频', target: 2, points: 15 },
+  { id: 'd_ad', kind: 'ad', name: NO_ADS ? '领取2次免费福利' : '观看2次视频', target: 2, points: 15 },
   { id: 'd_upgrade', kind: 'upgrade', name: '强化装备或军略3次', target: 3, points: 10 },
   { id: 'd_patrol', kind: 'patrol', name: '领取巡营收益', target: 1, points: 5 },
   { id: 'd_chest', kind: 'chest', name: '开启1次宝箱', target: 1, points: 5 },

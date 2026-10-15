@@ -1,6 +1,8 @@
 import { getPlatform } from '../platform';
 import type { SoundHandle } from '../platform/types';
 import { save } from '../meta/save';
+import { IS_XHS } from '../data/platformConfig';
+import { SR, synthSfx, synthTrack } from './synth';
 
 // 音频管理：音效限频、背景音乐切换、前后台切换处理
 
@@ -21,10 +23,68 @@ let hidden = false;
 
 const base = () => (getPlatform().name === 'web' ? 'assets/audio/' : 'assets/audio/');
 
+// —— 小红书小工具：包里不能带音频文件，用 Web Audio 现场合成 ——
+let actx: AudioContext | null = null;
+function audioCtx(): AudioContext | null {
+  if (actx) return actx;
+  try {
+    const C = (window as any).AudioContext || (window as any).webkitAudioContext;
+    actx = C ? new C() : null;
+  } catch (e) { actx = null; }
+  return actx;
+}
+
+class SynthSound implements SoundHandle {
+  private buf: AudioBuffer | null = null;
+  private src: AudioBufferSourceNode | null = null;
+  private vol = 1;
+  constructor(private make: () => Float32Array, private loop: boolean) {}
+  private ensure(c: AudioContext) {
+    if (this.buf) return;
+    const d = this.make();
+    const b = c.createBuffer(1, d.length, SR);
+    b.getChannelData(0).set(d);
+    this.buf = b;
+  }
+  play() {
+    const c = audioCtx();
+    if (!c) return;
+    try {
+      if (c.state === 'suspended') c.resume();
+      if (this.loop && this.src) return;
+      this.ensure(c);
+      const s = c.createBufferSource();
+      s.buffer = this.buf;
+      s.loop = this.loop;
+      const g = c.createGain();
+      g.gain.value = this.vol;
+      s.connect(g);
+      g.connect(c.destination);
+      s.start();
+      if (this.loop) this.src = s;
+    } catch (e) {}
+  }
+  stop() {
+    if (this.src) { try { this.src.stop(); } catch (e) {} this.src = null; }
+  }
+  setVolume(v: number) { this.vol = Math.max(0, Math.min(1, v)); }
+  destroy() { this.stop(); }
+}
+
+function createSfx(s: Sfx): SoundHandle {
+  if (IS_XHS) { const h = new SynthSound(() => synthSfx(s), false); return h; }
+  return getPlatform().createSound(base() + 'sfx_' + s + '.mp3', false);
+}
+
+function createBgm(b: Bgm): SoundHandle {
+  if (IS_XHS) return new SynthSound(() => synthTrack(b), true);
+  return getPlatform().createSound(base() + b + '.mp3', true);
+}
+
 export function initAudio() {
   const p = getPlatform();
   for (const s of SFX_LIST) {
-    sounds[s] = p.createSound(base() + 'sfx_' + s + '.mp3', false);
+    sounds[s] = createSfx(s);
     sounds[s]!.setVolume(VOLUME[s] ?? 0.55);
   }
   p.onHide(() => {
@@ -55,7 +115,7 @@ export function playBgm(b: Bgm | null) {
   currentBgm = b;
   if (!b) return;
   if (!bgms[b]) {
-    bgms[b] = getPlatform().createSound(base() + b + '.mp3', true);
+    bgms[b] = createBgm(b);
     bgms[b]!.setVolume(0.42);
   }
   if (save.settings.music && !hidden) bgms[b]!.play();
@@ -69,6 +129,7 @@ export function refreshMusic() {
 
 /** 浏览器需要用户交互后才能播放音频 */
 export function unlockAudio() {
+  if (IS_XHS) { const c = audioCtx(); if (c && c.state === 'suspended') c.resume(); }
   if (currentBgm && save.settings.music) bgms[currentBgm]?.play();
 }
 

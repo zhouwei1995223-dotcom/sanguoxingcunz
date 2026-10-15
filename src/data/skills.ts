@@ -347,7 +347,7 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   flag: { id: 'flag', name: '令旗', icon: 'p_flag', desc: '技能范围+10%' },
   tiger: { id: 'tiger', name: '虎符', icon: 'p_tiger', desc: '伤害+10%' },
   lingzhi: { id: 'lingzhi', name: '灵芝', icon: 'p_lingzhi', desc: '生命上限+10%，每秒回复0.3生命' },
-  pouch: { id: 'pouch', name: '锦囊', icon: 'p_pouch', desc: '技能持续时间+12%' },
+  pouch: { id: 'pouch', name: '漏刻', icon: 'p_pouch', desc: '技能持续时间+12%' },
   bowl: { id: 'bowl', name: '聚宝盆', icon: 'p_bowl', desc: '拾取范围+35%，金币+10%' },
   seal: { id: 'seal', name: '玉玺', icon: 'p_seal', desc: '经验获取+8%' },
   map: { id: 'map', name: '舆图', icon: 'p_map', desc: '飞剑、弩箭、飞刀等技能数量+1', max: 2, unlockCh: 3 },

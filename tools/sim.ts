@@ -25,7 +25,7 @@ function powerStats(): { atk: number; hp: number } {
 
 function stats(): HeroStats {
   const { atk, hp } = powerStats();
-  return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, hero: process.env.HERO || 'zhaoyun', cleared: Number(process.env.UNLOCK ?? 10) };
+  return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, potion: Number(process.env.POTION || 0), hero: process.env.HERO || 'zhaoyun', cleared: Number(process.env.UNLOCK ?? 10) };
 }
 
 for (let r = 0; r < runs; r++) {
@@ -77,6 +77,8 @@ for (let r = 0; r < runs; r++) {
       lateNear += near; lateScreen += onScreen; lateN++;
     }
     if (b.rageFull) b.castUlt();
+    // 金疮药：血量低于 40% 时喝（NOPOTION=1 模拟不会用药的玩家）
+    if (!process.env.NOPOTION && b.player.hp < b.player.maxHp * 0.4) b.usePotion();
     maxEnemies = Math.max(maxEnemies, b.enemies.length);
     while (b.pendingLevelUps > 0) {
       b.pendingLevelUps--;
@@ -86,6 +88,18 @@ for (let r = 0; r < runs; r++) {
         ? ch.find((c) => c.kind === 'weapon' && !c.isNew) || ch.find((c) => c.kind === 'weapon') || ch[0]
         : ch[Math.max(0, b.recommend(ch))];
       b.applyChoice(pickC);
+    }
+    // FORCE=xxx：开局 2 分钟时直接获得指定计策（测单条计策强度），之后不再给锦囊
+    if (process.env.FORCE) { if (b.t >= 120 && !b.strats.length) b.applyStrat(process.env.FORCE as any); b.pendingStrats.length = 0; }
+    // 锦囊：随机选一个（STRAT=xxx 时只要出现就选它）
+    while (b.pendingStrats.length) {
+      const st = b.pendingStrats.shift()!;
+      if (process.env.NOSTRAT) continue;
+      const ch = b.rollStrats(st.tier);
+      const want = process.env.STRAT && ch.find((x) => x === process.env.STRAT);
+      const pickS = want || ch[(Math.random() * ch.length) | 0];
+      b.applyStrat(pickS);
+      log.push(`${b.t.toFixed(0)}s 锦囊 ${pickS}`);
     }
     while (b.pendingChests.length) {
       const c = b.pendingChests.shift()!;

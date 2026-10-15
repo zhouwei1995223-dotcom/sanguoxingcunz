@@ -157,6 +157,29 @@ export class WorldRenderer {
       g.globalAlpha = 1;
     }
 
+    // 八阵图：八块阵石环绕
+    if (b.hasStrat('bazhen')) {
+      const R = b.bazhenR;
+      g.globalAlpha = 0.12;
+      g.fillStyle = '#c0cbdc';
+      this.ellipse(p.x, p.y - 4, R, R * 0.8);
+      g.globalAlpha = 0.6;
+      g.strokeStyle = '#8b9bb4';
+      g.lineWidth = 1;
+      this.ellipse(p.x, p.y - 4, R, R * 0.8, true);
+      g.globalAlpha = 1;
+      for (let i = 0; i < 8; i++) {
+        const a = b.t * 0.8 + (i / 8) * TAU;
+        const sx = Math.round(p.x + Math.cos(a) * R - this.camX), sy = Math.round(p.y - 4 + Math.sin(a) * R * 0.8 - this.camY);
+        g.fillStyle = '#181425';
+        g.fillRect(sx - 3, sy - 4, 7, 6);
+        g.fillStyle = '#8b9bb4';
+        g.fillRect(sx - 2, sy - 3, 5, 4);
+        g.fillStyle = '#c0cbdc';
+        g.fillRect(sx - 2, sy - 3, 2, 1);
+      }
+    }
+
     // 枪风光环
     const aura = b.weapon('aura');
     if (aura) {
@@ -543,6 +566,22 @@ export class WorldRenderer {
         g.strokeStyle = '#ffffff';
         g.lineWidth = 1;
         this.ellipse(f.x, f.y, r * 0.92, r * 0.92 * 0.8, true);
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'volley': {
+        // 万箭齐发：箭矢从右上方斜落
+        if (f.t < 0) break;
+        const q = Math.min(1, k);
+        const ax = Math.round(f.x + 36 * (1 - q) - this.camX), ay = Math.round(f.y - 120 * (1 - q) - this.camY);
+        g.globalAlpha = q < 0.9 ? 1 : (1 - q) * 10;
+        g.strokeStyle = '#733e39';
+        g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + 9, ay - 30); g.stroke();
+        g.fillStyle = '#ffffff';
+        g.fillRect(ax - 1, ay - 1, 3, 3);
+        g.fillStyle = '#c0cbdc';
+        g.fillRect(ax + 7, ay - 31, 3, 4);
         g.globalAlpha = 1;
         break;
       }

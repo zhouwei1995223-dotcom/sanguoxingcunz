@@ -11,7 +11,7 @@ import {
   canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE, chestOddsText,
 } from '../meta/ops';
 import {
-  HERO, heroLevelCost, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
+  HERO, heroLevelCost, potionStats, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
   CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
@@ -28,7 +28,7 @@ import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
-import { GAME_INFO } from '../data/platformConfig';
+import { GAME_INFO, IS_XHS, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 
 type Tab = 'shop' | 'equip' | 'battle' | 'talent' | 'hero';
 const TABS: { id: Tab; name: string; icon: string }[] = [
@@ -194,10 +194,10 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
-      { id: 'rank', icon: 'trophy', label: '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
+      { id: 'rank', icon: 'trophy', label: IS_XHS ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
       { id: 'settings', icon: 'gear', label: '设置', dot: false, on: () => game.openDialog(new SettingsDialog()) },
-      { id: 'share', icon: 'share', label: '分享', dot: false, on: () => getPlatform().share('长坂坡七进七出，你能撑过几分钟？') },
+      ...(IS_XHS ? [] : [{ id: 'share', icon: 'share', label: '分享', dot: false, on: () => getPlatform().share('长坂坡七进七出，你能撑过几分钟？') }]),
     ];
     if (getPlatform().supportsSidebar() || getPlatform().name === 'tt') sideR.push({ id: 'sidebar', icon: 'sidebar', label: '侧边栏', dot: !save.daily.sidebar, on: () => game.openDialog(new SidebarDialog()) });
     const bs = 84 * u;
@@ -378,7 +378,9 @@ export class HomeScene implements Scene {
       ui.icon(t.icon, x + cw / 2, y + 70 * u, 70 * u, locked ? 0.4 : 1);
       ui.text(t.name, x + cw / 2, y + 132 * u, 28, locked ? '#888' : '#fff4d6');
       ui.text(`${lv}/${t.max}`, x + cw / 2, y + 166 * u, 22, C.gold);
-      const eff = t.stat === 'revive' ? '每局可免费复活1次' : t.stat === 'reroll' ? '每局技能刷新+1次' : `${STAT_NAMES[t.stat]}+${fmtStat(t.stat, t.per)}`;
+      const ps = potionStats(lv);
+      const eff = t.stat === 'revive' ? '每局可免费复活1次' : t.stat === 'reroll' ? '每局技能刷新+1次'
+        : t.stat === 'potion' ? `回血${Math.round(ps.heal * 100)}%·冷却${ps.cd}秒` : `${STAT_NAMES[t.stat]}+${fmtStat(t.stat, t.per)}`;
       ui.text(eff, x + cw / 2, y + 200 * u, 18, '#d9c6a0');
       if (locked) {
         ui.text(`通关第${t.unlockChapter}章解锁`, x + cw / 2, y + 268 * u, 20, '#ff8a80');
@@ -511,8 +513,21 @@ export class HomeScene implements Scene {
       if (ss.owned) {
         if (ui.button('skin_toggle', bx2, by2, bw2, 80 * u, ss.on ? '卸下' : '穿戴', ss.on ? C.btnGray : C.btnPurple, { size: 26 })) { ss.on = !ss.on; markDirty(); playSfx('click'); }
       } else {
-        ui.text(`观看视频 ${ss.ads}/${sk.ads} 解锁`, lx + 156 * u, sy2 + 116 * u, 20, C.gold, 'left');
-        if (adButton(ui, 'skin_ad', bx2, by2, bw2, 80 * u, '解锁', { size: 24 })) {
+        const skinCost = (sk.ads - ss.ads) * NO_ADS_PRICE.skinPerAd;
+        if (NO_ADS) {
+          ui.text(`消耗${skinCost}元宝解锁`, lx + 156 * u, sy2 + 116 * u, 20, C.gold, 'left');
+          if (ui.button('skin_buy', bx2, by2, bw2, 80 * u, String(skinCost), save.yuanbao >= skinCost ? C.btnGold : C.btnGray, { icon: 'yuanbao', size: 24 })) {
+            if (save.yuanbao < skinCost) ui.toast('元宝不足');
+            else {
+              save.yuanbao -= skinCost;
+              while (!skinState(h.id).owned) skinAdProgress(h.id);
+              playSfx('victory');
+              ui.toast(`获得皮肤「${sk.name}」！`);
+              flushSave(true);
+            }
+          }
+        } else ui.text(`观看视频 ${ss.ads}/${sk.ads} 解锁`, lx + 156 * u, sy2 + 116 * u, 20, C.gold, 'left');
+        if (!NO_ADS && adButton(ui, 'skin_ad', bx2, by2, bw2, 80 * u, '解锁', { size: 24 })) {
           getPlatform().showRewardedAd('skin_' + h.id).then((ok) => {
             if (!ok) return;
             progressTask('ad', 1);

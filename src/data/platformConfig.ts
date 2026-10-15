@@ -1,5 +1,13 @@
 // 上架前需要填写的平台配置。广告位 ID 在微信「流量主」/ 抖音「广告变现」后台申请。
 
+declare const process: { env: Record<string, string | undefined> };
+/** 小红书小工具版本（离线 H5，构建时注入） */
+export const IS_XHS = process.env.TARGET === 'xhs';
+/** 无广告版本：原来看视频的地方改为免费领取、元宝兑换或直接去掉 */
+export const NO_ADS = IS_XHS;
+/** 无广告版本：元宝解锁皮肤（每次「观看」折算的元宝）与元宝复活的价格 */
+export const NO_ADS_PRICE = { skinPerAd: 60, revive: 100 };
+
 export const AD_CONFIG = {
   wx: {
     rewarded: '', // 激励视频广告位 ID，例如 'adunit-xxxxxxxx'

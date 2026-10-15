@@ -340,6 +340,20 @@ const ICONS: Record<string, () => PixelImage> = {
     '.yo.yo.o',
     '.oo.oo..',
   ]),
+  potion: () => art([
+    '....zz....',
+    '....Uz....',
+    '...qqqq...',
+    '..qYqqqu..',
+    '..qqqqqu..',
+    '...RRRR...',
+    '..qqqqqq..',
+    '.qYqqqqqu.',
+    '.qYqqqqqu.',
+    '.qqqqqquu.',
+    '.qqqqquuu.',
+    '..uuuuuu..',
+  ]),
   p_lingzhi: () => art([
     '.MMMMMM.',
     'MfMMMMfM',
@@ -349,7 +363,7 @@ const ICONS: Record<string, () => PixelImage> = {
     '...pE...',
     '..ppEE..',
   ]),
-  p_pouch: () => art([
+  jinnang: () => art([
     '..y..y..',
     '...yy...',
     '..RRRR..',
@@ -358,7 +372,19 @@ const ICONS: Record<string, () => PixelImage> = {
     'RRRYRRRr',
     '.RRRRrr.',
   ]),
-  p_bowl: () => art([
+
+  p_pouch: () => art([
+    '.UUUUUU.',
+    '.uqqqqu.',
+    '..uqqu..',
+    '...BB...',
+    '...B....',
+    '...c....',
+    '.UUUUUU.',
+    '.uBBBBu.',
+    '.uqqqqu.',
+    '..uuuu..',
+  ]),  p_bowl: () => art([
     '.Y.yY.y.',
     'yYyYYyYy',
     'UuuuuuuU',

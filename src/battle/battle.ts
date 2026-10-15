@@ -8,6 +8,8 @@ import {
   WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
+import { potionStats } from '../data/meta';
+import { STRATS, STRAT_TIMES, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
 import {
   Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
 } from './entities';
@@ -102,6 +104,31 @@ export class Battle {
   enemyHpMul = 1;
   enemyDmgMul = 1;
 
+  // 锦囊妙计
+  strats: StratId[] = [];
+  private stratSet = new Set<StratId>();
+  /** 已触发到第几次锦囊 */
+  stratRound = 0;
+  /** 待选择的锦囊：品质与第几计 */
+  pendingStrats: { tier: StratTier; round: number }[] = [];
+  /** 动态伤害倍率（背水一战、趁火打劫等，每帧计算） */
+  private dynMul = 1;
+  private jinchanUsed = false;
+  private qixingBuff = false;
+  private ultBuffT = -1;
+  private yiqiBase = 0;
+  private caochuanCd = 0;
+  private stratT = { huoshao: 6, shimian: 4, wanjian: 5, bazhen: 0 };
+  private chainQueue: { x: number; y: number }[] = [];
+  private delayed: { t: number; fn: () => void }[] = [];
+
+  // 金疮药：手动使用，冷却结束后可再次使用
+  potionHeal = 0.25;
+  potionCdMax = 60;
+  potionCd = 0;
+  potionUses = 0;
+  private potionBase = { heal: 0.25, cd: 60 };
+
   // 怒气 / 大招
   rage = 0;
   rageLock = 0;
@@ -176,6 +203,7 @@ export class Battle {
     this.player = { x: 0, y: 0, r: 8, hp: base.hp, maxHp: base.hp, dirX: 1, dirY: 0, left: false, moving: false, anim: 0, iframe: 0, hurtFlash: 0 };
     this.rerolls = base.reroll;
     this.revives = base.revive;
+    this.potionBase = potionStats(base.potion || 0);
     this.hero = HERO_BY_ID[base.hero] || HERO_BY_ID.zhaoyun;
     this.cleared = base.cleared ?? 99;
     this.addWeapon(this.hero.weapon);
@@ -209,7 +237,8 @@ export class Battle {
     const qianli = this.weapon('horse')?.link && hid === 'guanyu';
     this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (qianli ? 0.2 : 0));
     this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1);
-    const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')));
+    const hpStrat = (this.stratSet.has('shengou') ? 1.15 : 1) * (this.stratSet.has('kurou') ? 0.8 : 1);
+    const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')) * hpStrat);
     if (newMax > this.player.maxHp) this.player.hp += newMax - this.player.maxHp;
     this.player.maxHp = newMax;
     this.player.hp = Math.min(this.player.hp, newMax);
@@ -224,6 +253,195 @@ export class Battle {
     this.rageMul = 1 + 0.15 * P('horn');
     this.eliteDmg = 0.15 * P('whetstone');
     this.mirrorCd = P('mirror') ? 14 - 2 * P('mirror') : 0;
+    // 锦囊妙计
+    const S = (id: StratId) => this.stratSet.has(id);
+    if (S('libing')) this.dmgMul += 0.2;
+    if (S('kurou')) this.dmgMul += 0.35;
+    if (S('shengou')) this.dmgTakenMul *= 0.88;
+    if (S('shensu')) { this.speed *= 1.12; this.cdMul *= 0.92; }
+    if (S('wolong')) { this.cdMul *= 0.85; this.areaMul += 0.15; this.durMul += 0.15; }
+    this.cdMul = Math.max(0.3, this.cdMul);
+    if (S('jiliang')) { this.goldMul += 0.4; this.expMul *= 1.1; }
+    if (S('qinwang')) this.eliteDmg += 0.3;
+    this.potionHeal = this.potionBase.heal + (S('yangjing') ? 0.1 : 0);
+    this.potionCdMax = Math.round(this.potionBase.cd * (S('yangjing') ? 0.6 : 1));
+    this.potionCd = Math.min(this.potionCd, this.potionCdMax);
+  }
+
+  // —— 锦囊妙计 ——
+  hasStrat(id: StratId): boolean {
+    return this.stratSet.has(id);
+  }
+
+  /** 随机一组同品质的计策（不重复已拥有的） */
+  rollStrats(tier: StratTier, n = 3): StratId[] {
+    let pool = STRATS.filter((s) => s.tier === tier && !this.stratSet.has(s.id)).map((s) => s.id);
+    // 同品质不够时从其他品质补
+    if (pool.length < n) pool = pool.concat(STRATS.filter((s) => s.tier !== tier && !this.stratSet.has(s.id) && !pool.includes(s.id)).map((s) => s.id));
+    return shuffle(pool.slice()).slice(0, n);
+  }
+
+  applyStrat(id: StratId) {
+    if (this.stratSet.has(id)) return;
+    this.strats.push(id);
+    this.stratSet.add(id);
+    const p = this.player;
+    switch (id) {
+      case 'paozhuan': this.pendingLevelUps += 2; break;
+      case 'qixing': this.revives++; break;
+      case 'yiqi': this.yiqiBase = this.kills; break;
+      case 'taoyuan':
+        for (const w of this.weapons) if (!w.evo && w.lv < MAX_WEAPON_LV) w.lv++;
+        for (const ps of this.passives) if (ps.lv < passiveMax(ps.id)) ps.lv++;
+        break;
+    }
+    this.recalc();
+    this.fx.push({ kind: 'ring', x: p.x, y: p.y - 8, t: 0, dur: 0.6, r: 80, color: '#fee761' });
+    this.hooks.banner(`锦囊 · ${STRAT_BY_ID[id].name}`, '#fee761');
+    this.hooks.sfx('evolve');
+  }
+
+  private later(sec: number, fn: () => void) {
+    this.delayed.push({ t: sec, fn });
+  }
+
+  private updateStrats(dt: number) {
+    // 到点发放锦囊
+    if (this.stratRound < STRAT_TIMES.length && this.t >= STRAT_TIMES[this.stratRound] && this.t < this.chapter.duration) {
+      const w = STRAT_TIER_WEIGHTS[this.stratRound];
+      this.pendingStrats.push({ tier: weighted([0, 1, 2] as StratTier[], (k) => w[k]), round: this.stratRound });
+      this.stratRound++;
+    }
+    for (let i = this.delayed.length - 1; i >= 0; i--) {
+      const d = this.delayed[i];
+      d.t -= dt;
+      if (d.t <= 0) { this.delayed.splice(i, 1); d.fn(); }
+    }
+    // 动态伤害倍率
+    const p = this.player;
+    const S = (id: StratId) => this.stratSet.has(id);
+    let m = 1;
+    if (S('beishui') && p.hp < p.maxHp * 0.4) m *= 1.5;
+    if (S('chenhuo')) m *= 1 + Math.min(0.4, Math.floor(this.coins / 25) * 0.01);
+    if (this.t < this.ultBuffT) m *= 1.5;
+    if (this.qixingBuff) m *= 1.25;
+    if (S('yiqi')) m *= 1 + 0.04 * Math.floor((this.kills - this.yiqiBase) / 100);
+    this.dynMul = m;
+    if (!this.strats.length) return;
+    const atk = this.base.atk;
+    if (S('yiyi') && !p.moving) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.02 * dt);
+    this.caochuanCd = Math.max(0, this.caochuanCd - dt);
+    // 连环计：每帧最多引爆几次，避免连锁卡顿
+    for (let n = 0; n < 6 && this.chainQueue.length; n++) {
+      const c = this.chainQueue.shift()!;
+      const near: Enemy[] = [];
+      this.grid.query(c.x, c.y, 40, near);
+      for (const e of near) {
+        if (e.dead) continue;
+        const dx = e.x - c.x, dy = e.y - c.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d < 30 + e.r) this.damage(e, atk * 1.8, dx / d, dy / d, 50, { noCrit: true });
+      }
+      if (this.fx.length < 300) this.fx.push({ kind: 'explo', x: c.x, y: c.y + 6, t: 0, dur: 0.3 });
+    }
+    if (this.chainQueue.length > 40) this.chainQueue.length = 40;
+    if (S('huoshao')) {
+      this.stratT.huoshao -= dt;
+      if (this.stratT.huoshao <= 0) {
+        this.stratT.huoshao = 10;
+        // 在几个候选敌人里挑周围最拥挤的
+        let best: Enemy | null = null, bn = -1;
+        for (let i = 0; i < 6; i++) {
+          const e = this.randomVisibleEnemy();
+          if (!e) break;
+          const n = this.grid.query(e.x, e.y, 40, this.tmp).length;
+          if (n > bn) { bn = n; best = e; }
+        }
+        if (best) {
+          this.pools.push({ x: best.x, y: best.y, r: 50 * this.areaMul, dmg: atk * 0.9, tick: 0.4, tickT: 0, life: 5 * this.durMul, maxLife: 5 * this.durMul, slow: 0 });
+          this.fx.push({ kind: 'explo', x: best.x, y: best.y + 6, t: 0, dur: 0.4 });
+          this.hooks.sfx('fire');
+        }
+      }
+    }
+    if (S('shimian')) {
+      this.stratT.shimian -= dt;
+      if (this.stratT.shimian <= 0) {
+        this.stratT.shimian = 8;
+        const R = 90 * this.areaMul;
+        this.grid.query(p.x, p.y, R + 16, this.tmp);
+        for (const e of this.tmp.slice()) {
+          if (e.dead) continue;
+          const dx = e.x - p.x, dy = e.y - p.y;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d < R + e.r) this.damage(e, atk * 5, dx / d, dy / d, 160);
+        }
+        this.fx.push({ kind: 'drum', x: p.x, y: p.y - 4, t: 0, dur: 0.45, r: R, color: '#c0cbdc' });
+        this.hooks.shake(2);
+        this.hooks.sfx('thrust');
+      }
+    }
+    if (S('wanjian')) {
+      this.stratT.wanjian -= dt;
+      if (this.stratT.wanjian <= 0) {
+        this.stratT.wanjian = 15;
+        const targets = this.enemies.filter((e) => !e.dead && this.inView(e.x, e.y, 10));
+        let shown = 0;
+        for (const e of targets) {
+          const delay = 0.25 + Math.random() * 0.35;
+          if (shown++ < 70) this.fx.push({ kind: 'volley', x: e.x + rand(-4, 4), y: e.y - 4, t: -delay + 0.35, dur: 0.35 });
+          this.later(delay, () => { if (!e.dead) this.damage(e, atk * 7, 0, 1, 30, { force: true }); });
+        }
+        this.later(0.3, () => { this.hooks.shake(3); this.hooks.sfx('explode'); });
+        this.hooks.sfx('shoot');
+        this.fx.push({ kind: 'text', x: p.x, y: p.y - 50, t: 0, dur: 1.2, text: '万箭齐发！', color: '#fee761' });
+      }
+    }
+    if (S('bazhen')) {
+      this.stratT.bazhen -= dt;
+      if (this.stratT.bazhen <= 0) {
+        this.stratT.bazhen = 0.5;
+        const R = this.bazhenR;
+        this.grid.query(p.x, p.y, R + 16, this.tmp);
+        for (const e of this.tmp.slice()) {
+          if (e.dead) continue;
+          if ((e.x - p.x) ** 2 + ((e.y - p.y) * 1.25) ** 2 > (R + e.r) ** 2) continue;
+          if (!e.boss) { e.slow = Math.max(e.slow, 0.5); e.slowT = Math.max(e.slowT, 0.6); }
+          this.damage(e, atk * 1.6, 0, 0, 0, { noCrit: true });
+        }
+      }
+    }
+  }
+
+  /** 每过一个锦囊时间点，敌人血量提高一些，抵消计策带来的战力 */
+  get stratHpMul(): number {
+    return 1 + STRAT_HP_STEP * this.stratRound;
+  }
+
+  /** 八阵图半径 */
+  get bazhenR(): number {
+    return 66 * this.areaMul;
+  }
+
+  /** 借刀杀人：飞出的尸体撞伤沿途敌人 */
+  private updateJiedao() {
+    if (!this.stratSet.has('jiedao')) return;
+    const atk = this.base.atk;
+    const near: Enemy[] = [];
+    for (const f of this.fx) {
+      if (f.kind !== 'corpse' || f.t > 0.45) continue;
+      const x = f.x + f.vx! * f.t, y = f.y + (f.vy! + 60) * f.t;
+      this.grid.query(x, y, 14, near);
+      for (const e of near) {
+        if (e.dead) continue;
+        if ((e.x - x) ** 2 + (e.y - y) ** 2 > (10 + e.r) ** 2) continue;
+        if (!f.hit) f.hit = new Set();
+        if (f.hit.has(e.uid) || f.hit.size >= 3) continue;
+        f.hit.add(e.uid);
+        const vl = Math.hypot(f.vx!, 1) || 1;
+        this.damage(e, atk * 1.4, f.vx! / vl, 0, 60, { noCrit: true, force: true });
+      }
+    }
   }
 
   addWeapon(id: WeaponId) {
@@ -256,7 +474,7 @@ export class Battle {
     p.moving = ml > 0.05 || dashing;
     // 天下无双期间移速提升；其他大招慢动作时赵云以外的武将正常移动
     const moveDt = this.ult && this.ult.kind !== 'dragon' ? rawDt : dt;
-    const spd = this.speed * (this.ult && this.ult.kind === 'whirl' ? 1.5 : 1);
+    const spd = this.speed * (this.ult && this.ult.kind === 'whirl' ? 1.5 : 1) * (this.t < this.ultBuffT ? 1.2 : 1);
     if (dashing) p.anim += rawDt * 16;
     else if (p.moving) {
       p.x += mx * spd * moveDt;
@@ -271,6 +489,8 @@ export class Battle {
     if (this.mirrorT > 0) this.mirrorT -= dt;
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
     if (this.regen > 0) p.hp = Math.min(p.maxHp, p.hp + this.regen * dt);
+    if (this.potionCd > 0) this.potionCd = Math.max(0, this.potionCd - dt);
+    this.updateStrats(dt);
 
     // 网格
     this.grid.clear();
@@ -285,11 +505,28 @@ export class Battle {
     this.updateShots(dt);
     this.updatePickups(dt);
     this.updateBreakables(dt);
+    this.updateJiedao();
     this.updateFx(dt);
 
     // 清理
     if (this.enemies.length > 0 && this.t % 1 < dt) this.enemies = this.enemies.filter((e) => !e.dead);
 
+    if (p.hp <= 0 && !this.dead && this.stratSet.has('jinchan') && !this.jinchanUsed) {
+      // 金蝉脱壳：免死一次
+      this.jinchanUsed = true;
+      p.hp = Math.round(p.maxHp * 0.5);
+      p.iframe = 3;
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const dx = e.x - p.x, dy = e.y - p.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d < 100) { e.kx += (dx / d) * 260; e.ky += (dy / d) * 260; }
+      }
+      this.shots.length = 0;
+      this.fx.push({ kind: 'ring', x: p.x, y: p.y - 8, t: 0, dur: 0.6, r: 90, color: '#fee761' });
+      this.hooks.banner('金蝉脱壳！', '#fee761');
+      this.hooks.sfx('evolve');
+    }
     if (p.hp <= 0 && !this.dead) {
       this.dead = true;
       this.hooks.vibrate(true);
@@ -331,7 +568,7 @@ export class Battle {
     const late = Math.max(0, minute - 4);
     const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
-    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director;
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul;
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -362,7 +599,7 @@ export class Battle {
     e.x = x;
     e.y = y;
     e.r = d.radius;
-    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale);
+    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul);
     e.speed = d.speed;
     e.dmg = d.dmg * this.enemyDmgMul;
     e.mass = 50;
@@ -490,7 +727,7 @@ export class Battle {
     if (e.dead) return false;
     // 屏幕外的敌人打不到：敌人一定会先出现在玩家眼前（大招除外）
     if (!opts.force && !e.boss && !this.canHit(e)) return false;
-    let dmg = base * this.dmgMul;
+    let dmg = base * this.dmgMul * this.dynMul;
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (e.boss) dmg *= 1 + this.base.bossDmg / 100;
     if (e.boss || e.elite) dmg *= 1 + this.eliteDmg;
@@ -562,10 +799,11 @@ export class Battle {
       this.dropPickup('chest', e.x, e.y, 1, false);
       this.dropPickup('magnet', e.x + 12, e.y + 4, 1);
       this.dropGem(e.x + 6, e.y, e.exp);
-      for (let i = 0; i < 3; i++) this.dropPickup('coin', e.x + rand(-10, 10), e.y + rand(-10, 10), 2);
+      for (let i = 0; i < (this.stratSet.has('chenhuo') ? 6 : 3); i++) this.dropPickup('coin', e.x + rand(-10, 10), e.y + rand(-10, 10), 2);
       return;
     }
-    if (Math.random() < 0.035) this.dropPickup('coin', e.x, e.y, 1);
+    if (this.stratSet.has('lianhuan') && Math.random() < 0.2) this.chainQueue.push({ x: e.x, y: e.y });
+    if (Math.random() < (this.stratSet.has('chenhuo') ? 0.07 : 0.035)) this.dropPickup('coin', e.x, e.y, 1);
     // 小兵小概率掉磁石（有冷却，避免刷屏）
     if (this.magnetCd <= 0 && Math.random() < 0.004) { this.dropPickup('magnet', e.x, e.y, 1); this.magnetCd = 25; }
     this.dropGem(e.x, e.y, e.exp);
@@ -780,8 +1018,25 @@ export class Battle {
       if ((s.x - p.x) ** 2 + (s.y - (p.y - 8)) ** 2 < (s.r + p.r * 0.8) ** 2) {
         this.hurtPlayer(s.dmg);
         this.shots.splice(i, 1);
+        if (this.stratSet.has('caochuan') && this.caochuanCd <= 0) this.caochuanVolley();
       }
     }
+  }
+
+  /** 草船借箭：向四周射出箭矢 */
+  private caochuanVolley() {
+    this.caochuanCd = 0.6;
+    const p = this.player;
+    const a0 = rand(TAU);
+    for (let i = 0; i < 8; i++) {
+      const a = a0 + (i / 8) * TAU;
+      const pr = newProjectile('bolt');
+      pr.x = p.x; pr.y = p.y - 8;
+      pr.vx = Math.cos(a) * 260; pr.vy = Math.sin(a) * 260;
+      pr.rot = a; pr.dmg = this.base.atk * 2; pr.pierce = 2; pr.knock = 20; pr.r = 4; pr.life = 1.2;
+      this.projs.push(pr);
+    }
+    this.hooks.sfx('shoot');
   }
 
   // —— 拾取 ——
@@ -945,6 +1200,7 @@ export class Battle {
     this.rage = 0;
     this.rageLock = 18;
     this.ultCasts++;
+    if (this.stratSet.has('guohe')) this.ultBuffT = this.t + 17;
     const kind = this.hero.ult;
     this.hooks.banner(this.hero.ultName.replace('·', ' · '), this.hero.color);
     this.hooks.sfx('evolve');
@@ -1148,6 +1404,20 @@ export class Battle {
     this.hooks.sfx('fire');
   }
 
+  /** 金疮药：回复生命，进入冷却 */
+  usePotion(): boolean {
+    const p = this.player;
+    if (this.potionCd > 0 || this.dead || this.won) return false;
+    const heal = Math.round(p.maxHp * this.potionHeal);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    this.potionCd = this.potionCdMax;
+    this.potionUses++;
+    this.addNum(p.x, p.y - 24, heal, 'g');
+    this.fx.push({ kind: 'ring', x: p.x, y: p.y - 8, t: 0, dur: 0.4, r: 30, color: '#63c74d' });
+    this.hooks.sfx('coin');
+    return true;
+  }
+
   /** 看视频直接充满怒气 */
   fillRage() {
     this.rage = RAGE_MAX;
@@ -1319,6 +1589,7 @@ export class Battle {
     const p = this.player;
     this.dead = false;
     p.hp = p.maxHp;
+    if (this.stratSet.has('qixing')) this.qixingBuff = true;
     p.iframe = 2.5;
     this.hooks.sfx('evolve');
     this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: 120, color: '#fee761' });

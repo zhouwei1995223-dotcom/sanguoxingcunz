@@ -3,6 +3,7 @@ import { EQUIP_BY_ID, QUALITY_COLORS, QUALITY_NAMES, Reward } from '../data/meta
 import type { EquipItem } from '../meta/save';
 import { fmtNum, easeOutBack } from '../core/math';
 import { HERO_BY_ID } from '../data/heroes';
+import { NO_ADS } from '../data/platformConfig';
 
 // 通用界面组件
 
@@ -94,6 +95,8 @@ export function dialogFrame(ui: UI, w: number, h: number, title: string, t = 1, 
 
 /** 看广告按钮 */
 export function adButton(ui: UI, id: string, x: number, y: number, w: number, h: number, label: string, opts: { disabled?: boolean; sub?: string; size?: number } = {}): boolean {
+  // 无广告版本：同一个按钮直接免费领取，不显示视频图标
+  if (NO_ADS) return ui.button(id, x, y, w, h, label, C.btnGreen, opts);
   return ui.button(id, x, y, w, h, label, C.btnGreen, { icon: 'video', ...opts });
 }
 

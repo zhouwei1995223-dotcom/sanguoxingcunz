@@ -9,12 +9,15 @@ import { dayKey, weighted, pick } from '../core/math';
 import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS } from '../data/heroes';
 import { setBonuses, skinOn } from './goals';
 import { SKIN_DMG_BONUS } from '../data/goals';
+import { NO_ADS } from '../data/platformConfig';
 
 // 局外养成的所有操作（纯逻辑，UI 调用）
 
 export interface HeroStats extends Required<StatBlock> {
   revive: number;
   reroll: number;
+  /** 金疮药等级（军略） */
+  potion?: number;
   hero: string;
   /** 已通关章节数（决定局内技能池） */
   cleared?: number;
@@ -62,17 +65,18 @@ export function computeStats(heroId = save.hero): HeroStats {
   for (const st of setBonuses(tids).stats) addStats(s, st);
   // 皮肤加成
   if (skinOn(heroId)) addStats(s, { dmg: SKIN_DMG_BONUS });
-  let revive = 0, reroll = 0;
+  let revive = 0, reroll = 0, potion = 0;
   for (const t of TALENTS) {
     const lv = save.talents[t.id] || 0;
     if (!lv) continue;
     if (t.stat === 'revive') revive += lv * t.per;
     else if (t.stat === 'reroll') reroll += lv * t.per;
+    else if (t.stat === 'potion') potion += lv * t.per;
     else addStats(s, { [t.stat]: lv * t.per });
   }
   const full: HeroStats = {
     atk: 0, hp: 0, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0,
-    revive, reroll, hero: heroId, cleared: save.maxCleared,
+    revive, reroll, potion, hero: heroId, cleared: save.maxCleared,
   };
   addStats(full, s);
   full.atk = Math.round(full.atk);
@@ -446,7 +450,7 @@ export function chestOddsText(): string {
     const total = Object.values(w).reduce((a, b) => a + b, 0);
     return Object.keys(w).map((id) => `${HERO_BY_ID[id].name} ${pct(w[id], total)}`).join('、');
   };
-  const lines: string[] = ['宝箱概率公示', '', '宝箱可使用游戏内元宝开启，或每日观看视频免费开启。元宝只能在游戏内免费获得，不能用人民币购买。', ''];
+  const lines: string[] = ['宝箱概率公示', '', NO_ADS ? '宝箱可使用游戏内元宝开启，或每日免费开启若干次。元宝只能在游戏内免费获得，没有任何付费途径。' : '宝箱可使用游戏内元宝开启，或每日观看视频免费开启。元宝只能在游戏内免费获得，不能用人民币购买。', ''];
   for (const c of CHESTS) {
     const total = c.weights.reduce((a, b) => a + b, 0);
     lines.push(`【${c.name}】`);

@@ -16,6 +16,8 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer } from '../ui/guide';
+import { NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier } from '../data/strategies';
 
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
@@ -181,6 +183,83 @@ export class LevelUpDialog implements Dialog {
   t?: number;
 }
 
+const ROUND_NAMES = ['第一计', '第二计', '第三计'];
+
+/** 锦囊妙计：三选一，本局生效 */
+export class StrategyDialog implements Dialog {
+  t?: number;
+  private choices: StratId[];
+  private freeRerolls = 1;
+  private adRerolled = false;
+  constructor(private scene: BattleScene, private tier: StratTier, private round: number) {
+    this.choices = scene.battle.rollStrats(tier);
+  }
+  draw(ui: UI) {
+    const u = ui.u;
+    const b = this.scene.battle;
+    const t = this.t || 0;
+    const col = TIER_COLORS[this.tier];
+    const top = ui.H * 0.17;
+    ui.ribbon(ui.W / 2, top, 440 * u, `锦囊妙计 · ${ROUND_NAMES[this.round] || '奇谋'}`, this.tier === 2 ? '#7a2a78' : this.tier === 1 ? '#a2611a' : '#124e89');
+    ui.text(`本次为「${TIER_NAMES[this.tier]}」 · 三选一，本局生效`, ui.W / 2, top + 62 * u, 26, col);
+    const cw = ui.W - 70 * u, ch = 200 * u;
+    let y = top + 104 * u;
+    for (let i = 0; i < this.choices.length; i++) {
+      const d = STRAT_BY_ID[this.choices[i]];
+      const k = Math.max(0, Math.min(1, (t - i * 0.08) * 4));
+      const x = ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
+      if (this.stratCard(ui, 'strat_' + i, d.id, x, y, cw, ch) && t > 0.3) {
+        b.applyStrat(d.id);
+        return false;
+      }
+      y += ch + 18 * u;
+    }
+    const bh = 92 * u, bw = 320 * u;
+    y += 10 * u;
+    if (this.freeRerolls > 0) {
+      if (ui.button('strat_reroll', ui.W / 2 - bw / 2, y, bw, bh, `免费刷新(${this.freeRerolls})`, C.btnBlue)) {
+        this.freeRerolls--;
+        this.reroll();
+      }
+    } else if (!NO_ADS && adButton(ui, 'strat_reroll_ad', ui.W / 2 - bw / 2, y, bw, bh, '刷新', { disabled: this.adRerolled, sub: this.adRerolled ? '本计已刷新' : '每计可再刷新1次' })) {
+      getPlatform().showRewardedAd('strat_reroll').then((ok) => {
+        if (!ok) return;
+        this.adRerolled = true;
+        progressTask('ad', 1);
+        this.reroll();
+      });
+    }
+    if (b.strats.length) {
+      const names = b.strats.map((id) => STRAT_BY_ID[id].name).join('、');
+      ui.text('已有：' + names, ui.W / 2, y + bh + 40 * u, 22, C.textDim);
+    }
+  }
+  private reroll() {
+    this.choices = this.scene.battle.rollStrats(this.tier);
+    this.t = 0.15;
+    playSfx('click');
+  }
+  private stratCard(ui: UI, id: string, sid: StratId, x: number, y: number, w: number, h: number): boolean {
+    const u = ui.u;
+    const d = STRAT_BY_ID[sid];
+    const pressed = ui.isPressed(id);
+    const off = pressed ? 4 * u : 0;
+    // 神机：边框流光
+    const border = d.tier === 2 ? `hsl(${(ui.time * 120) % 360},80%,65%)` : TIER_COLORS[d.tier];
+    ui.pixRect(x, y + off, w, h, '#120d0c');
+    ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
+    ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, d.tier === 2 ? '#3a2240' : d.tier === 1 ? '#4a3418' : '#1f2c40');
+    const isz = h - 60 * u;
+    ui.qualityFrame(x + 20 * u, y + 30 * u + off, isz, border);
+    ui.icon('jinnang', x + 20 * u + isz / 2, y + 30 * u + isz / 2 + off, isz * 0.66);
+    const tx = x + 40 * u + isz;
+    ui.text(d.name, tx, y + 48 * u + off, 34, '#fff4d6', 'left');
+    tag(ui, tx + ui.measure(d.name, 34) + 14 * u, y + 32 * u + off, TIER_NAMES[d.tier], d.tier === 2 ? '#9b3a96' : d.tier === 1 ? '#c96d17' : '#0b6fa8');
+    ui.wrapText(d.desc, tx, y + 80 * u + off, w - (tx - x) - 24 * u, 26, '#d9c6a0');
+    return ui.clicked(id, x, y, w, h);
+  }
+}
+
 export class ChestDialog implements Dialog {
   private opened = false;
   constructor(private scene: BattleScene, private rewards: Choice[]) {}
@@ -262,7 +341,7 @@ export class PauseDialog implements Dialog {
   draw(ui: UI) {
     const u = ui.u;
     const b = this.scene.battle;
-    const w = ui.W - 60 * u, h = 980 * u;
+    const w = ui.W - 60 * u, h = 1040 * u;
     const f = dialogFrame(ui, w, h, '暂停', this.t);
     let y = f.y + 70 * u;
     const x = f.x + 40 * u;
@@ -287,7 +366,18 @@ export class PauseDialog implements Dialog {
       ui.text(`${ps.lv}/${passiveMax(ps.id)}`, ix + isz / 2, y + isz + 18 * u, 18, '#fff');
     });
     if (!b.passives.length) ui.text('尚未习得兵法', x, y + 30 * u, 22, C.textDim, 'left');
-    y += isz + 56 * u;
+    y += isz + 44 * u;
+    // 锦囊
+    ui.text('锦囊', x, y, 26, C.gold, 'left');
+    if (b.strats.length) {
+      let sx = x + 70 * u;
+      for (const id of b.strats) {
+        const d = STRAT_BY_ID[id];
+        ui.text(d.name, sx, y, 22, TIER_COLORS[d.tier], 'left');
+        sx += ui.measure(d.name, 22) + 24 * u;
+      }
+    } else ui.text('2:00、5:00、7:30 各获得一条计策', x + 70 * u, y, 20, C.textDim, 'left');
+    y += 56 * u;
     // 进化表
     if (ui.button('p_evo', ui.W / 2 - 180 * u, y - 30 * u, 360 * u, 64 * u, '查看进化表', C.btnGreen, { size: 24 })) game.openDialog(new EvoTableDialog(b));
     y += 60 * u;
@@ -337,10 +427,24 @@ export class ReviveDialog implements Dialog {
     const bw = w - 120 * u;
     const bx = ui.W / 2 - bw / 2;
     if (b.revives > 0) {
-      if (ui.button('rv_free', bx, y, bw, 96 * u, `不屈复活（${b.revives}）`, C.btnGold)) {
+      if (ui.button('rv_free', bx, y, bw, 96 * u, `免费复活（${b.revives}）`, C.btnGold)) {
         b.revives--;
         this.scene.revive();
         return false;
+      }
+      y += 116 * u;
+    } else if (!b.adReviveUsed && NO_ADS) {
+      // 无广告版本：花元宝复活（每局一次）
+      const cost = NO_ADS_PRICE.revive;
+      if (ui.button('rv_yb', bx, y, bw, 96 * u, `${cost}元宝复活`, save.yuanbao >= cost ? C.btnGold : C.btnGray, { icon: 'yuanbao' })) {
+        if (save.yuanbao < cost) ui.toast(`元宝不足（拥有${save.yuanbao}）`);
+        else {
+          save.yuanbao -= cost;
+          b.adReviveUsed = true;
+          markDirty();
+          this.scene.revive();
+          return false;
+        }
       }
       y += 116 * u;
     } else if (!b.adReviveUsed) {
@@ -460,7 +564,7 @@ export class ResultDialog implements Dialog {
     y += entries.length > 5 ? 380 * u : 210 * u;
     const bw = w - 140 * u;
     const bx = ui.W / 2 - bw / 2;
-    if (!this.doubled) {
+    if (!this.doubled && !NO_ADS) {
       if (adButton(ui, 'res_double', bx, y, bw, 100 * u, '双倍领取', { sub: '金币与玄铁翻倍' }) && !this.busy) {
         this.busy = true;
         getPlatform().showRewardedAd('result_double').then((ok) => {
@@ -490,7 +594,7 @@ export class ResultDialog implements Dialog {
       }
       y += 104 * u;
     }
-    if (ui.button('res_ok', bx, y, bw, 96 * u, this.doubled ? '收下' : '直接领取', this.doubled ? C.btnGold : C.btnGray) && t > 0.6) {
+    if (ui.button('res_ok', bx, y, bw, 96 * u, this.doubled || NO_ADS ? '收下' : '直接领取', this.doubled || NO_ADS ? C.btnGold : C.btnGray) && t > 0.6) {
       // 非首局且未看广告时偶尔展示插屏
       if (!this.doubled && save.stats.runs > 2 && save.stats.runs % 2 === 0) getPlatform().showInterstitialAd();
       playBgm('bgm_home');

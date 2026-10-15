@@ -13,15 +13,17 @@ import { setFirstBoss } from '../battle/spawner';
 import type { WeaponId } from '../data/skills';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
 import { BossDef } from '../data/enemies';
+import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
 import { computeStats } from '../meta/ops';
 import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog } from './battleDialogs';
+import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
+import { NO_ADS } from '../data/platformConfig';
 
 export class BattleScene implements Scene {
   battle!: Battle;
@@ -123,6 +125,8 @@ export class BattleScene implements Scene {
       if (this.joyId !== null) {
         const ub = this.ultBtn;
         if (ub && Math.hypot(t.x - ub.x, t.y - ub.y) < ub.r * 1.1) this.pressUlt();
+        const pb = this.potionBtn;
+        if (pb && Math.hypot(t.x - pb.x, t.y - pb.y) < pb.r * 1.15) this.pressPotion();
         return;
       }
       if (game.ui.touchBlocked(t.x, t.y)) return;
@@ -180,6 +184,7 @@ export class BattleScene implements Scene {
       else for (let i = 0; i < DEBUG.speed && !b.dead && !b.won; i++) b.update(dt * this.speedMul);
       const keys = (typeof window !== 'undefined' && (window as any).__keys) || null;
       if (keys && keys[' ']) this.tryUlt();
+      if (keys && keys['q'] && b.potionCd <= 0) this.pressPotion();
       save.stats.playSec += dt;
       this.tutorialT += dt;
       this.adaptDensity(dt);
@@ -197,6 +202,10 @@ export class BattleScene implements Scene {
         }
       } else if (b.ult) {
         // 大招期间不弹窗，结束后再处理升级与宝箱
+      } else if (b.pendingStrats.length) {
+        const st = b.pendingStrats.shift()!;
+        playSfx('chest');
+        game.openDialog(new StrategyDialog(this, st.tier, st.round));
       } else if (b.pendingChests.length) {
         const c = b.pendingChests.shift()!;
         game.openDialog(new ChestDialog(this, b.rollChest(c.boss)));
@@ -230,6 +239,7 @@ export class BattleScene implements Scene {
 
   /** 测试用：直接打开指定选项的升级弹窗 / 进化表 */
   openLevelUpForTest(choices: Choice[]) { game.openDialog(new LevelUpDialog(this, choices)); }
+  openStrategyForTest(tier: 0 | 1 | 2, round = 0) { game.openDialog(new StrategyDialog(this, tier, round)); }
   openEvoTableForTest() { game.openDialog(new EvoTableDialog(this.battle)); }
   pauseForTest() { game.openDialog(new PauseDialog(this)); }
 
@@ -306,6 +316,15 @@ export class BattleScene implements Scene {
     ui.panel(px, py, ps, ps, 'dark');
     ui.icon('pause', px + ps / 2, py + ps / 2, 30 * u);
 
+    // 已获得的锦囊
+    b.strats.forEach((id, i) => {
+      const d = STRAT_BY_ID[id];
+      const ty = py + ps + 24 * u + i * 32 * u;
+      const tw = ui.measure(d.name, 20) + 16 * u;
+      ui.pixRect(ui.W - 20 * u - tw, ty - 14 * u, tw + 8 * u, 28 * u, 'rgba(10,6,8,0.55)');
+      ui.text(d.name, ui.W - 16 * u, ty, 20, TIER_COLORS[d.tier], 'right');
+    });
+
     // 已拥有技能
     let ix = 18 * u;
     const iy = top + 136 * u;
@@ -369,6 +388,7 @@ export class BattleScene implements Scene {
     }
     this.drawCombo(dt);
     this.drawUltButton();
+    this.drawPotionButton();
 
     // 新手提示
     if (save.guide === 0 && this.tutorialT < 9 && !game.dialogs.length) {
@@ -377,6 +397,55 @@ export class BattleScene implements Scene {
   }
 
   private ultBtn: { x: number; y: number; r: number } | null = null;
+  private potionBtn: { x: number; y: number; r: number } | null = null;
+
+  private pressPotion() {
+    const b = this.battle;
+    if (b.usePotion()) { vibrate(); return; }
+    if (b.potionCd > 0) game.ui.toast(`金疮药冷却中（${Math.ceil(b.potionCd)}秒）`);
+  }
+
+  /** 金疮药按钮：放在大招按钮旁边，转圈显示冷却 */
+  private drawPotionButton() {
+    const ui = game.ui;
+    const u = ui.u;
+    const b = this.battle;
+    const ub = this.ultBtn;
+    if (!ub) return;
+    const g = ui.ctx;
+    const r = 52 * u;
+    const right = save.settings.ultRight;
+    const cx = right ? ub.x - ub.r - 26 * u - r : ub.x + ub.r + 26 * u + r;
+    const cy = ub.y + ub.r - r;
+    this.potionBtn = { x: cx, y: cy, r };
+    const ready = b.potionCd <= 0;
+    const low = b.player.hp < b.player.maxHp * 0.4;
+    if (ready && low) {
+      // 血量低且药已就绪：发光提示
+      const glow = g.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 1.6);
+      glow.addColorStop(0, 'rgba(99,199,77,0.6)');
+      glow.addColorStop(1, 'rgba(99,199,77,0)');
+      g.fillStyle = glow;
+      g.beginPath(); g.arc(cx, cy, r * (1.5 + 0.12 * Math.sin(ui.time * 9)), 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = 'rgba(12,8,16,0.75)';
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 6 * u;
+    g.strokeStyle = ready ? '#63c74d' : '#3a2c2a';
+    g.beginPath(); g.arc(cx, cy, r - 4 * u, 0, Math.PI * 2); g.stroke();
+    if (!ready) {
+      g.strokeStyle = '#5a6988';
+      g.beginPath(); g.arc(cx, cy, r - 4 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - b.potionCd / b.potionCdMax)); g.stroke();
+    }
+    ui.icon('potion', cx, cy - 6 * u, r * 1.05, ready ? 1 : 0.4);
+    if (ready) ui.text('金疮药', cx, cy + r * 0.62, 20, '#9be37a', 'center', '#10200c');
+    else ui.text(`${Math.ceil(b.potionCd)}s`, cx, cy + r * 0.62, 22, '#c0cbdc');
+    if (ui.clicked('potion_btn', cx - r, cy - r, r * 2, r * 2, false)) this.pressPotion();
+    // 新手提示：第一次血量偏低时提醒可以喝药
+    if (ready && low && b.potionUses === 0 && save.stats.runs < 5 && !game.dialogs.length && !b.dead) {
+      guideHint(ui, '生命偏低！点击「金疮药」回复生命', cy - r - 250 * u);
+    }
+  }
 
   private pressUlt() {
     const b = this.battle;
@@ -444,7 +513,7 @@ export class BattleScene implements Scene {
     else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#fff');
     if (ui.clicked('ult_btn', cx - r, cy - r, r * 2, r * 2, false)) this.pressUlt();
     // 看视频充满怒气（每局 2 次）
-    if (!full && !b.ult && b.adRageUsed < 2) {
+    if (!full && !b.ult && b.adRageUsed < 2 && !NO_ADS) {
       const bw = 150 * u, bh = 64 * u;
       if (ui.button('ult_ad', cx - bw / 2, cy - r - bh - 16 * u, bw, bh, '充满', C.btnGreen, { icon: 'video', size: 22 })) {
         getPlatform().showRewardedAd('rage_fill').then((ok) => {

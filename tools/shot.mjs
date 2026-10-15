@@ -9,7 +9,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = path.resolve('dist/web');
+const root = path.resolve(process.env.ROOT || 'dist/web');
 const server = http.createServer((req, res) => {
   let p = path.join(root, decodeURIComponent(req.url.split('?')[0]));
   if (p.endsWith('/')) p += 'index.html';

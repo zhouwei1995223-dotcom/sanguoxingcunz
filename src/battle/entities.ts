@@ -170,7 +170,7 @@ export interface Breakable {
 }
 
 export interface Fx {
-  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum';
+  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum' | 'volley';
   x: number;
   y: number;
   t: number;
@@ -190,6 +190,8 @@ export interface Fx {
   scale?: number;
   /** 闪电折线顶点 x0,y0,x1,y1... */
   pts?: number[];
+  /** 借刀杀人：这具尸体已经撞过的敌人 */
+  hit?: Set<number>;
 }
 
 /** 首领技能预警 */

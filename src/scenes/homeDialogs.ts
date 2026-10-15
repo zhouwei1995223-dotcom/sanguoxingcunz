@@ -17,7 +17,7 @@ import { isCleared, getBest, chapterOpen } from '../meta/run';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
-import { GAME_INFO, SUBSCRIBE_CONFIG } from '../data/platformConfig';
+import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -89,12 +89,12 @@ export class SigninDialog implements Dialog {
     const by = f.y + h - 170 * u;
     const bw = (w - 120 * u) / 2;
     if (can) {
-      if (ui.button('si_claim', f.x + 40 * u, by, bw, 100 * u, '签到', C.btnGold)) {
+      if (ui.button('si_claim', NO_ADS ? ui.W / 2 - bw / 2 : f.x + 40 * u, by, bw, 100 * u, '签到', C.btnGold)) {
         const g = doSignin(1);
         if (g) game.openDialog(new RewardDialog('签到奖励', g));
         flushSave(true);
       }
-      if (adButton(ui, 'si_double', f.x + 80 * u + bw, by, bw, 100 * u, '双倍签到') && !this.busy) {
+      if (!NO_ADS && adButton(ui, 'si_double', f.x + 80 * u + bw, by, bw, 100 * u, '双倍签到') && !this.busy) {
         this.busy = true;
         getPlatform().showRewardedAd('signin_double').then((ok) => {
           this.busy = false;
@@ -188,13 +188,13 @@ export class PatrolDialog implements Dialog {
     const bw = (w - 120 * u) / 2;
     const by = f.y + 650 * u;
     const can = p.minutes >= PATROL.minMinutes;
-    if (ui.button('pt_collect', f.x + 40 * u, by, bw, 100 * u, '领取', C.btnGold, { disabled: !can })) {
+    if (ui.button('pt_collect', NO_ADS ? ui.W / 2 - bw / 2 : f.x + 40 * u, by, bw, 100 * u, '领取', C.btnGold, { disabled: !can })) {
       collectPatrol(1);
       playSfx('coin');
       flushSave(true);
       ui.toast(`获得金币×${fmtNum(p.gold)} 玄铁×${p.iron}`);
     }
-    if (adButton(ui, 'pt_double', f.x + 80 * u + bw, by, bw, 100 * u, '双倍领取', { disabled: !can }) && !this.busy) {
+    if (!NO_ADS && adButton(ui, 'pt_double', f.x + 80 * u + bw, by, bw, 100 * u, '双倍领取', { disabled: !can }) && !this.busy) {
       this.busy = true;
       getPlatform().showRewardedAd('patrol_double').then((ok) => {
         this.busy = false;

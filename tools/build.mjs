@@ -1,4 +1,4 @@
-// 构建：输出 dist/web（浏览器试玩）、dist/wechat（微信小游戏）、dist/douyin（抖音小游戏）
+// 构建：输出 dist/web（浏览器试玩）、dist/wechat（微信小游戏）、dist/douyin（抖音小游戏）、dist/xhs（小红书小工具，离线 H5、无广告）
 import { build, context } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -84,6 +84,25 @@ function writeShells() {
     condition: {},
   }, null, 2));
   copyDir('assets', 'dist/douyin/assets');
+
+  // 小红书小工具：index.html 必须在 zip 根目录；不能有内联脚本、外部资源和音频文件（音效运行时合成）
+  fs.rmSync('dist/xhs', { recursive: true, force: true });
+  fs.mkdirSync('dist/xhs', { recursive: true });
+  fs.writeFileSync('dist/xhs/index.html', `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>长坂单骑传</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body>
+  <script src="./game.js"></script>
+</body>
+</html>
+`);
 }
 
 writeShells();
@@ -91,6 +110,7 @@ const outs = [
   { ...common, outfile: 'dist/web/game.js', define: { 'process.env.TARGET': '"web"' } },
   { ...common, outfile: 'dist/wechat/game.js', define: { 'process.env.TARGET': '"wx"' } },
   { ...common, outfile: 'dist/douyin/game.js', define: { 'process.env.TARGET': '"tt"' } },
+  { ...common, outfile: 'dist/xhs/game.js', define: { 'process.env.TARGET': '"xhs"' } },
 ];
 if (watch) {
   const ctx = await context(outs[0]);
@@ -98,7 +118,7 @@ if (watch) {
   console.log('watching… 浏览器打开 dist/web/index.html（需本地服务器，如 npx http-server dist/web）');
 } else {
   for (const o of outs) await build(o);
-  for (const d of ['web', 'wechat', 'douyin']) {
+  for (const d of ['web', 'wechat', 'douyin', 'xhs']) {
     let total = 0;
     const walk = (p) => { for (const f of fs.readdirSync(p)) { const s = path.join(p, f); if (fs.statSync(s).isDirectory()) walk(s); else total += fs.statSync(s).size; } };
     walk('dist/' + d);

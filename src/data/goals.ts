@@ -1,3 +1,4 @@
+import { NO_ADS } from './platformConfig';
 import type { Reward, StatBlock } from './meta';
 
 // 成就、新手七日目标、每周挑战、武将皮肤、装备套装
@@ -57,7 +58,7 @@ export const NEWBIE_DAYS: GoalDef[][] = [
   ],
   [
     { id: 'n4a', name: '拥有2名武将', metric: 'heroesOwned', target: 2, reward: { shards: { hero: 'zhuge', n: 5 } } },
-    { id: 'n4b', name: '观看3次视频', metric: 'ads', target: 3, reward: { yuanbao: 60 } },
+    { id: 'n4b', name: NO_ADS ? '领取3次免费福利' : '观看3次视频', metric: 'ads', target: 3, reward: { yuanbao: 60 } },
     { id: 'n4c', name: '进化1次神兵', metric: 'evos', target: 1, reward: { iron: 20 } },
   ],
   [

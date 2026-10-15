@@ -1,6 +1,7 @@
 import type { Platform } from './types';
 import { createWebPlatform } from './web';
 import { createMiniGamePlatform } from './minigame';
+import { NO_ADS } from '../data/platformConfig';
 
 declare const wx: any;
 declare const tt: any;
@@ -12,6 +13,11 @@ export function getPlatform(): Platform {
   if (typeof tt !== 'undefined' && tt.createCanvas) instance = createMiniGamePlatform('tt');
   else if (typeof wx !== 'undefined' && wx.createCanvas) instance = createMiniGamePlatform('wx');
   else instance = createWebPlatform();
+  if (NO_ADS) {
+    // 无广告版本：所有「看视频」直接发放奖励
+    instance.showRewardedAd = () => Promise.resolve(true);
+    instance.showInterstitialAd = () => {};
+  }
   // 所有激励视频统一上报（点位、是否看完）
   const p = instance;
   const raw = p.showRewardedAd.bind(p);
