@@ -63,7 +63,7 @@ function writeShells() {
     setting: { urlCheck: false, es6: true, enhance: true, postcss: false, minified: true, minifyWXSS: true },
     compileType: 'game',
     cloudfunctionRoot: 'cloudfunctions/',
-    libVersion: '3.3.4',
+    libVersion: '3.17.5', // 开发者工具调试用的基础库版本，与工具里的 project.private.config.json 保持一致
     appid: WX_APPID,
     projectname: 'sanguo-xingcun',
     condition: {},
