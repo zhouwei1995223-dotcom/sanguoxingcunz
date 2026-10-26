@@ -1,9 +1,9 @@
-// 生成小游戏头像：像素赵云 + 夕阳背景，输出 dist/icon_144.png / dist/icon_512.png
+// 生成小游戏头像：像素赵云 + 夕阳背景，输出 dist/icon_600.png（抖音）/ dist/icon_512.png / dist/icon_144.png（微信）
 import fs from 'node:fs';
 export default async function ({ page, wait }) {
   await page.waitForFunction(() => window.__game && window.__atlas && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(300);
-  for (const S of [512, 144]) {
+  for (const S of [600, 512, 144]) {
     const data = await page.evaluate((S) => {
       const { sprite } = window.__atlas;
       const c = document.createElement('canvas');
