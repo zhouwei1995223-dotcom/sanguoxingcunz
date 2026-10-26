@@ -1,5 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { IS_XHS, IS_OFFLINE_H5 } from '../data/platformConfig';
+import { IS_XHS } from '../data/platformConfig';
 
 // 浏览器实现：用于开发调试与验收。广告用 2 秒模拟弹窗代替。
 
@@ -148,8 +148,8 @@ export function createWebPlatform(): Platform {
     share(title) { showToast('分享：' + title); },
     onShow(cb) { showListeners.push(cb); },
     onHide(cb) { hideListeners.push(cb); },
-    supportsSidebar() { return !IS_OFFLINE_H5 && /sidebar/.test(location.search); },
-    isFromSidebar() { return !IS_OFFLINE_H5 && /fromSidebar/.test(location.search); },
+    supportsSidebar() { return /sidebar/.test(location.search); },
+    isFromSidebar() { return /fromSidebar/.test(location.search); },
     navigateToSidebar() { showToast('（模拟）前往侧边栏'); },
     supportsAddShortcut() { return false; },
     addShortcut() { return Promise.resolve(false); },
@@ -160,7 +160,7 @@ export function createWebPlatform(): Platform {
     showNativeRank() {},
     showToast,
     // 浏览器：?cloud=1 时用另一个本地键模拟云存档，方便测试同步逻辑
-    cloudReady() { return !IS_OFFLINE_H5 && /cloud=1/.test(location.search); },
+    cloudReady() { return /cloud=1/.test(location.search); },
     cloudLoad() {
       try { const v = localStorage.getItem('sgxc_cloud'); return Promise.resolve(v ? JSON.parse(v) : null); } catch (e) { return Promise.resolve(null); }
     },

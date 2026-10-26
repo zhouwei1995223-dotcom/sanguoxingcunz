@@ -4,7 +4,6 @@ import { LoadingScene } from './scenes/loadingScene';
 import { flushSave } from './meta/save';
 import { cloudPush } from './meta/cloud';
 import { unlockAudio } from './audio/sound';
-import { IS_TAPTAP } from './data/platformConfig';
 
 // 入口：微信 / 抖音的 game.js 与浏览器 index.html 共用
 
@@ -23,9 +22,9 @@ p.onTouch((k) => {
 });
 
 // 浏览器下暴露给自动化测试
-if (p.name === 'web' && (!IS_TAPTAP || location.hostname === 'localhost')) {
+if (p.name === 'web') {
   (window as any).__game = game;
   import('./meta/save').then((m) => { (window as any).__saveMod = m; });
   import('./gfx/atlas').then((m) => { (window as any).__atlas = m; });
-  import('./meta/cloud').then((m) => { (window as any).__cloudMod = m; });
 }
+if (p.name === 'web') import('./meta/cloud').then((m) => { (window as any).__cloudMod = m; });

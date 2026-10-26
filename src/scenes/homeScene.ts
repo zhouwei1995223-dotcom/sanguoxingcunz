@@ -28,7 +28,7 @@ import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
-import { GAME_INFO, IS_OFFLINE_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { GAME_INFO, IS_XHS, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 
 type Tab = 'shop' | 'equip' | 'battle' | 'talent' | 'hero';
 const TABS: { id: Tab; name: string; icon: string }[] = [
@@ -194,10 +194,10 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
-      { id: 'rank', icon: 'trophy', label: IS_OFFLINE_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
+      { id: 'rank', icon: 'trophy', label: IS_XHS ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
       { id: 'settings', icon: 'gear', label: '设置', dot: false, on: () => game.openDialog(new SettingsDialog()) },
-      ...(IS_OFFLINE_H5 ? [] : [{ id: 'share', icon: 'share', label: '分享', dot: false, on: () => getPlatform().share('长坂坡七进七出，你能撑过几分钟？') }]),
+      ...(IS_XHS ? [] : [{ id: 'share', icon: 'share', label: '分享', dot: false, on: () => getPlatform().share('长坂坡七进七出，你能撑过几分钟？') }]),
     ];
     if (getPlatform().supportsSidebar() || getPlatform().name === 'tt') sideR.push({ id: 'sidebar', icon: 'sidebar', label: '侧边栏', dot: !save.daily.sidebar, on: () => game.openDialog(new SidebarDialog()) });
     const bs = 84 * u;

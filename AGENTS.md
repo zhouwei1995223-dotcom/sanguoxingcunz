@@ -6,22 +6,20 @@
 ## 和用户协作的约定
 - 用中文回复。用户不写代码，负责真机测试和平台后台操作；你负责开发、打包、指导后台步骤。
 - 每次改动都提交并推送；没要求就不要开 PR。
-- 角色美术先交付造型和动画预览，用户确认后再接入游戏（用户 2026-10-15 明确要求）。当前赵云、关羽的新造型均为独立预览，见 `docs/art/`；不要在本人确认前导入正式图集。
 - 用户发截图提问时，先看截图里平台的实际要求再回答，不要凭记忆。
 - 诚信底线：不替用户签署不真实的声明（例如软著申请里的「未使用 AI 开发编写代码」承诺——本项目代码由 AI 编写，不能签）；不要让用户发身份证照片、验证码。
 
 ## 技术栈与命令
 - TypeScript + esbuild，打成 IIFE；美术全部由代码生成（字符画像素图），音效 / 音乐由代码合成。
-- `npm run build`：输出 `dist/web`（浏览器试玩）、`dist/wechat`、`dist/douyin`、`dist/xhs`（小红书小工具，无广告）、`dist/taptap`（TapTap H5 无广告试玩）
+- `npm run build`：输出 `dist/web`（浏览器试玩）、`dist/wechat`、`dist/douyin`、`dist/xhs`（小红书小工具，无广告）
 - `npm run typecheck`；`npm run sim -- <章> 0 0 <局数>`（配合环境变量 `HERO`、`POWER`、`DIFF`、`NOPOTION`、`NOSTRAT`、`FORCE=<计策id>`）
 - 胜率矩阵：`tools/balfull.sh "3 6" 0.85 16`；单条计策强度：`tools/stratpower.sh 6 0.75 6`
 - 自动试玩截图：`Q='?skip=1' node tools/shot.mjs <脚本名>`（脚本在 `tools/shots/`；`ROOT=dist/xhs` 测小红书版）。`?skip=1` 跳过隐私弹窗和新手引导。
   - 已知：`heroes` 脚本会报 `this.scene.update is not a function`，是测试脚本的问题，不是游戏 bug；`modes` 需要 `Q='?skip=1&ch=4&rich=1'`；`newbie` 不要带 skip。
 - 打包 zip（根目录，zip 已在 .gitignore）：`cd dist/wechat && zip -qr ../../长坂单骑传-微信-提审版v1.0.0.zip .`，抖音、小红书同理。
-- TapTap H5 ZIP 要保留英文目录一层：`cd dist && zip -qr ../长坂单骑传-TapTap-无广告试玩版-v1.0.0.zip taptap`；不要用小红书的根目录结构。`ROOT=dist/taptap Q='?skip=1&rich=1' node tools/shot.mjs taptap` 验证无广告和本机存档；Windows 可用 `BROWSER_CHANNEL=msedge`。测试脚本失败或浏览器报错会返回非零退出码。
 
 ## 代码结构要点
-- `src/platform/`：平台抽象（web / 微信 / 抖音）。`src/data/platformConfig.ts`：AppID 之外的上架配置、`IS_XHS` / `IS_TAPTAP` / `IS_OFFLINE_H5` / `NO_ADS` 开关、兑换码、广告位 ID（目前为空，没开流量主时激励视频直接发奖励）。
+- `src/platform/`：平台抽象（web / 微信 / 抖音）。`src/data/platformConfig.ts`：AppID 之外的上架配置、`IS_XHS` / `NO_ADS` 开关、兑换码、广告位 ID（目前为空，没开流量主时激励视频直接发奖励）。
 - `src/battle/battle.ts`：战斗核心（伤害只对屏幕内敌人生效、动态难度 director、锦囊、金疮药）。`weapons.ts` 武器行为，`spawner.ts` 刷怪。
 - `src/data/`：数值配置。`skills.ts` 武器 / 兵法 / 武将专属联动；`strategies.ts` 锦囊妙计；`meta.ts` 养成、军略（含金疮药 `POTION`）；`chapters.ts` 章节与推荐战力。
 - `src/audio/synth.ts`：合成器；`tools/gen-audio.mjs` 用它导出 mp3 给微信 / 抖音，小红书版在运行时调用它（小红书包里不能放音频文件）。
@@ -38,4 +36,4 @@
 - **微信（主力，靠激励视频广告变现）**：AppID `wx483a0ed3065a3de6`。小游戏备案第二次提交后等结果；微信认证已提交。之后：小程序备案 → 用开发者工具上传 `dist/wechat`（版本 1.0.0）→ 版本管理提交审核 → 开流量主，把广告位 ID 填进 `AD_CONFIG` → 备案号填 `GAME_INFO.icp`。不开云存档和订阅提醒（用户决定）；兑换码保留现有 3 个。
 - **抖音**：要软著才能上架，用户在问客服能否如实申报 AI 开发；`TT_APPID` 还是 `testappid`，要新建「长坂单骑传」小游戏后换成正式 AppID。用户有三国内容账号，计划用视频挂载小游戏引流；没上线前可先用「发行人计划」挂别人的游戏。
 - **小红书**：`长坂单骑传-小红书.zip` 已交付，待用户在创服平台模拟器和安卓 / iPhone 真机验证（声音、触控、存档）。
-- **TapTap**：H5 无广告试玩版已完成，`dist/taptap`，v1.0.0、竖屏、运行时合成音频和本机存档；免费福利/元宝规则沿用小红书版。已核对官方 H5 上传实现和目录结构，完整来源、大小限制的不确定口径、SDK 适用范围与后台步骤在 `docs/TapTap-H5试玩版.md`。ZIP 内必须有单层 `taptap/` 目录，不同于小红书。未上传或提审，待用户确认后台 H5 发布形态和对应资质，并在安卓/iPhone TapTap 容器真机自测；“试玩版”不自动豁免资质。
+- **TapTap**：没有版号只能以「试玩版」上线、不能内购；打算用无广告的 H5 版（类似小红书版）以试玩版上架。还没查到 TapTap 对 H5 包的具体要求（文件结构、大小、是否需要接入 SDK），下一步先读 developer.taptap.cn 的小游戏文档，再打 TapTap 专用包。

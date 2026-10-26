@@ -1,4 +1,4 @@
-// 构建：浏览器、微信、抖音、小红书小工具、TapTap H5 无广告试玩版
+// 构建：输出 dist/web（浏览器试玩）、dist/wechat（微信小游戏）、dist/douyin（抖音小游戏）、dist/xhs（小红书小工具，离线 H5、无广告）
 import { build, context } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -103,12 +103,6 @@ function writeShells() {
 </body>
 </html>
 `);
-
-  // TapTap H5：构建目录内直接包含 index.html；上传 ZIP 时外包一层英文目录 taptap。
-  // 无广告 / 无账号 SDK，复用离线 H5 的运行时合成音频，无需外部资源。
-  fs.mkdirSync('dist/taptap', { recursive: true });
-  fs.writeFileSync('dist/taptap/index.html', fs.readFileSync('dist/xhs/index.html', 'utf8')
-    .replace('<title>长坂单骑传</title>', '<title>长坂单骑传 · TapTap 试玩版</title>\n  <link rel="icon" href="data:," />'));
 }
 
 writeShells();
@@ -117,7 +111,6 @@ const outs = [
   { ...common, outfile: 'dist/wechat/game.js', define: { 'process.env.TARGET': '"wx"' } },
   { ...common, outfile: 'dist/douyin/game.js', define: { 'process.env.TARGET': '"tt"' } },
   { ...common, target: ['es2017', 'chrome61'], outfile: 'dist/xhs/game.js', define: { 'process.env.TARGET': '"xhs"' } },
-  { ...common, target: ['es2017', 'chrome61'], outfile: 'dist/taptap/game.js', define: { 'process.env.TARGET': '"taptap"' } },
 ];
 if (watch) {
   const ctx = await context(outs[0]);
@@ -125,7 +118,7 @@ if (watch) {
   console.log('watching… 浏览器打开 dist/web/index.html（需本地服务器，如 npx http-server dist/web）');
 } else {
   for (const o of outs) await build(o);
-  for (const d of ['web', 'wechat', 'douyin', 'xhs', 'taptap']) {
+  for (const d of ['web', 'wechat', 'douyin', 'xhs']) {
     let total = 0;
     const walk = (p) => { for (const f of fs.readdirSync(p)) { const s = path.join(p, f); if (fs.statSync(s).isDirectory()) walk(s); else total += fs.statSync(s).size; } };
     walk('dist/' + d);

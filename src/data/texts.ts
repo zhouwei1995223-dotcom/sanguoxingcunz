@@ -1,9 +1,9 @@
-import { GAME_INFO, NO_ADS, IS_XHS, IS_TAPTAP, IS_OFFLINE_H5, CLOUD_CONFIG, SUBSCRIBE_CONFIG } from './platformConfig';
+import { GAME_INFO, NO_ADS, IS_XHS, CLOUD_CONFIG, SUBSCRIBE_CONFIG } from './platformConfig';
 
 // 按实际开通的功能生成条款：没开的功能不写进去
-const PLATFORM_NAME = IS_TAPTAP ? 'TapTap' : IS_XHS ? '小红书' : '微信 / 抖音';
-const CLOUD_ON = !IS_OFFLINE_H5 && !!(CLOUD_CONFIG.wx.env || CLOUD_CONFIG.tt.env);
-const SUBSCRIBE_ON = !IS_OFFLINE_H5 && !!(SUBSCRIBE_CONFIG.wx.stamina || SUBSCRIBE_CONFIG.wx.patrol || SUBSCRIBE_CONFIG.tt.stamina || SUBSCRIBE_CONFIG.tt.patrol);
+const PLATFORM_NAME = IS_XHS ? '小红书' : '微信 / 抖音';
+const CLOUD_ON = !IS_XHS && !!(CLOUD_CONFIG.wx.env || CLOUD_CONFIG.tt.env);
+const SUBSCRIBE_ON = !IS_XHS && !!(SUBSCRIBE_CONFIG.wx.stamina || SUBSCRIBE_CONFIG.wx.patrol || SUBSCRIBE_CONFIG.tt.stamina || SUBSCRIBE_CONFIG.tt.patrol);
 const numbered = (lines: string[]) => lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
 
 // 合规文本。正式上线前请按实际运营主体修改「运营方」等信息。
@@ -34,7 +34,7 @@ ${numbered([
 2. 您不得利用本游戏从事任何违法违规活动。
 
 四、未成年人保护
-本游戏严格遵守国家关于防止未成年人沉迷网络游戏的相关规定，${IS_OFFLINE_H5 ? '并遵守平台的未成年人保护规则' : '并接入平台的实名认证与防沉迷系统'}。未成年人应在监护人指导下使用本游戏。
+本游戏严格遵守国家关于防止未成年人沉迷网络游戏的相关规定，${IS_XHS ? '并遵守平台的未成年人保护规则' : '并接入平台的实名认证与防沉迷系统'}。未成年人应在监护人指导下使用本游戏。
 
 五、免责声明
 因网络状况、设备故障、平台维护等不可抗力因素导致的服务中断或数据异常，我们将尽力修复，但不承担由此产生的间接损失。清除小游戏缓存或删除小游戏可能导致本地进度丢失。
@@ -54,15 +54,14 @@ ${numbered([
   CLOUD_ON
     ? `游戏进度（等级、装备、资源等）保存在您的设备本地，并同步一份至平台（${PLATFORM_NAME}）提供的云开发数据库，仅用于更换设备或清除缓存后恢复进度。云端数据按平台账号隔离，仅您本人可读写。`
     : '游戏进度（等级、装备、资源等）仅保存在您的设备本地，我们不会上传到任何服务器。',
-  ...(IS_OFFLINE_H5 ? [] : [`当您使用排行榜功能时，平台（${PLATFORM_NAME}）会根据其规则处理您的昵称、头像及游戏分数，用于向您的好友展示排行。`]),
+  ...(IS_XHS ? [] : [`当您使用排行榜功能时，平台（${PLATFORM_NAME}）会根据其规则处理您的昵称、头像及游戏分数，用于向您的好友展示排行。`]),
   ...(NO_ADS ? [] : ['广告服务由平台提供，平台可能会根据其隐私政策收集设备信息以投放广告。']),
   ...(SUBSCRIBE_ON ? ['当您开启「体力满提醒」时，平台会在您同意后向您发送一次性订阅消息，我们仅记录提醒时间。'] : []),
   ...(IS_XHS ? ['本游戏不联网，不收集您的昵称、头像、设备标识等任何个人信息。'] : []),
-  ...(IS_TAPTAP ? ['本试玩版的游戏代码不发起网络请求，不收集昵称、头像、设备标识等个人信息；TapTap 平台在加载游戏、提供平台服务时如何处理信息，以 TapTap 的隐私政策为准。'] : []),
 ])}
 
 二、信息的使用
-我们仅将上述信息用于提供游戏功能${IS_OFFLINE_H5 ? '' : NO_ADS ? '（如排行榜展示）' : '（如排行榜展示、广告奖励发放）'}，不会将其用于其他目的。
+我们仅将上述信息用于提供游戏功能${IS_XHS ? '' : NO_ADS ? '（如排行榜展示）' : '（如排行榜展示、广告奖励发放）'}，不会将其用于其他目的。
 
 三、信息的共享
 除法律法规要求或平台必要的服务外，我们不会向任何第三方出售、出租或共享您的个人信息。

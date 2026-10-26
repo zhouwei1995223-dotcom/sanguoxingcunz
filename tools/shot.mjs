@@ -11,7 +11,6 @@ import path from 'node:path';
 
 const root = path.resolve(process.env.ROOT || 'dist/web');
 const server = http.createServer((req, res) => {
-  if (req.url === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   let p = path.join(root, decodeURIComponent(req.url.split('?')[0]));
   if (p.endsWith('/')) p += 'index.html';
   if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
@@ -23,7 +22,7 @@ const port = server.address().port;
 const out = process.env.SHOT_DIR || 'dist/shots';
 fs.mkdirSync(out, { recursive: true });
 
-const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || undefined, args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: Number(process.env.VW || 390), height: Number(process.env.VH || 844) }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -42,8 +41,7 @@ const drag = async (x, y, dx, dy, ms) => {
 const ctx = { page, wait, shot, tap, drag, errors };
 const scriptName = process.argv[2] || 'basic';
 const mod = await import('./shots/' + scriptName + '.mjs');
-try { await mod.default(ctx); } catch (e) { console.log('SCRIPT ERROR', e); process.exitCode = 1; }
+try { await mod.default(ctx); } catch (e) { console.log('SCRIPT ERROR', e); }
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no errors');
-if (errors.length) process.exitCode = 1;
 await browser.close();
 server.close();

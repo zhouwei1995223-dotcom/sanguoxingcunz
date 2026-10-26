@@ -3,8 +3,8 @@
 类吸血鬼幸存者（Vampire Survivors / 弹壳特攻队）的三国题材竖屏小游戏，可同时发布到**微信小游戏**与**抖音小游戏**。共 5 名武将：赵云、关羽、张飞、诸葛亮、吕布。
 
 - 像素风美术、音效、背景音乐全部由代码生成，没有外部素材版权问题
-- TypeScript + 自研轻量 Canvas 引擎，一套代码输出浏览器、微信、抖音、小红书和 TapTap H5；微信/抖音包体约 1.4MB
-- 微信/抖音通过激励视频 + 插屏（IAA）变现，没有内购；小红书和 TapTap H5 为无广告版本
+- TypeScript + 自研轻量 Canvas 引擎，一套代码输出三个平台，包体约 1.3MB（主包限制 4MB）
+- 变现方式：激励视频 + 插屏（IAA），没有内购
 
 ---
 
@@ -12,7 +12,7 @@
 
 ```bash
 npm install
-npm run build          # 输出 dist/web、dist/wechat、dist/douyin、dist/xhs、dist/taptap
+npm run build          # 输出 dist/web、dist/wechat、dist/douyin
 npx http-server dist/web -p 8080
 ```
 
@@ -33,8 +33,6 @@ npx http-server dist/web -p 8080
 示例：`http://localhost:8080/?skip=1&rich=1&ch=5&speed=3`
 
 浏览器里的广告是模拟弹窗（倒计时 2 秒自动发奖励，也可以点「关闭」测试不发奖励的情况）。
-
-**TapTap 无广告试玩版**在 `dist/taptap`，可用本地静态服务器试玩；上传 ZIP 必须是 `taptap/index.html` 与 `taptap/game.js`，保留单层英文目录。要求核对、SDK 适用范围、打包和后台步骤见 **[docs/TapTap-H5试玩版.md](docs/TapTap-H5试玩版.md)**。这版使用本机存档、运行时合成音频，免费福利保留次数，皮肤和复活使用游戏内元宝。
 
 ## 二、导入开发者工具
 
@@ -182,18 +180,13 @@ tools/         构建、音频合成、像素图预览、战斗数值模拟、�
 ## 七、常用命令
 
 ```bash
-npm run build                          # 构建浏览器 / 微信 / 抖音 / 小红书 / TapTap H5 五个版本
+npm run build                          # 构建浏览器 / 微信 / 抖音 / 小红书四个版本
 npm run dev                            # 监听修改，只构建浏览器版
 npm run typecheck                      # 类型检查
 npm run audio                          # 重新合成全部音效和音乐（需要 ffmpeg）
 npm run sim -- 2 70 450 5              # 数值模拟：第2章、攻击70、生命450、跑5局
 node tools/preview.mjs hero 8          # 导出像素图预览 dist/preview.png
-node tools/zhaoyun-reference-preview.mjs # 赵云按认可原画生成的图片帧预览（暂停/逐帧/左右翻转）
-node tools/guanyu-preview.mjs          # 关羽独立造型与四帧动画预览（待本人确认，未接入游戏）
-node tools/guanyu-trot-v4.mjs          # 按修正腿型继续制作的八帧小跑（需 sharp，独立预览）
-node tools/guanyu-gait-preview.mjs     # 早期八帧步态试验（腿型未获认可；最新单帧修正见 docs/art/guanyu-leg-review-v3.md）
 node tools/shot.mjs play               # 自动试玩并截图（需要 Playwright），另有 home / boss / newbie / perf 场景
-ROOT=dist/taptap Q='?skip=1&rich=1' node tools/shot.mjs taptap # TapTap 无广告与存档验收
 node tools/mock-minigame.mjs wechat    # 在模拟的微信 / 抖音环境中运行打包产物，检查小游戏代码路径
 tools/balfull.sh "3 6" 0.85 16         # 胜率矩阵：五名武将在指定章节、按推荐战力比例各跑 N 局
 tools/stratpower.sh 6 0.75 6           # 单条计策强度：开局 2 分钟强制获得某计策，对比胜率

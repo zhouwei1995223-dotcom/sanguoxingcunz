@@ -1,7 +1,7 @@
 import type { Platform } from './types';
 import { createWebPlatform } from './web';
 import { createMiniGamePlatform } from './minigame';
-import { NO_ADS, IS_OFFLINE_H5 } from '../data/platformConfig';
+import { NO_ADS } from '../data/platformConfig';
 
 declare const wx: any;
 declare const tt: any;
@@ -10,8 +10,7 @@ let instance: Platform | null = null;
 
 export function getPlatform(): Platform {
   if (instance) return instance;
-  if (IS_OFFLINE_H5) instance = createWebPlatform();
-  else if (typeof tt !== 'undefined' && tt.createCanvas) instance = createMiniGamePlatform('tt');
+  if (typeof tt !== 'undefined' && tt.createCanvas) instance = createMiniGamePlatform('tt');
   else if (typeof wx !== 'undefined' && wx.createCanvas) instance = createMiniGamePlatform('wx');
   else instance = createWebPlatform();
   if (NO_ADS) {

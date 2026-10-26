@@ -17,7 +17,7 @@ import { isCleared, getBest, chapterOpen } from '../meta/run';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
-import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_TAPTAP } from '../data/platformConfig';
+import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -439,7 +439,7 @@ export class SettingsDialog implements Dialog {
     ui.text('云存档：' + cs, f.x + 60 * u, y + 20 * u, 22, cloudEnabled() && cloudStatus === 'ok' ? '#9be37a' : C.textDim, 'left');
     if (cloudEnabled() && ui.button('st_sync', f.x + w - 220 * u, y - 10 * u, 160 * u, 60 * u, '立即同步', C.btnBlue, { size: 20 })) cloudPush(true);
     y += 90 * u;
-    ui.text(`${GAME_INFO.name}  v${GAME_INFO.version}${IS_TAPTAP ? ' · TapTap试玩版' : ''}`, ui.W / 2, y, 22, C.textDim);
+    ui.text(`${GAME_INFO.name}  v${GAME_INFO.version}`, ui.W / 2, y, 22, C.textDim);
     ui.text(GAME_INFO.copyright, ui.W / 2, y + 36 * u, 18, C.textDim);
     // 备案号拿到前不显示占位文字
     if (!GAME_INFO.icp.includes('待填写')) ui.text(GAME_INFO.icp, ui.W / 2, y + 66 * u, 18, C.textDim);
@@ -478,7 +478,7 @@ export class RankDialog implements Dialog {
     const u = ui.u;
     const p = getPlatform();
     const w = ui.W - 60 * u, h = ui.H - 300 * u - ui.safeTop;
-    const f = dialogFrame(ui, w, h, IS_TAPTAP ? '本机战绩' : '排行榜', this.t, 'rk_close');
+    const f = dialogFrame(ui, w, h, '排行榜', this.t, 'rk_close');
     if (f.close) { p.postToOpenData({ type: 'hide' }); return false; }
     const score = bestScore();
     const ch = Math.floor(score / 10000), sec = score % 10000;
@@ -511,7 +511,7 @@ export class RankDialog implements Dialog {
         ui.text(`已通关 ${n}/${CHAPTERS.length} 章`, f.x + w - 70 * u, y + 40 * u, 24, '#fff', 'right');
         y += 94 * u;
       }
-      ui.text(IS_TAPTAP ? '试玩版战绩仅保存在本机' : '好友排行榜在微信 / 抖音小游戏中可用', ui.W / 2, y + 30 * u, 20, C.textDim);
+      ui.text('好友排行榜在微信 / 抖音小游戏中可用', ui.W / 2, y + 30 * u, 20, C.textDim);
     }
   }
 }
