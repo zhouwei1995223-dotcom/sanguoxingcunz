@@ -28,6 +28,7 @@ import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
+import { funnel, reportDailyLogin } from '../meta/telemetry';
 import { GAME_INFO, IS_XHS, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 
 type Tab = 'shop' | 'equip' | 'battle' | 'talent' | 'hero';
@@ -53,6 +54,8 @@ export class HomeScene implements Scene {
     rolloverDaily();
     tickStamina();
     this.lastPower = combatPower();
+    if (save.stats.runs >= 1) funnel('home_first');
+    reportDailyLogin();
     flushSave(true);
   }
 

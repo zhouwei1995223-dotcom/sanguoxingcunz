@@ -3,11 +3,13 @@ import { game } from './game';
 import { LoadingScene } from './scenes/loadingScene';
 import { flushSave } from './meta/save';
 import { cloudPush } from './meta/cloud';
+import { initTelemetry } from './meta/telemetry';
 import { unlockAudio } from './audio/sound';
 
 // 入口：微信 / 抖音的 game.js 与浏览器 index.html 共用
 
 const p = getPlatform();
+initTelemetry();
 game.start(new LoadingScene());
 
 // 定期与切后台时保存

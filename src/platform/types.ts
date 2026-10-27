@@ -78,6 +78,10 @@ export interface Platform {
 
   /** 数据埋点（需在平台后台配置同名事件） */
   report(event: string, data: Record<string, string | number>): void;
+  /** 监听未捕获的错误 */
+  onError(cb: (msg: string) => void): void;
+  /** 写一条错误日志（微信：后台「运维中心 → 实时日志」可查，无需配置） */
+  logError(msg: string): void;
 
   // —— 录屏（抖音）——
   supportsRecorder(): boolean;

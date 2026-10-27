@@ -23,6 +23,7 @@ import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, Bo
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
+import { funnel } from '../meta/telemetry';
 import { NO_ADS } from '../data/platformConfig';
 
 export class BattleScene implements Scene {
@@ -88,6 +89,8 @@ export class BattleScene implements Scene {
     this.battle.heroSpriteName = heroSpriteName(save.hero);
     // 抖音录屏：整局录制，精彩时刻打点剪辑
     getPlatform().recorderStart();
+    if (save.stats.runs === 0) funnel('b1_start');
+    else if (save.stats.runs === 1) funnel('b2_start');
     getPlatform().report('battle_start', { mode: this.modeName, chapter: this.chapter.id, diff: this.diff.id, hero: save.hero });
     // 新手教学局降低难度
     if (save.guide === 0) { this.battle.enemyHpMul = 0.75; this.battle.enemyDmgMul = 0.6; }
@@ -191,6 +194,7 @@ export class BattleScene implements Scene {
       if (keys && keys[' ']) this.tryUlt();
       if (keys && keys['q'] && b.potionCd <= 0) this.pressPotion();
       save.stats.playSec += dt;
+      if (save.stats.runs === 0 && b.t >= 120) funnel('b1_2min');
       this.tutorialT += dt;
       this.adaptDensity(dt);
       this.checkTips(dt);
@@ -224,6 +228,7 @@ export class BattleScene implements Scene {
           this.autoGoldT = 1;
         } else {
           playSfx('levelup');
+          if (save.stats.runs === 0) funnel('b1_levelup');
           game.openDialog(new LevelUpDialog(this, choices));
         }
       }
@@ -309,6 +314,8 @@ export class BattleScene implements Scene {
     const b = this.battle;
     playBgm(null);
     playSfx(win ? 'victory' : 'defeat');
+    if (save.stats.runs === 0) funnel('b1_end');
+    else if (save.stats.runs === 1) funnel('b2_end');
     save.stats.runs++;
     save.stats.kills += b.kills;
     save.stats.bossKills += b.bossKills;

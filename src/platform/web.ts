@@ -172,6 +172,14 @@ export function createWebPlatform(): Platform {
       const w = window as any;
       (w.__reports = w.__reports || []).push({ event, data });
     },
+    onError(cb) {
+      window.addEventListener('error', (e) => cb(`${e.message} @${e.filename}:${e.lineno}`));
+      window.addEventListener('unhandledrejection', (e) => cb('unhandled: ' + String((e.reason && (e.reason.stack || e.reason.message)) || e.reason)));
+    },
+    logError(msg) {
+      const w = window as any;
+      (w.__errors = w.__errors || []).push(msg);
+    },
     supportsRecorder() { return false; },
     recorderStart() {},
     recorderMark() {},

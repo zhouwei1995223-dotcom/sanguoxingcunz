@@ -69,6 +69,12 @@ export interface SaveData {
   guide: number;
   /** 已经看过的一次性提示（首次遇到某个系统时显示） */
   tips: Record<string, boolean>;
+  /** 新手漏斗：已上报过的步骤 */
+  funnel: Record<string, boolean>;
+  /** 首次安装的日期（YYYY-MM-DD），算第几天回来 */
+  installDay: string;
+  /** 最近一次上报登录的日期 */
+  loginReportDay: string;
   stats: {
     kills: number; runs: number; bossKills: number; playSec: number; wins: number;
     chests: number; upgrades: number; ads: number; ults: number; evos: number; bestCombo: number;
@@ -141,6 +147,9 @@ function freshSave(): SaveData {
     settings: { music: true, sfx: true, vibrate: true, dmgNum: true, ultRight: false },
     guide: 0,
     tips: {},
+    funnel: {},
+    installDay: '',
+    loginReportDay: '',
     stats: { kills: 0, runs: 0, bossKills: 0, playSec: 0, wins: 0, chests: 0, upgrades: 0, ads: 0, ults: 0, evos: 0, bestCombo: 0 },
     updatedAt: now,
     achClaimed: {},

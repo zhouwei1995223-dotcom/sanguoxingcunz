@@ -1,4 +1,5 @@
 import { getPlatform } from './platform';
+import { reportError } from './meta/telemetry';
 import type { TouchKind, TouchPoint } from './platform/types';
 import { UI } from './ui/ui';
 
@@ -48,7 +49,13 @@ class Game {
       this.last = now;
       if (dt > 0.1) dt = 0.1;
       if (dt < 0) dt = 0;
-      this.frame(dt);
+      try {
+        this.frame(dt);
+      } catch (e: any) {
+        // 某一帧出错时记录下来继续跑，不让整个游戏卡死
+        reportError('frame: ' + ((e && (e.stack || e.message)) || String(e)));
+        try { this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ui.end(); } catch (e2) {}
+      }
       p.requestFrame(loop);
     };
     p.requestFrame(loop);
@@ -72,6 +79,7 @@ class Game {
       if (this.scene && this.scene.exit) this.scene.exit();
       this.scene = this.nextScene;
       this.nextScene = null;
+      (globalThis as any).__sceneName = this.scene.constructor.name;
       this.dialogs.length = 0;
       this.fade = 1;
       if (this.scene.enter) this.scene.enter();

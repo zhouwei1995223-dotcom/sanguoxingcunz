@@ -24,6 +24,7 @@ import { HERO_BY_ID } from '../data/heroes';
 import { setOf, redeem } from '../meta/goals';
 import { getEquipped } from '../meta/ops';
 import { SLOTS } from '../data/meta';
+import { funnel } from '../meta/telemetry';
 import { cloudStatus, cloudEnabled, lastSyncAt, cloudPush } from '../meta/cloud';
 
 function statLines(s: StatBlock): string[] {
@@ -627,6 +628,7 @@ export class PrivacyDialog implements Dialog {
     }
     if (ui.button('pv_ok', f.x + 100 * u + bw, f.y + h - 150 * u, bw, 96 * u, '同意', C.btnGold)) {
       save.agreedPrivacy = true;
+      funnel('privacy_ok');
       markDirty();
       flushSave(true);
       this.onAgree();

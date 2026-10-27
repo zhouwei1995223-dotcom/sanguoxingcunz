@@ -278,6 +278,18 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
         else if (kind === 'tt' && api.reportAnalytics) api.reportAnalytics(event, data);
       } catch (e) {}
     },
+    onError(cb) {
+      try {
+        if (api.onError) api.onError((r: any) => cb(typeof r === 'string' ? r : `${r && r.message}\n${r && r.stack}`));
+        if (api.onUnhandledRejection) api.onUnhandledRejection((r: any) => { const e = r && r.reason; cb('unhandled: ' + (e && (e.stack || e.message) || String(e))); });
+      } catch (e) {}
+    },
+    logError(msg) {
+      try {
+        const lm = api.getRealtimeLogManager && api.getRealtimeLogManager();
+        if (lm) lm.error(msg);
+      } catch (e) {}
+    },
     supportsRecorder() { return !!recorder; },
     recorderStart() {
       if (!recorder || recording) return;

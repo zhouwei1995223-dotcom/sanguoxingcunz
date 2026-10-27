@@ -8,6 +8,7 @@ import { cloudPull } from '../meta/cloud';
 import { GAME_INFO } from '../data/platformConfig';
 import { HomeScene } from './homeScene';
 import { BattleScene } from './battleScene';
+import { reportDailyLogin } from '../meta/telemetry';
 import { PrivacyDialog } from './homeDialogs';
 
 // 启动页：健康游戏忠告 + 资源生成
@@ -24,7 +25,7 @@ export class LoadingScene implements Scene {
     const u = ui.u;
     this.t += dt;
     // 分帧初始化，先画出启动页
-    if (this.step === 1) { loadSave(); }
+    if (this.step === 1) { loadSave(); reportDailyLogin(); }
     if (this.step === 2) { buildAtlas(); }
     if (this.step === 3) {
       initAudio();
