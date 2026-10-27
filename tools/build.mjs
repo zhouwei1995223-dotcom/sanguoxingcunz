@@ -1,4 +1,4 @@
-// 构建：输出 dist/web（浏览器试玩）、dist/wechat（微信小游戏）、dist/douyin（抖音小游戏）、dist/xhs（小红书小工具，离线 H5、无广告）
+// 构建：输出 dist/web（浏览器试玩）、dist/wechat（微信小游戏）、dist/douyin（抖音小游戏）、dist/xhs（小红书小工具，离线 H5、无广告）、dist/taptap（TapTap H5 小游戏，同样离线无广告）
 import { build, context } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -86,9 +86,11 @@ function writeShells() {
   copyDir('assets', 'dist/douyin/assets');
 
   // 小红书小工具：index.html 必须在 zip 根目录；不能有内联脚本、外部资源和音频文件（音效运行时合成）
-  fs.rmSync('dist/xhs', { recursive: true, force: true });
-  fs.mkdirSync('dist/xhs', { recursive: true });
-  fs.writeFileSync('dist/xhs/index.html', `<!DOCTYPE html>
+  // TapTap H5 小游戏用同一个壳：zip 根目录放一个文件夹，index.html 在文件夹第一层
+  for (const d of ['dist/xhs', 'dist/taptap']) {
+    fs.rmSync(d, { recursive: true, force: true });
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(d + '/index.html', `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -103,6 +105,7 @@ function writeShells() {
 </body>
 </html>
 `);
+  }
 }
 
 writeShells();
@@ -111,6 +114,7 @@ const outs = [
   { ...common, outfile: 'dist/wechat/game.js', define: { 'process.env.TARGET': '"wx"' } },
   { ...common, outfile: 'dist/douyin/game.js', define: { 'process.env.TARGET': '"tt"' } },
   { ...common, target: ['es2017', 'chrome61'], outfile: 'dist/xhs/game.js', define: { 'process.env.TARGET': '"xhs"' } },
+  { ...common, target: ['es2017', 'chrome61'], outfile: 'dist/taptap/game.js', define: { 'process.env.TARGET': '"tap"' } },
 ];
 if (watch) {
   const ctx = await context(outs[0]);
@@ -118,7 +122,7 @@ if (watch) {
   console.log('watching… 浏览器打开 dist/web/index.html（需本地服务器，如 npx http-server dist/web）');
 } else {
   for (const o of outs) await build(o);
-  for (const d of ['web', 'wechat', 'douyin', 'xhs']) {
+  for (const d of ['web', 'wechat', 'douyin', 'xhs', 'taptap']) {
     let total = 0;
     const walk = (p) => { for (const f of fs.readdirSync(p)) { const s = path.join(p, f); if (fs.statSync(s).isDirectory()) walk(s); else total += fs.statSync(s).size; } };
     walk('dist/' + d);

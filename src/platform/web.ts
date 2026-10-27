@@ -1,5 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { IS_XHS } from '../data/platformConfig';
+import { IS_H5 } from '../data/platformConfig';
 
 // 浏览器实现：用于开发调试与验收。广告用 2 秒模拟弹窗代替。
 
@@ -60,7 +60,7 @@ export function createWebPlatform(): Platform {
     probe.remove();
   } catch (e) {}
   // 小红书容器可能在顶部叠加按钮，至少留出一点空隙
-  if (IS_XHS) safeArea.top = Math.max(safeArea.top, 20 * dpr);
+  if (IS_H5) safeArea.top = Math.max(safeArea.top, 20 * dpr);
 
   const listeners: ((k: TouchKind, t: TouchPoint[]) => void)[] = [];
   const emit = (k: TouchKind, t: TouchPoint[]) => listeners.forEach((l) => l(k, t));

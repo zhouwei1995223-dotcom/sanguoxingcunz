@@ -11,12 +11,12 @@
 
 ## 技术栈与命令
 - TypeScript + esbuild，打成 IIFE；美术全部由代码生成（字符画像素图），音效 / 音乐由代码合成。
-- `npm run build`：输出 `dist/web`（浏览器试玩）、`dist/wechat`、`dist/douyin`、`dist/xhs`（小红书小工具，无广告）
+- `npm run build`：输出 `dist/web`（浏览器试玩）、`dist/wechat`、`dist/douyin`、`dist/xhs`（小红书小工具，无广告）、`dist/taptap`（TapTap H5 小游戏，无广告）
 - `npm run typecheck`；`npm run sim -- <章> 0 0 <局数>`（配合环境变量 `HERO`、`POWER`、`DIFF`、`NOPOTION`、`NOSTRAT`、`FORCE=<计策id>`）
 - 胜率矩阵：`tools/balfull.sh "3 6" 0.85 16`；单条计策强度：`tools/stratpower.sh 6 0.75 6`
 - 自动试玩截图：`Q='?skip=1' node tools/shot.mjs <脚本名>`（脚本在 `tools/shots/`；`ROOT=dist/xhs` 测小红书版）。`?skip=1` 跳过隐私弹窗和新手引导。
   - 已知：`heroes` 脚本会报 `this.scene.update is not a function`，是测试脚本的问题，不是游戏 bug；`modes` 需要 `Q='?skip=1&ch=4&rich=1'`；`newbie` 不要带 skip。
-- 打包 zip（根目录，zip 已在 .gitignore）：`cd dist/wechat && zip -qr ../../长坂单骑传-微信-提审版v1.0.0.zip .`，抖音、小红书同理。
+- 打包 zip（根目录，zip 已在 .gitignore）：`cd dist/wechat && zip -qr ../../长坂单骑传-微信-提审版v1.0.0.zip .`，抖音、小红书同理；TapTap 的 zip 根目录要是一个文件夹：`cd dist && zip -qr ../长坂单骑传-TapTap.zip taptap`。
 
 ## 代码结构要点
 - `src/platform/`：平台抽象（web / 微信 / 抖音）。`src/data/platformConfig.ts`：AppID 之外的上架配置、`IS_XHS` / `NO_ADS` 开关、兑换码、广告位 ID（目前为空，没开流量主时激励视频直接发奖励）。
@@ -36,4 +36,4 @@
 - **微信（主力，靠激励视频广告变现）**：AppID `wx483a0ed3065a3de6`。小游戏备案已通过（主管部门）。小程序备案第一次被驳回（电话无人接听、应急联系人核验失败、名称涉及游戏），已改备注并附小游戏备案截图重新提交。审核员曾来电称浙江要求网络游戏出版物号核发单，用户经腾讯官方确认单机广告小游戏不需要版号，已按原省份重新提交（小程序备案仍需要做），应急联系人（用户母亲）已接到核验电话，目前审核中。不要建议用户换到没有户籍 / 居住证的省份备案。2026-10-26 已上传 1.0.0 并提交版本审核：网络类型选「单机」，引擎填「自研 Canvas 2D 引擎」，Apple ID 填用户本人邮箱。审核通过后发布；备案完成前不要改游戏名称或迁移主体。上线后开流量主，把广告位 ID 填进 `AD_CONFIG`，备案号填 `GAME_INFO.icp`。不开云存档和订阅提醒（用户决定）；兑换码保留现有 3 个。
 - **抖音**：暂缓（用户 2026-10-26 决定先专注微信）。卡在软著：本项目无法如实签「未使用 AI」承诺；不要使用他人为别的软件登记的软著（资质与游戏不符，有被认定虚假资质的风险）。基础信息文案已给出，600×600 图标在 `docs/icon/`。`TT_APPID` 仍是 `testappid`。
 - **小红书**：`长坂单骑传-小红书.zip` 已交付，待用户在创服平台模拟器和安卓 / iPhone 真机验证（声音、触控、存档）。
-- **TapTap**：没有版号只能以「试玩版」上线、不能内购；打算用无广告的 H5 版（类似小红书版）以试玩版上架。还没查到 TapTap 对 H5 包的具体要求（文件结构、大小、是否需要接入 SDK），下一步先读 developer.taptap.cn 的小游戏文档，再打 TapTap 专用包。
+- **TapTap**：没有版号只能以「试玩版」上线、不能内购。已加 `tap` 构建目标（`IS_TAP`，和小红书共用 `IS_H5`：离线、无广告、无分享、音效运行时合成），包为 `长坂单骑传-TapTap.zip`（zip 里一个 `taptap/` 文件夹，`index.html` 在第一层，这是官方 MCP 工具 taptap/instant-games-open-mcp 的打包方式）。developer.taptap.cn 从云端环境访问不了，后台具体步骤要看用户截图再指导。
