@@ -4,7 +4,7 @@ export default async function ({ page, wait, shot, tap }) {
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(300);
   await shot('m_home');
-  await tap(115, 543); await wait(300); await shot('m_hard');
+  await tap(115, 585); await wait(300); await shot('m_hard');
   await tap(352, 722); await wait(600); await shot('m_list');
   await page.evaluate(() => { window.__game.dialogs.length = 0; }); await wait(300);
   await tap(48, 722);

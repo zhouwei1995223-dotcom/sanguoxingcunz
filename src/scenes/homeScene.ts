@@ -63,7 +63,7 @@ export class HomeScene implements Scene {
     if (save.guide !== this.lastGuide) { if (this.lastGuide >= 0) getPlatform().report('guide_step', { step: save.guide }); this.lastGuide = save.guide; }
     tickStamina();
     rolloverDaily();
-    if (this.tab === 'battle') this.bg.draw(ui.ctx, dt);
+    if (this.tab === 'battle') this.bg.draw(ui.ctx, dt, this.battleLayout(ui).cy - 2 * ui.u, this.contentTop(ui) + 250 * ui.u, 120 * ui.u);
     else this.drawPlainBg(ui);
     const power = combatPower();
     if (power !== this.lastPower) { this.flashPower = 1.2; this.lastPower = power; }
@@ -176,14 +176,27 @@ export class HomeScene implements Scene {
 
   // —— 征战页 ——
   private sideBtnRect: Record<string, [number, number, number, number]> = {};
+  /** 征战页的纵向布局：出征按钮贴底，章节卡在其上方，人物站在章节卡上面 */
+  private battleLayout(ui: UI) {
+    const u = ui.u;
+    const chH = 240 * u, bh = 124 * u;
+    const by = this.contentBottom(ui) - bh - 16 * u;
+    const cy = by - 20 * u - chH;
+    return { chH, bh, by, cy };
+  }
+
   private drawBattleTab(ui: UI) {
     const u = ui.u;
     const top = this.contentTop(ui);
+    const L = this.battleLayout(ui);
     // 标题
-    const ty = top + 70 * u;
-    ui.text(GAME_INFO.shortName, ui.W / 2 + 4 * u, ty + 4 * u, 96, '#3a0d12', 'center', null);
-    ui.text(GAME_INFO.shortName, ui.W / 2, ty, 96, '#fee761', 'center', '#7a1c24');
-    ui.text('— 乱世幸存者 —', ui.W / 2, ty + 74 * u, 30, '#fff4d6');
+    const ty = top + 64 * u;
+    ui.text(GAME_INFO.shortName, ui.W / 2 + 4 * u, ty + 4 * u, 88, '#3a0d12', 'center', null);
+    ui.text(GAME_INFO.shortName, ui.W / 2, ty, 88, '#fee761', 'center', '#7a1c24');
+    ui.text('— 乱世幸存者 —', ui.W / 2, ty + 66 * u, 28, '#fff4d6');
+    // 点人物进武将页
+    const hr = this.bg.heroBox;
+    if (ui.clicked('home_hero', hr[0], hr[1], hr[2], hr[3])) this.tab = 'hero';
 
     // 侧边功能按钮
     const side: { id: string; icon: string; label: string; dot: boolean; on: () => void; show?: boolean }[] = [
@@ -201,9 +214,9 @@ export class HomeScene implements Scene {
     ];
     if (getPlatform().supportsSidebar() || getPlatform().name === 'tt') sideR.push({ id: 'sidebar', icon: 'sidebar', label: '侧边栏', dot: !save.daily.sidebar, on: () => game.openDialog(new SidebarDialog()) });
     const bs = 84 * u;
-    const sy = top + 180 * u;
+    const sy = top + 160 * u;
     // 按钮多时自动压缩间距，避免压住章节卡
-    const cardTop = this.contentBottom(ui) - 310 * u - 170 * u;
+    const cardTop = L.cy;
     const drawSide = (list: typeof side, x0: number, right: boolean) => list.forEach((s, i) => {
       const step = Math.min(bs + 40 * u, (cardTop - sy - 20 * u) / list.length);
       // 空间不够时缩小按钮，保证下面的文字不被下一个按钮挡住
@@ -226,49 +239,51 @@ export class HomeScene implements Scene {
     const d = save.selectedDiff || 0;
     const diff = DIFFICULTIES[d];
     const unlocked = chapterOpen(ch.id, d);
-    const cw = ui.W - 80 * u, chH = 310 * u;
-    const cx = 40 * u, cy = this.contentBottom(ui) - chH - 170 * u;
+    const cw = ui.W - 80 * u, chH = L.chH;
+    const cx = 40 * u, cy = L.cy;
     ui.panel(cx, cy, cw, chH, 'wood');
     // 难度页签
     const tw = (cw - 60 * u) / 3;
     DIFFICULTIES.forEach((df, i) => {
       const open = diffOpen(df.id);
-      const tx = cx + 30 * u + i * tw, ty = cy + 22 * u;
+      const tx = cx + 30 * u + i * tw, ty = cy + 20 * u;
       const on = d === df.id;
-      ui.pixRect(tx + 4 * u, ty, tw - 8 * u, 50 * u, on ? df.color : '#231917');
-      ui.text(df.name, tx + tw / 2, ty + 25 * u, 24, on ? '#1a1210' : open ? df.color : '#666', 'center', null);
-      if (!open) ui.icon('lock', tx + tw - 26 * u, ty + 25 * u, 26 * u);
-      if (ui.clicked('diff_' + df.id, tx, ty, tw, 50 * u)) {
+      ui.pixRect(tx + 4 * u, ty, tw - 8 * u, 46 * u, on ? df.color : '#231917');
+      ui.text(df.name, tx + tw / 2, ty + 23 * u, 24, on ? '#1a1210' : open ? df.color : '#666', 'center', null);
+      if (!open) ui.icon('lock', tx + tw - 26 * u, ty + 23 * u, 26 * u);
+      if (ui.clicked('diff_' + df.id, tx, ty, tw, 46 * u)) {
         if (!open) ui.toast(`通关${DIFFICULTIES[df.id - 1].name}难度第1章解锁`);
         else { save.selectedDiff = df.id; markDirty(); }
       }
     });
-    const oy = cy + 60 * u;
-    ui.text(`第${ch.id}章`, ui.W / 2, oy + 40 * u, 24, C.textDim);
-    ui.text(ch.name, ui.W / 2, oy + 88 * u, 50, unlocked ? '#fff4d6' : '#8b8b8b');
-    ui.text(ch.subtitle, ui.W / 2, oy + 136 * u, 24, C.gold);
+    const oy = cy + 66 * u;
+    ui.text(`第${ch.id}章`, ui.W / 2, oy + 22 * u, 22, C.textDim);
+    ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, unlocked ? '#fff4d6' : '#8b8b8b');
+    ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
     const best = getBest(d, ch.id);
     const cleared = isCleared(d, ch.id);
     const info = cleared ? `${diff.name}已通关 ✓` : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
-    ui.text(info, ui.W / 2, oy + 178 * u, 22, cleared ? '#9be37a' : '#d9c6a0');
     const power = combatPower();
     const need = recommendedPower(ch, diff);
-    ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2, oy + 212 * u, 20, power >= need ? '#9be37a' : '#ff8a80');
+    // 进度与推荐战力放在同一行
+    ui.text(info, ui.W / 2 - 14 * u, oy + 142 * u, 20, cleared ? '#9be37a' : '#d9c6a0', 'right');
+    ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2 + 14 * u, oy + 142 * u, 20, power >= need ? '#9be37a' : '#ff8a80', 'left');
+    ui.pixRect(ui.W / 2 - 1 * u, oy + 132 * u, 2 * u, 20 * u, '#6b4a3a');
     if (!unlocked) {
       ui.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ui.ctx.fillRect(cx + 12 * u, oy + 6 * u, cw - 24 * u, chH - 78 * u);
-      ui.icon('lock', ui.W / 2, oy + 90 * u, 80 * u);
-      ui.text(d === 0 ? `通关第${ch.id - 1}章解锁` : `通关${DIFFICULTIES[d - 1].name}难度第${ch.id}章解锁`, ui.W / 2, oy + 160 * u, 26, '#fff');
+      ui.ctx.fillRect(cx + 12 * u, oy + 2 * u, cw - 24 * u, chH - 78 * u);
+      ui.icon('lock', ui.W / 2, oy + 52 * u, 70 * u);
+      ui.text(d === 0 ? `通关第${ch.id - 1}章解锁` : `通关${DIFFICULTIES[d - 1].name}难度第${ch.id}章解锁`, ui.W / 2, oy + 112 * u, 26, '#fff');
     }
-    if (ui.clicked('chapter_story', cx + 100 * u, oy, cw - 200 * u, chH - 60 * u)) game.openDialog(new ChapterStoryDialog(ch.id, d));
+    if (ui.clicked('chapter_story', cx + 100 * u, oy, cw - 200 * u, chH - 70 * u)) game.openDialog(new ChapterStoryDialog(ch.id, d));
     // 左右切换
     const aw = 70 * u;
-    if (save.selectedChapter > 1 && ui.button('ch_prev', cx - 10 * u, oy + 110 * u - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedChapter--; markDirty(); }
-    if (save.selectedChapter < CHAPTERS.length && ui.button('ch_next', cx + cw - aw + 10 * u, oy + 110 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedChapter++; markDirty(); }
+    if (save.selectedChapter > 1 && ui.button('ch_prev', cx - 10 * u, oy + 66 * u - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedChapter--; markDirty(); }
+    if (save.selectedChapter < CHAPTERS.length && ui.button('ch_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedChapter++; markDirty(); }
 
     // 出征按钮
-    const bw = 400 * u, bh = 130 * u;
-    const by = cy + chH + 24 * u;
+    const bw = 400 * u, bh = L.bh;
+    const by = L.by;
     if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     // 无尽模式入口
