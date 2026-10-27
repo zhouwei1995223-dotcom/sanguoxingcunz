@@ -1,3 +1,5 @@
+import { DEBUG } from '../debug';
+import { zhaoyunFramesV2 } from './art/zhaoyun';
 import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
 import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
@@ -147,7 +149,7 @@ function addUnit(name: string, frames: PixelImage[]) {
 }
 
 export function buildAtlas() {
-  for (const id of HERO_IDS) { addUnit('hero_' + id, heroFramesFor(id)); addUnit('hero_' + id + '_skin', heroSkinFrames(id)); }
+  for (const id of HERO_IDS) { addUnit('hero_' + id, DEBUG.artV2 && id === 'zhaoyun' ? zhaoyunFramesV2() : heroFramesFor(id)); addUnit('hero_' + id + '_skin', heroSkinFrames(id)); }
   for (const k in SOLDIER_STYLES) addUnit('u_' + k, soldierFrames(SOLDIER_STYLES[k]));
   for (const k in GENERAL_STYLES) addUnit('u_' + k, generalFrames(GENERAL_STYLES[k]));
 

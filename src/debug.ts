@@ -22,4 +22,6 @@ export const DEBUG = {
   reset: param('reset') === '1',
   fps: param('fps') === '1',
   allHeroes: param('heroes') === '1',
+  /** 预览新造型：?art=v2（只用于浏览器验收，正式包不受影响） */
+  artV2: param('art') === 'v2',
 };
