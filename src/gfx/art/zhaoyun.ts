@@ -4,7 +4,7 @@ import { PixelImage } from '../pixel';
 // 银盔红缨、白袍银甲、蓝色披风，骑照夜玉狮子（白马），持亮银枪。
 // 马腿按奔跑节奏画 4 帧，披风、红缨、马鬃、马尾随帧飘动。
 
-const W = 38, H = 34;
+const W = 38, H = 35;
 
 /** 马身（不含腿），面朝右；x 偏移 4，y 偏移 11 */
 const HORSE_BODY = [
@@ -43,30 +43,55 @@ const CAPE = [
   ['.....b', '...bBB', '.bbBBb', 'bBBBb.', '.bBBb.', '..bBb.', '...bb.'],
 ];
 
-/** 骑手（面朝右，3/4 侧脸）：眉、眼白 + 瞳孔、鼻、嘴 */
+/** 骑手：口袋妖怪地图小人比例（大圆头 + 小身体），银盔像帽子一样有帽檐，3/4 正脸 */
 const RIDER = [
-  '.....RR......',
-  '....RRrR.....',
-  '.....RR......',
-  '....SSSSS....',
-  '...SwwSSSS...',
-  '..SSSSSSSSS..',
-  '..sSUUqqUUq..',
-  '..sSwkqqwkq..',
-  '..sSqqqqqEq..',
-  '...sSqqqqq...',
-  '...sSqEEq....',
-  '....SSqq.....',
-  '..SSnwwwwS...',
-  '.SSsSsSsSsS..',
-  '.SsSsSwSsSSqq',
-  '.SsSyyyyySSqq',
-  '..SbBBBBBbS..',
-  '..SwwwwwwwwS.',
-  '...bwwSSwwb..',
-  '....wwSn.....',
-  '.....Snn.....',
+  '......RR........',
+  '.....RRrR.......',
+  '......Rr........',
+  '....SSSSSSS.....',
+  '...SwwSSSSSS....',
+  '..SwwSSSSSSSs...',
+  '..SSSSSSSSSSs...',
+  '..ssyYysssssss..',
+  '..kkkkkkkkkkk...',
+  '..kqqqqqqqqqk...',
+  '..kqzzqqqzzqq...',
+  '..kqkqqqqqkqq...',
+  '..kqkqqqqqkqE...',
+  '..kqqqqqqEqqE...',
+  '...qqqqUUqqE....',
+  '....qqqqqqE.....',
+  '...SSnwwnSS.....',
+  '..SSsSSSSsSS....',
+  '.SSsSwwwSsSSqq..',
+  '.SsSyyyyyySSqq..',
+  '..SbBBBBBBbS....',
+  '..SwwwwwwwwS....',
+  '...wwwSSwww.....',
 ];
+
+/**
+ * 口袋妖怪式体积光：光从左上方来。每种材质有「亮 / 中 / 暗」三层，
+ * 上边缘提亮，下边缘与右边缘压暗，眼睛眉毛等细节不参与。
+ */
+const RAMPS: Record<string, [string, string]> = {
+  S: ['w', 's'], w: ['w', 'S'], B: ['B', 'b'], q: ['q', 'E'], R: ['f', 'r'], y: ['Y', 'y'],
+};
+
+function shadeVolume(img: PixelImage): PixelImage {
+  const out = img.clone();
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++) {
+      const c = img.get(x, y);
+      const ramp = RAMPS[c];
+      if (!ramp) continue;
+      const up = img.get(x, y - 1), down = img.get(x, y + 1), right = img.get(x + 1, y), left = img.get(x - 1, y);
+      if (down !== c && (down === '.' || RAMPS[down])) out.set(x, y, ramp[1]);
+      else if (right === '.') out.set(x, y, ramp[1]);
+      else if ((up === '.' || left === '.') && c !== 'w') out.set(x, y, ramp[0]);
+    }
+  return out;
+}
 
 /** 腿：每条腿 [膝 dx, 膝 dy, 蹄 dx, 蹄 dy]，顺序：后腿近、后腿远、前腿近、前腿远 */
 const LEG_POSES: number[][][] = [
@@ -104,7 +129,7 @@ export function zhaoyunFramesV2(): PixelImage[] {
     const flap = f % 2;
     const img = new PixelImage(W, H);
     const hx = 4, hy = 12 + bob;
-    const rx = 11, ry = 0 + bob;
+    const rx = 10, ry = 0 + bob;
     // 远侧腿先画（深色），被马身挡住一部分
     const pose = LEG_POSES[f];
     leg(img, hx + 5, hy + 13, pose[1], 's');
@@ -119,12 +144,12 @@ export function zhaoyunFramesV2(): PixelImage[] {
     // 笼头（棕色皮带）
     img.set(hx + 25, hy + 6, 'U'); img.set(hx + 26, hy + 7, 'U');
     // 披风在骑手身后
-    img.blit(PixelImage.fromRows(CAPE[flap]), rx - 4, ry + 12);
+    img.blit(PixelImage.fromRows(CAPE[flap]), rx - 4, ry + 16);
     img.blit(PixelImage.fromRows(RIDER), rx, ry);
     // 红缨飘动
-    if (flap) { img.set(rx + 3, ry + 1, 'R'); img.set(rx + 2, ry + 2, 'r'); }
-    else { img.set(rx + 3, ry + 0, 'R'); img.set(rx + 3, ry + 1, 'r'); }
-    img.blit(silverSpear(), rx + 8, ry + 5);
-    return img.outline();
+    if (flap) { img.set(rx + 4, ry + 1, 'R'); img.set(rx + 3, ry + 2, 'r'); }
+    else { img.set(rx + 4, ry + 0, 'R'); img.set(rx + 4, ry + 1, 'r'); }
+    img.blit(silverSpear(), rx + 10, ry + 9);
+    return shadeVolume(img).outline();
   });
 }
