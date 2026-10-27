@@ -38,6 +38,11 @@ export class BattleScene implements Scene {
   private reviveShown = false;
   private bossBar: { name: string; title: string } | null = null;
   private tutorialT = 0;
+  // 一次性提示：第一次遇到某个系统时在屏幕下方显示几秒
+  private tipQueue: string[] = [];
+  private tipText = '';
+  private tipT = 0;
+  private tipCheckT = 0;
   private autoGoldT = 0;
   paused = false;
 
@@ -188,6 +193,7 @@ export class BattleScene implements Scene {
       save.stats.playSec += dt;
       this.tutorialT += dt;
       this.adaptDensity(dt);
+      this.checkTips(dt);
     }
 
     // 待处理事件：升级 / 宝箱 / 死亡 / 胜利
@@ -229,6 +235,46 @@ export class BattleScene implements Scene {
     this.drawVignette();
     this.drawHud(dt);
     if (!blocked) this.drawJoystick();
+  }
+
+  /** 第一次遇到时提示；urgent 的立刻顶替当前提示 */
+  private tip(id: string, text: string, urgent = false) {
+    if (save.tips[id]) return;
+    save.tips[id] = true;
+    markDirty();
+    if (urgent) { if (this.tipText) this.tipQueue.unshift(this.tipText); this.tipText = text; this.tipT = 4; }
+    else this.tipQueue.push(text);
+  }
+
+  private checkTips(dt: number) {
+    const b = this.battle;
+    // 新手局开头的操作提示还在显示时先不弹
+    if (save.guide === 0 && this.tutorialT < 9) return;
+    if (b.warnings.length) this.tip('boss_warn', '地上的红圈是敌将的技能范围，快躲开！', true);
+    this.tipCheckT -= dt;
+    if (this.tipCheckT > 0) return;
+    this.tipCheckT = 0.5;
+    const near = (x: number, y: number) => b.inView(x, y, -30);
+    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', '打破灯笼和粮车，会掉出包子、磁石、震天雷');
+    for (const k of b.pickups) {
+      if (!near(k.x, k.y)) continue;
+      if (k.kind === 'bun') this.tip('pk_bun', '肉包子：拾取后回复30%生命');
+      else if (k.kind === 'magnet') this.tip('pk_magnet', '磁石：拾取后吸走全场的经验宝石');
+      else if (k.kind === 'bomb') this.tip('pk_bomb', '震天雷：拾取后消灭屏幕内的敌人');
+    }
+    if (b.enemies.some((e) => e.elite && !e.dead && near(e.x, e.y))) this.tip('elite', '精英敌人体型更大、更耐打，击败必掉宝箱');
+    if (b.evolvable().length) this.tip('evo', '武器已满级且有对应兵法，打开宝箱就能进化神兵！');
+  }
+
+  private drawTip(dt: number) {
+    const ui = game.ui;
+    if (!this.tipText && this.tipQueue.length) { this.tipText = this.tipQueue.shift()!; this.tipT = 3.5; }
+    if (!this.tipText) return;
+    if (!game.dialogs.length) this.tipT -= dt;
+    if (this.tipT <= 0) { this.tipText = ''; return; }
+    ui.ctx.globalAlpha = Math.min(1, this.tipT / 0.4);
+    guideHint(ui, this.tipText, ui.H * 0.56);
+    ui.ctx.globalAlpha = 1;
   }
 
   get label(): string {
@@ -390,6 +436,7 @@ export class BattleScene implements Scene {
     this.drawUltButton();
     this.drawPotionButton();
 
+    if (!game.dialogs.length) this.drawTip(dt);
     // 新手提示
     if (save.guide === 0 && this.tutorialT < 9 && !game.dialogs.length) {
       guideHint(ui, this.tutorialT < 4.5 ? `按住屏幕任意位置拖动，控制${this.battle.hero.name}移动` : `${this.battle.hero.name}会自动攻击，拾取蓝色宝石升级`, ui.H * 0.72);

@@ -15,7 +15,7 @@ import { playSfx, playBgm, refreshMusic } from '../audio/sound';
 import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
-import { guidePointer } from '../ui/guide';
+import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier } from '../data/strategies';
 
@@ -117,7 +117,11 @@ function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: numb
 }
 
 export class LevelUpDialog implements Dialog {
-  constructor(private scene: BattleScene, private choices: Choice[]) {}
+  private banishTip = false;
+  constructor(private scene: BattleScene, private choices: Choice[]) {
+    // 第三次升级时提示刷新和封禁（新手局第一次升级有手指引导，先不打扰）
+    if (!save.tips.banish && scene.battle.level >= 4) { this.banishTip = true; save.tips.banish = true; markDirty(); }
+  }
   private banishMode = false;
   draw(ui: UI) {
     const u = ui.u;
@@ -179,6 +183,7 @@ export class LevelUpDialog implements Dialog {
       this.banishMode = !this.banishMode;
     }
     if (save.guide === 0 && b.level === 2) guidePointer(ui, ui.W / 2 - cw / 2, ui.H * 0.2 + 110 * u, cw, ch);
+    if (this.banishTip) guideHint(ui, '不满意可以「刷新」，不想要的可以「封禁」', y + bh + 70 * u);
   }
   t?: number;
 }
@@ -191,8 +196,10 @@ export class StrategyDialog implements Dialog {
   private choices: StratId[];
   private freeRerolls = 1;
   private adRerolled = false;
+  private firstTime = false;
   constructor(private scene: BattleScene, private tier: StratTier, private round: number) {
     this.choices = scene.battle.rollStrats(tier);
+    if (!save.tips.strat) { this.firstTime = true; save.tips.strat = true; markDirty(); }
   }
   draw(ui: UI) {
     const u = ui.u;
@@ -233,6 +240,7 @@ export class StrategyDialog implements Dialog {
       const names = b.strats.map((id) => STRAT_BY_ID[id].name).join('、');
       ui.text('已有：' + names, ui.W / 2, y + bh + 40 * u, 22, C.textDim);
     }
+    if (this.firstTime) guideHint(ui, '2:00、5:00、7:30 各得一条锦囊，本局一直生效', y + bh + 100 * u);
   }
   private reroll() {
     this.choices = this.scene.battle.rollStrats(this.tier);
