@@ -13,7 +13,9 @@ const CELL = 36;
 
 interface Drawable {
   y: number;
-  draw: () => void;
+  /** 敌人用复用的条目（不为每个敌人每帧新建闭包），其他物体用 draw */
+  e?: Enemy | null;
+  draw?: () => void;
 }
 
 export class WorldRenderer {
@@ -28,6 +30,18 @@ export class WorldRenderer {
   private theme: GroundTheme;
   private themeName: string;
   private list: Drawable[] = [];
+  private enemyPool: Drawable[] = [];
+  private crowded = false;
+  /** 敌人精灵名缓存：避免每帧为每个敌人拼字符串 */
+  private nameCache: Record<string, string[]> = {};
+  private enemyName(sp: string, frame: number, left: boolean, flash: boolean) {
+    let a = this.nameCache[sp];
+    if (!a) {
+      a = this.nameCache[sp] = [];
+      for (let f = 0; f < 4; f++) for (const l of [false, true]) for (const w of [false, true]) a.push(`${sp}_${f}${l ? '_L' : ''}${w ? (l ? 'W' : '_W') : ''}`);
+    }
+    return a[frame * 4 + (left ? 2 : 0) + (flash ? 1 : 0)];
+  }
 
   constructor(screenW: number, screenH: number, themeName: string) {
     this.scale = Math.max(2, Math.round(screenW / 280));
@@ -100,6 +114,7 @@ export class WorldRenderer {
     for (let y = oy; y < this.h; y += T) for (let x = ox; x < this.w; x += T) g.drawImage(this.tile, 0, 0, T * this.scale, T * this.scale, x, y, T, T);
 
     this.list.length = 0;
+    let pooled = 0;
     // 装饰
     const c0x = Math.floor((cx - 20) / CELL), c1x = Math.floor((cx + this.w + 20) / CELL);
     const c0y = Math.floor((cy - 10) / CELL), c1y = Math.floor((cy + this.h + 50) / CELL);
@@ -250,7 +265,11 @@ export class WorldRenderer {
     for (const e of b.enemies) {
       if (e.dead) continue;
       if (e.x < cx - 40 || e.x > cx + this.w + 40 || e.y < cy - 20 || e.y > cy + this.h + 70) continue;
-      this.list.push({ y: e.y, draw: () => this.drawEnemy(e, b) });
+      let d = this.enemyPool[pooled];
+      if (!d) d = this.enemyPool[pooled] = { y: 0, e: null };
+      pooled++;
+      d.y = e.y; d.e = e;
+      this.list.push(d);
     }
 
     // 玩家
@@ -270,8 +289,10 @@ export class WorldRenderer {
       });
     }
 
+    // 同屏敌人很多时不画脚下影子（挤成一团时看不出来，能少一半贴图调用）
+    this.crowded = pooled > 120;
     this.list.sort((a, c) => a.y - c.y);
-    for (const d of this.list) d.draw();
+    for (const d of this.list) { if (d.e) this.drawEnemy(d.e, b); else d.draw!(); }
 
     // 投射物
     for (const pr of b.projs) {
@@ -363,10 +384,10 @@ export class WorldRenderer {
   private drawEnemy(e: Enemy, b: Battle) {
     const g = this.ctx;
     const frame = Math.floor(e.anim) % 4;
-    const name = `${e.sprite}_${frame}${e.left ? '_L' : ''}${e.flash > 0 ? (e.left ? 'W' : '_W') : ''}`;
+    const name = this.enemyName(e.sprite, frame, e.left, e.flash > 0);
     const s = sprite(name);
     const sc = e.scale;
-    this.blitScaled(sprite(sc > 1 || e.boss ? 'shadow_l' : e.r > 8 ? 'shadow_m' : 'shadow_s'), e.x, e.y + 1, sc > 1 && !e.boss ? 1 : sc > 1 ? 2 : 1);
+    if (!this.crowded || e.boss || e.elite) this.blitScaled(sprite(sc > 1 || e.boss ? 'shadow_l' : e.r > 8 ? 'shadow_m' : 'shadow_s'), e.x, e.y + 1, sc > 1 && !e.boss ? 1 : sc > 1 ? 2 : 1);
     if (e.elite || e.boss) {
       g.globalAlpha = 0.25 + 0.15 * Math.sin(b.t * 6);
       g.fillStyle = e.boss ? '#e43b44' : '#feae34';

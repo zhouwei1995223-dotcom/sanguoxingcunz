@@ -515,10 +515,16 @@ export class BattleScene implements Scene {
     if (DEBUG.speed > 1) return;
     this.frameAvg += (dt - this.frameAvg) * 0.05;
     const b = this.battle;
-    if (this.frameAvg > 1 / 40) {
+    // 省电模式本来就是 30 帧，按 30 帧的标准判断是否掉帧
+    const lp = save.settings.lowPower;
+    if (this.frameAvg > (lp ? 1 / 24 : 1 / 40)) {
       this.slowT += dt; this.fastT = 0;
-      if (this.slowT > 2) { this.slowT = 0; b.densityMul = Math.max(0.5, b.densityMul - 0.1); }
-    } else if (this.frameAvg < 1 / 55) {
+      if (this.slowT > 2) {
+        this.slowT = 0; b.densityMul = Math.max(0.5, b.densityMul - 0.1);
+        // 手机带不动时提示省电模式（每个玩家只提示一次）
+        if (b.densityMul <= 0.7 && !save.settings.lowPower) this.tip('lowpower', '手机发烫？暂停里可以打开「省电」');
+      }
+    } else if (this.frameAvg < (lp ? 1 / 28 : 1 / 55)) {
       this.fastT += dt; this.slowT = 0;
       if (this.fastT > 6) { this.fastT = 0; b.densityMul = Math.min(1, b.densityMul + 0.05); }
     } else { this.slowT = 0; this.fastT = 0; }
@@ -660,16 +666,37 @@ export class BattleScene implements Scene {
     }
   }
 
+  // 暗角：全屏径向渐变每帧现算很费 GPU，改成预先画好的小图（1/4 分辨率）拉伸贴上去
+  private vigCache: Record<string, HTMLCanvasElement> = {};
+  private vignette(kind: 'dark' | 'red') {
+    const ui = game.ui;
+    const key = kind + ui.W + 'x' + ui.H;
+    let c = this.vigCache[key];
+    if (!c) {
+      const w = Math.ceil(ui.W / 4), h = Math.ceil(ui.H / 4);
+      c = getPlatform().createCanvas(w, h);
+      const g = c.getContext('2d')!;
+      const grad = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.75);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, kind === 'red' ? 'rgba(160,10,20,1)' : 'rgba(10,6,16,1)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+      this.vigCache[key] = c;
+    }
+    return c;
+  }
+
   private drawVignette() {
     const ui = game.ui;
     const g = ui.ctx;
     const b = this.battle;
     const low = b.player.hp < b.player.maxHp * 0.3;
-    const grad = g.createRadialGradient(ui.W / 2, ui.H / 2, Math.min(ui.W, ui.H) * 0.45, ui.W / 2, ui.H / 2, Math.max(ui.W, ui.H) * 0.75);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, low ? `rgba(160,10,20,${0.45 + 0.15 * Math.sin(b.t * 6)})` : 'rgba(10,6,16,0.45)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, ui.W, ui.H);
+    const c = this.vignette(low ? 'red' : 'dark');
+    g.save();
+    g.imageSmoothingEnabled = true;
+    g.globalAlpha = low ? 0.45 + 0.15 * Math.sin(b.t * 6) : 0.45;
+    g.drawImage(c, 0, 0, c.width, c.height, 0, 0, ui.W, ui.H);
+    g.restore();
   }
 
   private drawJoystick() {

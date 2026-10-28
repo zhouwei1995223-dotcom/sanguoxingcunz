@@ -394,7 +394,7 @@ export class SettingsDialog implements Dialog {
     const w = ui.W - 80 * u, h = 1320 * u;
     const f = dialogFrame(ui, w, h, '设置', this.t, 'st_close');
     if (f.close) return false;
-    const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['震动', 'vibrate'], ['伤害数字', 'dmgNum'], ['大招按钮位置', 'ultRight']];
+    const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['震动', 'vibrate'], ['伤害数字', 'dmgNum'], ['省电模式（手机发烫时打开）', 'lowPower'], ['大招按钮位置', 'ultRight']];
     let y = f.y + 100 * u;
     for (const [name, key] of toggles) {
       ui.text(name, f.x + 60 * u, y + 40 * u, 28, '#fff4d6', 'left');
@@ -405,9 +405,9 @@ export class SettingsDialog implements Dialog {
         markDirty();
         flushSave(true);
       }
-      y += 100 * u;
+      y += 90 * u;
     }
-    y += 10 * u;
+    y += 20 * u;
     const bw = (w - 140 * u) / 2;
     if (ui.button('st_agree', f.x + 40 * u, y, bw, 80 * u, '用户协议', C.btnBlue, { size: 24 })) game.openDialog(new TextDialog('用户协议', USER_AGREEMENT));
     if (ui.button('st_privacy', f.x + 100 * u + bw, y, bw, 80 * u, '隐私政策', C.btnBlue, { size: 24 })) game.openDialog(new TextDialog('隐私政策', PRIVACY_POLICY));

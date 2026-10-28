@@ -43,7 +43,8 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
   try {
     if (api.getWindowInfo) sys = Object.assign({}, sys, api.getWindowInfo());
   } catch (e) {}
-  const dpr = Math.min(sys.pixelRatio || 2, 3);
+  // 画布分辨率最多 2 倍：3 倍屏按 3 倍画，像素量多 2.25 倍、更费电发热，像素风画面看不出区别
+  const dpr = Math.min(sys.pixelRatio || 2, 2);
   const winW = sys.windowWidth || sys.screenWidth || 375;
   const winH = sys.windowHeight || sys.screenHeight || 667;
 
@@ -107,6 +108,9 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     showListeners.forEach((f) => f());
   });
   api.onHide(() => hideListeners.forEach((f) => f()));
+
+  // 高刷屏（90 / 120Hz）上默认会跟着跑满，限制在 60 帧，省电
+  try { if (api.setPreferredFramesPerSecond) api.setPreferredFramesPerSecond(60); } catch (e) {}
 
   // 被动分享（右上角菜单）
   try {
@@ -215,8 +219,8 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
       lastInterstitial = now;
       try { interstitial.show().catch(() => {}); } catch (e) {}
     },
-    share(title, query) {
-      try { api.shareAppMessage({ title, query: query || '', imageUrl: SHARE_CONFIG.imageUrl || undefined }); } catch (e) {}
+    share(title, query, imageUrl) {
+      try { api.shareAppMessage({ title, query: query || '', imageUrl: imageUrl || SHARE_CONFIG.imageUrl || undefined }); } catch (e) {}
     },
     onShow(cb) { showListeners.push(cb); },
     onHide(cb) { hideListeners.push(cb); },

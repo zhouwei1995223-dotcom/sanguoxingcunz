@@ -2,6 +2,7 @@ import { getPlatform } from './platform';
 import { reportError } from './meta/telemetry';
 import type { TouchKind, TouchPoint } from './platform/types';
 import { UI } from './ui/ui';
+import { save } from './meta/save';
 
 // 全局游戏对象：场景切换、弹窗栈、主循环
 
@@ -28,6 +29,7 @@ class Game {
   scene: Scene | null = null;
   dialogs: Dialog[] = [];
   private last = 0;
+  private nextAt = 0;
   private nextScene: Scene | null = null;
   fade = 0;
 
@@ -45,6 +47,11 @@ class Game {
     this.last = p.now();
     const loop = () => {
       const now = p.now();
+      // 帧率上限：高刷屏不超过 60 帧，省电模式 30 帧（没到时间就跳过这一帧，不更新也不绘制）。
+      // 按固定节拍排下一帧，90Hz 屏也能稳定在 60 帧，而不是掉到 45 帧
+      const interval = save.settings.lowPower ? 1000 / 30 : 1000 / 60;
+      if (now < this.nextAt - interval * 0.25) { p.requestFrame(loop); return; }
+      this.nextAt = Math.max(this.nextAt + interval, now);
       let dt = (now - this.last) / 1000;
       this.last = now;
       if (dt > 0.1) dt = 0.1;

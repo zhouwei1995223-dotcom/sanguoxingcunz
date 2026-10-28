@@ -30,7 +30,7 @@ const common = {
   bundle: true,
   format: 'iife',
   target: 'es2017',
-  minify: !watch,
+  minify: !watch && !process.env.NOMINIFY,
   sourcemap: watch ? 'inline' : false,
   legalComments: 'none',
   keepNames: true,

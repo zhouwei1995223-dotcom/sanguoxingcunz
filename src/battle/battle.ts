@@ -1426,17 +1426,23 @@ export class Battle {
   }
 
   // —— 特效 ——
+  private numAlive = 0;
   addNum(x: number, y: number, v: number, color: 'w' | 'y' | 'r' | 'g', big = false) {
-    if (this.fx.length > 400) return;
+    if (this.fx.length > 400 || (this.numAlive >= 60 && !big)) return;
+    this.numAlive++;
     this.fx.push({ kind: 'num', x, y, t: 0, dur: 0.6, text: String(v), color, big });
   }
 
   private updateFx(dt: number) {
-    for (let i = this.fx.length - 1; i >= 0; i--) {
+    // 原地压缩数组（几百个特效时逐个 splice 很慢）
+    let n = 0, nums = 0;
+    for (let i = 0; i < this.fx.length; i++) {
       const f = this.fx[i];
       f.t += dt;
-      if (f.t >= f.dur) this.fx.splice(i, 1);
+      if (f.t < f.dur) { this.fx[n++] = f; if (f.kind === 'num') nums++; }
     }
+    this.fx.length = n;
+    this.numAlive = nums;
     for (let i = this.warnings.length - 1; i >= 0; i--) {
       const w = this.warnings[i];
       w.t += dt;

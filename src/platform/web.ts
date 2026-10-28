@@ -35,7 +35,7 @@ export function createWebPlatform(): Platform {
   document.body.appendChild(canvas);
 
   // 桌面浏览器上模拟手机竖屏比例
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let cssW = window.innerWidth;
   let cssH = window.innerHeight;
   if (cssW / cssH > 0.62) cssW = Math.round(cssH * 0.5);

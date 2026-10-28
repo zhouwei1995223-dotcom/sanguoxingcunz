@@ -27,7 +27,9 @@ export const AD_CONFIG = {
 
 export const SHARE_CONFIG = {
   title: '长坂坡七进七出，你能撑过几分钟？',
-  imageUrl: '', // 分享图，可放 5:4 的图片路径，例如 'share.png'
+  imageUrl: 'assets/share/combo.jpg', // 右上角菜单分享用的图（5:4）
+  /** 按场景分享用的图：结算连斩、结算大招、锦囊三选一 */
+  images: { combo: 'assets/share/combo.jpg', ult: 'assets/share/ult.jpg', strat: 'assets/share/strat.jpg' },
 };
 
 export const GAME_INFO = {

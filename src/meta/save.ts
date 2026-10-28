@@ -65,7 +65,7 @@ export interface SaveData {
   signinDay: string;
   daily: DailyState;
   goldChestCount: number;
-  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean };
+  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean; lowPower: boolean };
   guide: number;
   /** 已经看过的一次性提示（首次遇到某个系统时显示） */
   tips: Record<string, boolean>;
@@ -144,7 +144,7 @@ function freshSave(): SaveData {
     signinDay: '',
     daily: freshDaily(),
     goldChestCount: 0,
-    settings: { music: true, sfx: true, vibrate: true, dmgNum: true, ultRight: false },
+    settings: { music: true, sfx: true, vibrate: true, dmgNum: true, ultRight: false, lowPower: false },
     guide: 0,
     tips: {},
     funnel: {},

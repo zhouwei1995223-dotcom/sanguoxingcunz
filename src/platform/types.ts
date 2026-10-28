@@ -48,7 +48,7 @@ export interface Platform {
   showRewardedAd(placement: string): Promise<boolean>;
   showInterstitialAd(): void;
 
-  share(title: string, query?: string): void;
+  share(title: string, query?: string, imageUrl?: string): void;
   onShow(cb: () => void): void;
   onHide(cb: () => void): void;
 

@@ -16,7 +16,7 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
-import { NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier } from '../data/strategies';
 
 /** 每局可看广告刷新技能的次数 */
@@ -236,6 +236,11 @@ export class StrategyDialog implements Dialog {
         this.reroll();
       });
     }
+    if (!IS_H5 && ui.button('strat_ask', ui.W / 2 + bw / 2 + 20 * u, y + 6 * u, 150 * u, bh - 12 * u, '问好友', C.btnGreen, { size: 24 })) {
+      const names = this.choices.map((id) => STRAT_BY_ID[id].name).join(' / ');
+      getPlatform().share(`三个锦囊只能选一个：${names}，你选哪个？`, 'from=strat', SHARE_CONFIG.images.strat);
+      getPlatform().report('share', { scene: 'strat' });
+    }
     if (b.strats.length) {
       const names = b.strats.map((id) => STRAT_BY_ID[id].name).join('、');
       ui.text('已有：' + names, ui.W / 2, y + bh + 40 * u, 22, C.textDim);
@@ -401,10 +406,11 @@ export class PauseDialog implements Dialog {
     });
     y += 140 * u;
     // 设置开关
-    const tw = (w - 120 * u) / 3;
+    const tw = (w - 120 * u - 60 * u) / 4;
     if (ui.button('p_music', x, y, tw, 76 * u, '音乐:' + (save.settings.music ? '开' : '关'), C.btnGray, { size: 22 })) { save.settings.music = !save.settings.music; refreshMusic(); markDirty(); }
     if (ui.button('p_sfx', x + tw + 20 * u, y, tw, 76 * u, '音效:' + (save.settings.sfx ? '开' : '关'), C.btnGray, { size: 22 })) { save.settings.sfx = !save.settings.sfx; markDirty(); }
     if (ui.button('p_ult', x + (tw + 20 * u) * 2, y, tw, 76 * u, '大招:' + (save.settings.ultRight ? '右' : '左'), C.btnGray, { size: 22 })) { save.settings.ultRight = !save.settings.ultRight; markDirty(); }
+    if (ui.button('p_power', x + (tw + 20 * u) * 3, y, tw, 76 * u, '省电:' + (save.settings.lowPower ? '开' : '关'), save.settings.lowPower ? C.btnGreen : C.btnGray, { size: 22 })) { save.settings.lowPower = !save.settings.lowPower; markDirty(); }
     y += 100 * u;
     const bw = (w - 100 * u) / 2;
     if (!this.confirmQuit) {
@@ -602,7 +608,16 @@ export class ResultDialog implements Dialog {
       }
       y += 104 * u;
     }
-    if (ui.button('res_ok', bx, y, bw, 96 * u, this.doubled || NO_ADS ? '收下' : '直接领取', this.doubled || NO_ADS ? C.btnGold : C.btnGray) && t > 0.6) {
+    // 炫耀战绩：带上本局真实数据，按本局亮点配图（分享不给奖励，避免诱导分享）
+    const canShare = !IS_H5 && !this.video;
+    const okW = canShare ? (bw - 20 * u) / 2 : bw;
+    if (canShare && ui.button('res_share', bx + okW + 20 * u, y, okW, 96 * u, '炫耀战绩', C.btnBlue, { size: 28 })) {
+      const combo = b.bestCombo >= 50 ? `，最高${b.bestCombo}连斩` : '';
+      const useUlt = b.ultCasts >= 3 && b.bestCombo < 100;
+      getPlatform().share(`我在长坂坡斩敌${b.kills}人${combo}，你能超过我吗？`, 'from=result', useUlt ? SHARE_CONFIG.images.ult : SHARE_CONFIG.images.combo);
+      getPlatform().report('share', { scene: 'result' });
+    }
+    if (ui.button('res_ok', bx, y, okW, 96 * u, this.doubled || NO_ADS ? '收下' : '直接领取', this.doubled || NO_ADS ? C.btnGold : C.btnGray) && t > 0.6) {
       // 非首局且未看广告时偶尔展示插屏
       if (!this.doubled && save.stats.runs > 2 && save.stats.runs % 2 === 0) getPlatform().showInterstitialAd();
       playBgm('bgm_home');
