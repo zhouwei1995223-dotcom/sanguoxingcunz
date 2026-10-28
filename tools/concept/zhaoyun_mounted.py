@@ -165,18 +165,24 @@ layers.append(legr)
 rein = L()
 rein.line(57, 45, 64, 41, B5); rein.line(64, 41, 72, 37, B5)
 layers.append(rein)
-# 9 亮银枪：近手握枪，枪尖斜指前上方
+# 9 亮银枪：双手平端，枪尖朝前略向下（对付步兵的冲锋姿势），枪杆在马脖子外侧
 spear = L()
-x0, y0, x1, y1 = 45, 70, 74, 4
-spear.line(x0, y0, x1, y1, S3, 2)
-spear.line(x0 + 1, y0, x1 + 1, y1, S2)
-for i, (x, y) in enumerate([(74, 3), (75, 2), (75, 1), (76, 0), (74, 4), (75, 3), (76, 2), (76, 1)]): spear.put(x, y, WH if i % 2 == 0 else S1)
-for (x, y, c) in [(73, 7, B1), (72, 8, B2), (74, 8, B2), (71, 9, B1), (73, 9, B3), (75, 9, B1)]: spear.put(x, y, c)
+x0, y0, x1, y1 = 9, 44, 86, 48
+spear.line(x0, y0, x1, y1, S2)
+# 枪头：叶形，银白，长 8
+for (x, y, c) in [(87, 48, S1), (88, 48, WH), (89, 48, WH), (90, 48, WH), (91, 48, WH), (92, 48, WH), (93, 48, S1), (94, 48, S1),
+                  (88, 47, S1), (89, 47, WH), (90, 47, WH), (91, 47, S1), (88, 49, S2), (89, 49, S1), (90, 49, S1), (91, 49, S2)]:
+    spear.put(x, y, c)
+spear.put(86, 47, S3); spear.put(86, 49, S3)
+# 蓝缨挂在枪头后面
+for (x, y, c) in [(84, 49, B2), (85, 49, B1), (83, 50, B3), (84, 50, B2), (85, 50, B1), (83, 51, B2), (85, 51, B2), (84, 52, B3)]: spear.put(x, y, c)
 layers.append(spear)
-# 10 握枪的手
+# 10 双手握枪：把参考图里两只手的像素盖到枪上
 hand = L()
-for (x, y) in [(55, 45), (56, 45), (57, 45), (55, 46), (56, 46), (57, 46)]: hand.put(x, y, P(232, 178, 160))
-hand.put(57, 45, P(184, 128, 104)); hand.put(57, 46, P(184, 128, 104))
+SKIN, SKIN2 = P(240, 196, 176), P(200, 140, 120)
+for hx, hy in ((29, 44), (49, 45)):
+    for dx in range(3):
+        hand.put(hx + dx, hy, SKIN); hand.put(hx + dx, hy + 1, SKIN2 if dx == 2 else SKIN); hand.put(hx + dx, hy + 2, SKIN2)
 layers.append(hand)
 
 out = Image.new('RGBA', (W, H), (0, 0, 0, 0))
