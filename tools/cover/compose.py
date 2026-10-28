@@ -81,6 +81,7 @@ dust(hx + 58, hy + 56, 5, 170); dust(hx + 68, hy + 53, 4, 120); dust(hx + 76, hy
 can.alpha_composite(hero, (hx, hy))
 # 枪尖挑中敌兵的火花
 put('spark0', 80, 13); put('spark1', 75, 18)
+can.save('dist/cover_canvas.png')
 out = can.resize((CW * S, CH * S), Image.NEAREST).convert('RGB').crop((1, 1, 651, 251))
 for q in (95, 90, 85, 80, 75, 70):
     out.save('dist/cover.jpg', 'JPEG', quality=q, optimize=True, subsampling=0)
