@@ -19,7 +19,7 @@ import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog } from './battleDialogs';
+import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
@@ -53,8 +53,9 @@ export class BattleScene implements Scene {
   /** 每周挑战规则（每周挑战模式下有值） */
   weekly: WeeklyDef | null = null;
   private speedMul = 1;
-  /** 玩家开的加速：1 或 2 倍 */
+  /** 玩家开的加速：1 或 1.5 倍 */
   private userSpeed = 1;
+  private speedAcc = 0;
   videoPath: Promise<string | null> | null = null;
 
   /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼 */
@@ -193,8 +194,13 @@ export class BattleScene implements Scene {
       // 调试加速：拆成多个小步长，保证碰撞稳定
       // 顿帧：命中瞬间画面停一下，增强打击感
       if (b.hitStop > 0) b.hitStop -= dt;
-      // 加速（2 倍速）：一帧里多走一步，而不是把步长放大，碰撞依然稳定
-      else for (let i = 0; i < DEBUG.speed * this.userSpeed && !b.dead && !b.won; i++) b.update(dt * this.speedMul);
+      // 加速（1.5 倍速）：每两帧多走一步，而不是把步长放大，碰撞依然稳定
+      else {
+        this.speedAcc += this.userSpeed;
+        const steps = Math.floor(this.speedAcc);
+        this.speedAcc -= steps;
+        for (let i = 0; i < DEBUG.speed * steps && !b.dead && !b.won; i++) b.update(dt * this.speedMul);
+      }
       const keys = (typeof window !== 'undefined' && (window as any).__keys) || null;
       if (keys && keys[' ']) this.tryUlt();
       if (keys && keys['q'] && b.potionCd <= 0) this.pressPotion();
@@ -297,6 +303,7 @@ export class BattleScene implements Scene {
   /** 测试用：直接打开指定选项的升级弹窗 / 进化表 */
   openLevelUpForTest(choices: Choice[]) { game.openDialog(new LevelUpDialog(this, choices)); }
   openStrategyForTest(tier: 0 | 1 | 2, round = 0) { game.openDialog(new StrategyDialog(this, tier, round)); }
+  openRushForTest() { game.openDialog(new RushConfirmDialog(this)); }
   openEvoTableForTest() { game.openDialog(new EvoTableDialog(this.battle)); }
   pauseForTest() { game.openDialog(new PauseDialog(this)); }
 
@@ -378,17 +385,17 @@ export class BattleScene implements Scene {
     // 加速：1 倍 / 2 倍（新手试炼和每周挑战不提供）
     if (!this.chapter.tutorial && !this.weekly) {
       const sx = px - ps - 12 * u;
-      if (ui.clicked('speed', sx, py, ps, ps)) { this.userSpeed = this.userSpeed === 1 ? 2 : 1; ui.toast(this.userSpeed === 2 ? '已开启 2 倍速' : '恢复正常速度'); }
+      if (ui.clicked('speed', sx, py, ps, ps)) { this.userSpeed = this.userSpeed === 1 ? 1.5 : 1; ui.toast(this.userSpeed > 1 ? '已开启 1.5 倍速' : '恢复正常速度'); }
       ui.panel(sx, py, ps, ps, 'dark');
-      ui.text(this.userSpeed === 2 ? '×2' : '×1', sx + ps / 2, py + ps / 2, 30, this.userSpeed === 2 ? C.gold : '#fff');
+      ui.text(this.userSpeed > 1 ? '×1.5' : '×1', sx + ps / 2, py + ps / 2, this.userSpeed > 1 ? 24 : 30, this.userSpeed > 1 ? C.gold : '#fff');
     }
-    // 直取敌将：已经稳稳压制敌军时出现，跳过小兵直接挑战下一个敌将
+    // 直取敌将：敌将登场前 2 分钟内出现（3:00~5:00、8:00~10:00），确认后跳过小兵直接挑战敌将
     if (b.canRush() && !b.dead && !b.won) {
       const rw = 260 * u, rh = 72 * u, rx = ui.W / 2 - rw / 2, ry = top + 136 * u;
       const pulse = 1 + 0.05 * Math.sin(ui.time * 6);
       g.save();
       g.translate(ui.W / 2, ry + rh / 2); g.scale(pulse, pulse); g.translate(-ui.W / 2, -(ry + rh / 2));
-      if (ui.button('rush', rx, ry, rw, rh, '直取敌将 ▶', C.btnRed, { size: 28 })) { b.rush(); getPlatform().report('rush', { chapter: this.chapter.id, sec: Math.floor(b.t) }); }
+      if (ui.button('rush', rx, ry, rw, rh, '直取敌将 ▶', C.btnRed, { size: 28 })) game.openDialog(new RushConfirmDialog(this));
       g.restore();
       this.tip('rush', '点「直取敌将」可跳过小兵，直接挑战敌将');
     }

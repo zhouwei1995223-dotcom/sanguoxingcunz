@@ -10,6 +10,10 @@ import { levelData } from './weapons';
 
 const TALL = new Set(['tree', 'pine', 'deadTree', 'banner', 'bigRock']);
 const CELL = 36;
+/** 地图块大小（世界像素，地砖 96 的整数倍） */
+const CHUNK = 192;
+/** 地图块缓存上限（每块 192×192×倍率，3 倍时约 1.3MB） */
+const CHUNK_CACHE = 18;
 
 interface Drawable {
   y: number;
@@ -50,6 +54,40 @@ export class WorldRenderer {
     this.themeName = themeName;
     this.theme = THEMES[themeName];
     this.tile = this.buildTile();
+  }
+
+  private chunks = new Map<string, HTMLCanvasElement>();
+  /** 地图块：地砖 + 矮装饰（草、花、石头……）画在一张图里，按需生成，最近用过的留在缓存 */
+  private chunk(kx: number, ky: number): HTMLCanvasElement {
+    const key = kx + ',' + ky;
+    const hit = this.chunks.get(key);
+    if (hit) { this.chunks.delete(key); this.chunks.set(key, hit); return hit; }
+    const K = this.scale, T = 96;
+    const c = getPlatform().createCanvas(CHUNK * K, CHUNK * K);
+    const g = c.getContext('2d')!;
+    g.imageSmoothingEnabled = false;
+    for (let y = 0; y < CHUNK; y += T) for (let x = 0; x < CHUNK; x += T) g.drawImage(this.tile, 0, 0, T * K, T * K, x * K, y * K, T * K, T * K);
+    const x0 = kx * CHUNK, y0 = ky * CHUNK;
+    const decor = this.theme.decor;
+    let total = 0;
+    for (const d of decor) total += d[1];
+    // 装饰可能跨到相邻地图块：把周围一圈格子都算上，超出部分会被画布边缘裁掉
+    for (let gy = Math.floor(y0 / CELL) - 1; gy <= Math.floor((y0 + CHUNK) / CELL) + 1; gy++)
+      for (let gx = Math.floor(x0 / CELL) - 1; gx <= Math.floor((x0 + CHUNK) / CELL) + 1; gx++) {
+        if (hash2(gx, gy, 11) > 0.42) continue;
+        if (Math.abs(gx) <= 1 && Math.abs(gy) <= 1) continue;
+        const r = hash2(gx, gy, 23);
+        let acc = 0, name = decor[0][0];
+        for (const d of decor) { acc += d[1] / total; if (r <= acc) { name = d[0]; break; } }
+        if (TALL.has(name)) continue;
+        const wx = gx * CELL + hash2(gx, gy, 31) * (CELL - 8), wy = gy * CELL + hash2(gx, gy, 41) * (CELL - 8);
+        const s = sprite(`env_${this.themeName}_${name}`);
+        const ss = scaled(s, K);
+        g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(wx - s.ax - x0) * K, Math.round(wy - s.ay - y0) * K, s.w * K, s.h * K);
+      }
+    this.chunks.set(key, c);
+    if (this.chunks.size > CHUNK_CACHE) this.chunks.delete(this.chunks.keys().next().value as string);
+    return c;
   }
 
   /** 地表贴图：直接按屏幕像素倍率绘制，保证清晰 */
@@ -108,10 +146,12 @@ export class WorldRenderer {
     this.camY = cy;
     g.imageSmoothingEnabled = false;
 
-    // 地面
-    const T = 96;
-    const ox = -(((cx % T) + T) % T), oy = -(((cy % T) + T) % T);
-    for (let y = oy; y < this.h; y += T) for (let x = ox; x < this.w; x += T) g.drawImage(this.tile, 0, 0, T * this.scale, T * this.scale, x, y, T, T);
+    // 地面 + 矮装饰：按 192×192 的地图块预先画好缓存，每帧只贴十几块（原来每帧要贴一百多次）
+    for (let ky = Math.floor(cy / CHUNK); ky <= Math.floor((cy + this.h) / CHUNK); ky++)
+      for (let kx = Math.floor(cx / CHUNK); kx <= Math.floor((cx + this.w) / CHUNK); kx++) {
+        const c = this.chunk(kx, ky);
+        g.drawImage(c, 0, 0, c.width, c.height, kx * CHUNK - cx, ky * CHUNK - cy, CHUNK, CHUNK);
+      }
 
     this.list.length = 0;
     let pooled = 0;
@@ -130,13 +170,15 @@ export class WorldRenderer {
         for (const d of decor) total += d[1];
         let name = decor[0][0];
         for (const d of decor) { acc += d[1] / total; if (r <= acc) { name = d[0]; break; } }
+        // 矮装饰已经画进地图块，这里只处理需要和人物前后遮挡的高装饰
+        if (!TALL.has(name)) continue;
         const wx = gx * CELL + hash2(gx, gy, 31) * (CELL - 8), wy = gy * CELL + hash2(gx, gy, 41) * (CELL - 8);
         const s = sprite(`env_${this.themeName}_${name}`);
-        if (TALL.has(name)) this.list.push({ y: wy, draw: () => this.blit(s, wx, wy) });
-        else this.blit(s, wx, wy);
+        this.list.push({ y: wy, draw: () => this.blit(s, wx, wy) });
       }
 
     // 火海 / 铁蒺藜
+    let flames = 0;
     for (const f of b.pools) {
       const a = Math.min(1, f.life / 0.4, (f.maxLife - f.life) / 0.15 + 0.3);
       if (f.kind === 'caltrop') {
@@ -161,7 +203,9 @@ export class WorldRenderer {
       g.fillStyle = '#f77622';
       this.ellipse(f.x, f.y, f.r, f.r * 0.7);
       g.globalAlpha = a;
-      const n = Math.max(4, Math.round(f.r / 4));
+      // 火苗：每片火海少画一些，全屏最多 40 个（火海一多，贴图调用能占到一半）
+      const n = Math.min(Math.max(3, Math.round(f.r / 7)), 40 - flames);
+      flames += Math.max(0, n);
       for (let i = 0; i < n; i++) {
         const ang = (i / n) * TAU + hash2(i, 3, f.x | 0);
         const rr = f.r * (0.25 + 0.7 * hash2(i, 5, f.y | 0));

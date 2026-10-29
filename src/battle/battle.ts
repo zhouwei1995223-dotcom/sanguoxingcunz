@@ -66,6 +66,12 @@ const noopHooks: BattleHooks = { sfx() {}, shake() {}, banner() {}, vibrate() {}
 const TENSION: [number, number][] = [[0, 0.8], [60, 0.9], [90, 1.45], [270, 2.4], [300, 2.4], [345, 1.3], [420, 1.3], [540, 1.55], [9999, 1.55]];
 /** 接触伤害倍率：小怪出手变慢（贴身蓄力 + 玩家受击后短暂无敌）后，单次伤害相应提高 */
 const CONTACT_DMG = 1.25;
+/** 小兵弓箭 / 飞石伤害倍率：子弹密集，单发伤害略低，不选回血技能也能过关 */
+const SHOT_DMG = 0.8;
+/** 敌将血量 / 伤害倍率（新手试炼除外） */
+const BOSS_HP = 1.4, BOSS_DMG = 1.1;
+/** 直取敌将按钮：敌将登场前多少秒内出现 */
+const RUSH_WINDOW = 120;
 export function tension(t: number, chapterId = 2): number {
   let v = TENSION[TENSION.length - 1][1];
   for (let i = 1; i < TENSION.length; i++) {
@@ -569,6 +575,9 @@ export class Battle {
   recentDmg = 0;
   /** 持续压制的秒数（每秒在 updateDirector 里更新） */
   dominantT = 0;
+  /** 每秒获得的经验（平滑，未乘经验加成），用于直取敌将的经验补偿 */
+  expRate = 0;
+  private expRaw = 0;
 
   /** 下一个首领事件（没有就返回 null） */
   private nextBossEvent() {
@@ -576,11 +585,22 @@ export class Battle {
     for (let i = this.eventIdx; i < evs.length; i++) if (evs[i].type === 'boss' || evs[i].type === 'midboss') return evs[i];
     return null;
   }
-  /** 可以「直取敌将」：普通章节、场上没有首领、开局 1 分钟后、已经稳稳压制敌军 10 秒以上 */
+  /** 可以「直取敌将」：普通章节、场上没有敌将、离下一个敌将登场还有 2 分钟以内（3:00~5:00、8:00~10:00） */
   canRush(): boolean {
     const ch = this.chapter;
-    if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.t < 60) return false;
-    return this.dominantT >= 10 && !!this.nextBossEvent();
+    if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.dead || this.won) return false;
+    const ev = this.nextBossEvent();
+    return !!ev && ev.t - this.t <= RUSH_WINDOW && ev.t - this.t > 3;
+  }
+  /** 下一个敌将的名字 */
+  nextBossName(): string {
+    const ev = this.nextBossEvent();
+    return (ev && ev.enemy && BOSSES[ev.enemy] && BOSSES[ev.enemy].name) || '敌将';
+  }
+  /** 直取敌将会跳过多少秒 */
+  rushSkip(): number {
+    const ev = this.nextBossEvent();
+    return ev ? Math.max(0, ev.t - 0.5 - this.t) : 0;
   }
   /** 直取敌将：时间直接推进到下一个首领登场前，中间的小规模事件跳过（锦囊照常补发） */
   rush(): boolean {
@@ -590,7 +610,10 @@ export class Battle {
     if (to <= this.t) return false;
     while (this.eventIdx < this.chapter.events.length && this.chapter.events[this.eventIdx].t < to && this.chapter.events[this.eventIdx] !== ev) this.eventIdx++;
     skipHordesBefore(to);
+    // 跳过的时间按最近的经验速度补 60%，到了敌将面前不至于等级太低
+    const bonus = this.expRate * (to - this.t) * 0.6;
     this.t = to;
+    if (bonus > 0) this.gainExp(bonus);
     this.dominantT = 0;
     this.rushes++;
     this.hooks.banner('直取敌将！', '#ff8a80');
@@ -614,6 +637,8 @@ export class Battle {
     const fill = near / this.targetDensity;
     this.screenFill += (fill - this.screenFill) * 0.15;
     this.recentDmg *= 0.9;
+    this.expRate += (this.expRaw - this.expRate) * 0.1;
+    this.expRaw = 0;
     this.dominantT = this.screenFill < 0.08 && this.recentDmg < this.player.maxHp * 0.04 ? this.dominantT + 1 : 0;
     if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(3, this.director + 0.04);
     else if (this.screenFill > 0.06) this.director = Math.max(1, this.director - 0.02);
@@ -664,9 +689,10 @@ export class Battle {
     e.x = x;
     e.y = y;
     e.r = d.radius;
-    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul);
+    const strong = this.chapter.tutorial ? 1 : BOSS_HP;
+    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong);
     e.speed = d.speed;
-    e.dmg = d.dmg * this.enemyDmgMul;
+    e.dmg = d.dmg * this.enemyDmgMul * (this.chapter.tutorial ? 1 : BOSS_DMG);
     e.mass = 50;
     e.exp = isFinal ? 200 : 100;
     e.sprite = 'u_' + d.sprite;
@@ -708,7 +734,7 @@ export class Battle {
         e.shootT -= dt;
         if (e.shootT <= 0 && d < range + 40 && e.slow < 1) {
           e.shootT = e.def!.shootCd || 3;
-          this.enemyShoot(e.x, e.y - 6, dx, dy, 90, e.dmg, e.def!.proj || 'arrow');
+          this.enemyShoot(e.x, e.y - 6, dx, dy, 90, e.dmg * SHOT_DMG, e.def!.proj || 'arrow');
         }
       } else {
         e.x += dx * spd * dt;
@@ -888,7 +914,7 @@ export class Battle {
   }
 
   dropGem(x: number, y: number, value: number) {
-    if (this.gemCount > 260) {
+    if (this.gemCount > 150) {
       // 宝石过多：合并到一颗大宝石里，避免卡顿
       if (!this.overflowGem || !this.pickups.includes(this.overflowGem)) {
         this.overflowGem = this.dropPickup('gem', x, y, 0);
@@ -1193,6 +1219,7 @@ export class Battle {
   }
 
   gainExp(v: number) {
+    this.expRaw += v;
     this.exp += v * this.expMul;
     while (this.exp >= this.expNeed) {
       this.exp -= this.expNeed;
@@ -1242,7 +1269,7 @@ export class Battle {
     if (e.boss) return;
     let corpses = 0;
     for (const f of this.fx) if (f.kind === 'corpse') corpses++;
-    if (corpses > 90) { this.fx.push({ kind: 'puff', x: e.x, y: e.y - 4 * e.scale, t: 0, dur: 0.3, big: e.scale > 1 }); return; }
+    if (corpses > 45) { this.fx.push({ kind: 'puff', x: e.x, y: e.y - 4 * e.scale, t: 0, dur: 0.3, big: e.scale > 1 }); return; }
     let hx = e.hx, hy = e.hy;
     if (!hx && !hy) { const dx = e.x - this.player.x, dy = e.y - this.player.y; const d = Math.hypot(dx, dy) || 1; hx = dx / d; hy = dy / d; }
     const power = rand(110, 170) * (this.ult ? 1.6 : 1);
@@ -1506,7 +1533,7 @@ export class Battle {
   // —— 特效 ——
   private numAlive = 0;
   addNum(x: number, y: number, v: number, color: 'w' | 'y' | 'r' | 'g', big = false) {
-    if (this.fx.length > 400 || (this.numAlive >= 60 && !big)) return;
+    if (this.fx.length > 400 || (this.numAlive >= 30 && !big)) return;
     this.numAlive++;
     this.fx.push({ kind: 'num', x, y, t: 0, dur: 0.6, text: String(v), color, big });
   }
@@ -1646,17 +1673,31 @@ export class Battle {
     return this.weapons.filter((w) => !w.evo && w.lv >= MAX_WEAPON_LV && this.passiveLv(WEAPONS[w.id].evoPassive) > 0).map((w) => w.id);
   }
 
-  /** 开宝箱：优先进化，其次随机升级已有技能 */
+  /**
+   * 开宝箱：优先进化，其次升级已有技能。
+   * 敌将宝箱保底：没有能进化的武器时，满级武器缺进化兵法就直接送这本兵法并当场进化；
+   * 还是进化不了就给 5 个升级，并优先升最接近满级的武器（下一个宝箱更容易进化）。
+   */
   rollChest(boss: boolean): Choice[] {
     const out: Choice[] = [];
-    const evo = this.evolvable();
+    let evo = this.evolvable();
     let count = boss ? 3 : Math.random() < 0.08 ? 5 : Math.random() < 0.3 ? 3 : 1;
+    if (boss && !evo.length && this.passives.length < PASSIVE_SLOTS) {
+      const w = this.weapons.find((x) => !x.evo && x.lv >= MAX_WEAPON_LV && !this.passiveLv(WEAPONS[x.id].evoPassive));
+      if (w) { out.push({ kind: 'passive', id: WEAPONS[w.id].evoPassive, lv: 1, isNew: true }); evo = [w.id]; count--; }
+    }
     if (evo.length) { out.push({ kind: 'evo', id: evo[0] }); count--; }
+    else if (boss) count = 5;
     for (let i = 0; i < count; i++) {
       const pool: Choice[] = [];
       for (const w of this.weapons) {
         const pending = out.filter((c) => c.kind === 'weapon' && c.id === w.id).length;
-        if (!w.evo && w.lv + pending < MAX_WEAPON_LV) pool.push({ kind: 'weapon', id: w.id, lv: w.lv + pending + 1, isNew: false });
+        if (!w.evo && w.lv + pending < MAX_WEAPON_LV) {
+          const c: Choice = { kind: 'weapon', id: w.id, lv: w.lv + pending + 1, isNew: false };
+          pool.push(c);
+          // 敌将宝箱：等级越高的武器权重越大
+          if (boss) for (let k = 0; k < w.lv + pending; k++) pool.push(c);
+        }
       }
       for (const p of this.passives) {
         const pending = out.filter((c) => c.kind === 'passive' && c.id === p.id).length;

@@ -493,6 +493,32 @@ export class ReviveDialog implements Dialog {
   closed?: boolean;
 }
 
+/** 直取敌将确认：跳过多久、补多少经验，确认后再跳，防止误触 */
+export class RushConfirmDialog implements Dialog {
+  t?: number;
+  constructor(private scene: BattleScene) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const b = this.scene.battle;
+    const w = ui.W - 120 * u, h = 520 * u;
+    const f = dialogFrame(ui, w, h, '直取敌将', this.t, 'rush_close');
+    if (f.close || !b.canRush()) return false;
+    let y = f.y + 120 * u;
+    ui.text(`跳过约 ${Math.round(b.rushSkip())} 秒小兵`, ui.W / 2, y, 32, '#fff4d6');
+    y += 60 * u;
+    ui.text(`直接迎战「${b.nextBossName()}」`, ui.W / 2, y, 32, C.gold);
+    y += 60 * u;
+    ui.text('跳过的部分补 60% 经验，锦囊照常发放', ui.W / 2, y, 22, C.textDim);
+    y += 80 * u;
+    const bw = (w - 140 * u) / 2;
+    if (ui.button('rush_no', f.x + 50 * u, y, bw, 96 * u, '再等等', C.btnGray)) return false;
+    if (ui.button('rush_go', f.x + 90 * u + bw, y, bw, 96 * u, '出发！', C.btnRed)) {
+      if (b.rush()) getPlatform().report('rush', { chapter: b.chapter.id, sec: Math.floor(b.t) });
+      return false;
+    }
+  }
+}
+
 export class BossIntroDialog implements Dialog {
   noDim = true;
   t?: number;

@@ -226,7 +226,7 @@ export const TALENTS: TalentDef[] = [
 ];
 
 // —— 金疮药（局内主动回血，军略升级）——
-export const POTION = { heal: 0.25, healPerLv: 0.025, cd: 60, cdPerLv: 2 };
+export const POTION = { heal: 0.25, healPerLv: 0.025, cd: 45, cdPerLv: 1.5 };
 export function potionStats(lv: number): { heal: number; cd: number } {
   return { heal: POTION.heal + POTION.healPerLv * lv, cd: POTION.cd - POTION.cdPerLv * lv };
 }
