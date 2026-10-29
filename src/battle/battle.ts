@@ -72,8 +72,8 @@ export function tension(t: number, chapterId = 2): number {
     const [t1, v1] = TENSION[i];
     if (t <= t1) { const [t0, v0] = TENSION[i - 1]; v = v0 + ((v1 - v0) * (t - t0)) / (t1 - t0); break; }
   }
-  // 第 1 章是新玩家的第一关：起伏减半；后期章节本身数值已经很高，起伏收小
-  const amp = chapterId === 1 ? 0.5 : chapterId >= 7 ? 0.7 : 1;
+  // 第 1 章是新玩家的第一关：起伏减半；7 章以后本身数值已经很高，起伏只留三成（实测再大胜率明显下降）
+  const amp = chapterId === 1 ? 0.5 : chapterId >= 7 ? 0.3 : 1;
   return 1 + (v - 1) * amp;
 }
 
