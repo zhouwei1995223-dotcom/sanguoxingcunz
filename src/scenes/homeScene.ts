@@ -63,7 +63,7 @@ export class HomeScene implements Scene {
   update(dt: number) {
     const ui = game.ui;
     // 埋点：新手引导每推进一步上报一次
-    if (save.guide !== this.lastGuide) { if (this.lastGuide >= 0) getPlatform().report('guide_step', { step: save.guide }); this.lastGuide = save.guide; }
+    if (save.guide !== this.lastGuide) { if (this.lastGuide >= 0) getPlatform().report('guide_step', { step: String(save.guide) }); this.lastGuide = save.guide; }
     tickStamina();
     rolloverDaily();
     if (this.tab === 'battle') this.bg.draw(ui.ctx, dt, this.battleLayout(ui).cy - 2 * ui.u, this.contentTop(ui) + 250 * ui.u, 120 * ui.u);
