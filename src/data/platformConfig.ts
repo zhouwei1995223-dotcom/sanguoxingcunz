@@ -35,11 +35,11 @@ export const SHARE_CONFIG = {
 export const GAME_INFO = {
   name: '长坂单骑传',
   shortName: '长坂单骑传',
-  version: '1.0.1',
+  version: '1.0.2',
   ageRating: 8, // 适龄提示：8+
   // 著作权人 / 出版单位等信息在拿到软著和备案后填写，显示在设置-关于
   copyright: '著作权人：张周炜',
-  icp: '备案号：（待填写）',
+  icp: '浙ICP备2026092296号-1X',
 };
 
 /** 云开发配置（云存档、订阅提醒）。开通后填写环境 ID。 */

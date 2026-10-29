@@ -13,6 +13,12 @@ function refill(need: number, density: number) {
 }
 let breakableT = 20;
 let hordeIdx = 0;
+const HORDE_AT = [270, 510];
+
+/** 直取敌将时跳过的「大军压境」不再补发 */
+export function skipHordesBefore(t: number) {
+  while (hordeIdx < HORDE_AT.length && HORDE_AT[hordeIdx] < t) hordeIdx++;
+}
 
 // 无尽模式的事件计时
 const ENDLESS_BOSSES = ['xiahouen', 'chenying', 'xuhuang', 'hanying', 'suyong', 'huaxiong', 'yanliang', 'caimao', 'zhuran', 'guohuai', 'caochun', 'baolong', 'zhanghe', 'hande', 'caozhen'];
@@ -102,7 +108,7 @@ export function updateSpawner(b: Battle, dt: number) {
 
   // 大军压境：成片的弱小敌人从四面涌来
   if (ch.duration >= 600) {
-    const at = [270, 510];
+    const at = HORDE_AT;
     if (hordeIdx < at.length && t >= at[hordeIdx]) {
       const weakest = ch.waves[0].pool[0][0] as string;
       runEvent(b, { t, type: 'horde', enemy: weakest, count: Math.round((110 + hordeIdx * 50) * b.densityMul), text: '敌军大举压境！' });
@@ -196,7 +202,7 @@ function runEvent(b: Battle, ev: ChapterEvent) {
     }
     case 'boss': {
       const [x, y] = b.spawnPoint();
-      b.spawnBoss(ev.enemy!, x, y, true);
+      b.spawnBoss(ev.enemy!, x, y, true, ev.hpScale || 1);
       break;
     }
   }

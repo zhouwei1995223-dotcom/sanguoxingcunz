@@ -296,7 +296,16 @@ export class WorldRenderer {
 
     // 投射物
     for (const pr of b.projs) {
-      if (pr.kind === 'bolt') this.blitRot(sprite(pr.sprite), pr.x, pr.y, pr.rot, pr.scale);
+      if (pr.kind === 'bolt') {
+        // 拖尾：一道亮线，箭射出去看得清
+        const sp = Math.hypot(pr.vx, pr.vy) || 1, tl = Math.min(26, 0.07 * sp) * (pr.scale > 1 ? 1.2 : 1);
+        g.globalAlpha = 0.55;
+        g.strokeStyle = pr.sprite === 'bolt_evo' ? '#feae34' : '#fff4c0';
+        g.lineWidth = pr.scale >= 2 ? 2 : 1.5;
+        g.beginPath(); g.moveTo(pr.x - this.camX, pr.y - this.camY); g.lineTo(pr.x - (pr.vx / sp) * tl - this.camX, pr.y - (pr.vy / sp) * tl - this.camY); g.stroke();
+        g.globalAlpha = 1;
+        this.blitRot(sprite(pr.sprite), pr.x, pr.y, pr.rot, pr.scale);
+      }
       else if (pr.kind === 'knife') this.blitRot(sprite('icon_w_knife'), pr.x, pr.y, pr.rot);
       else if (pr.kind === 'rock') {
         if (pr.scale === 0) continue;
@@ -384,7 +393,8 @@ export class WorldRenderer {
   private drawEnemy(e: Enemy, b: Battle) {
     const g = this.ctx;
     const frame = Math.floor(e.anim) % 4;
-    const name = this.enemyName(e.sprite, frame, e.left, e.flash > 0);
+    const windup = e.touching && e.atkCd > 0 && e.atkCd < 0.16 && !e.boss;
+    const name = this.enemyName(e.sprite, frame, e.left, e.flash > 0 || (windup && Math.floor(b.t * 30) % 2 === 0));
     const s = sprite(name);
     const sc = e.scale;
     if (!this.crowded || e.boss || e.elite) this.blitScaled(sprite(sc > 1 || e.boss ? 'shadow_l' : e.r > 8 ? 'shadow_m' : 'shadow_s'), e.x, e.y + 1, sc > 1 && !e.boss ? 1 : sc > 1 ? 2 : 1);
@@ -556,7 +566,7 @@ export class WorldRenderer {
         const pts = f.pts!;
         g.save();
         g.translate(-this.camX, -this.camY);
-        for (const [col, lw, al] of [[f.color || '#8be9ff', 4, 0.45], ['#ffffff', 1.5, 1]] as [string, number, number][]) {
+        for (const [col, lw, al] of [[f.color || '#8be9ff', 7, 0.35], [f.color || '#8be9ff', 3.5, 0.8], ['#ffffff', 1.8, 1]] as [string, number, number][]) {
           g.globalAlpha = al * (1 - k);
           g.strokeStyle = col;
           g.lineWidth = lw;

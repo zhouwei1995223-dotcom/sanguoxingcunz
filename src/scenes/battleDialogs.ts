@@ -8,7 +8,7 @@ import type { Battle, Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, WeaponId } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
-import { settleRun, settleEndless, settleWeeklyRun, RunResult } from '../meta/run';
+import { settleRun, settleEndless, settleWeeklyRun, settleTutorial, RunResult } from '../meta/run';
 import { settleWeekly } from '../meta/goals';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
@@ -354,7 +354,7 @@ export class PauseDialog implements Dialog {
   draw(ui: UI) {
     const u = ui.u;
     const b = this.scene.battle;
-    const w = ui.W - 60 * u, h = 1040 * u;
+    const w = ui.W - 60 * u, h = 1130 * u;
     const f = dialogFrame(ui, w, h, '暂停', this.t);
     let y = f.y + 70 * u;
     const x = f.x + 40 * u;
@@ -405,12 +405,20 @@ export class PauseDialog implements Dialog {
       ui.text(s[1], sx + 130 * u, sy, 22, '#fff', 'left');
     });
     y += 140 * u;
-    // 设置开关
-    const tw = (w - 120 * u - 60 * u) / 4;
-    if (ui.button('p_music', x, y, tw, 76 * u, '音乐:' + (save.settings.music ? '开' : '关'), C.btnGray, { size: 22 })) { save.settings.music = !save.settings.music; refreshMusic(); markDirty(); }
-    if (ui.button('p_sfx', x + tw + 20 * u, y, tw, 76 * u, '音效:' + (save.settings.sfx ? '开' : '关'), C.btnGray, { size: 22 })) { save.settings.sfx = !save.settings.sfx; markDirty(); }
-    if (ui.button('p_ult', x + (tw + 20 * u) * 2, y, tw, 76 * u, '大招:' + (save.settings.ultRight ? '右' : '左'), C.btnGray, { size: 22 })) { save.settings.ultRight = !save.settings.ultRight; markDirty(); }
-    if (ui.button('p_power', x + (tw + 20 * u) * 3, y, tw, 76 * u, '省电:' + (save.settings.lowPower ? '开' : '关'), save.settings.lowPower ? C.btnGreen : C.btnGray, { size: 22 })) { save.settings.lowPower = !save.settings.lowPower; markDirty(); }
+    // 设置开关：两行，每行三个（开着的显示绿色）
+    const tw = (w - 80 * u - 40 * u) / 3;
+    const toggles: [string, string, () => void, boolean][] = [
+      ['p_music', '音乐:' + (save.settings.music ? '开' : '关'), () => { save.settings.music = !save.settings.music; refreshMusic(); }, save.settings.music],
+      ['p_sfx', '音效:' + (save.settings.sfx ? '开' : '关'), () => { save.settings.sfx = !save.settings.sfx; }, save.settings.sfx],
+      ['p_vib', '震动:' + (save.settings.vibrate ? '开' : '关'), () => { save.settings.vibrate = !save.settings.vibrate; }, save.settings.vibrate],
+      ['p_ult', '大招:' + (save.settings.ultRight ? '右' : '左'), () => { save.settings.ultRight = !save.settings.ultRight; }, false],
+      ['p_power', '省电:' + (save.settings.lowPower ? '开' : '关'), () => { save.settings.lowPower = !save.settings.lowPower; }, save.settings.lowPower],
+      ['p_num', '伤害数字:' + (save.settings.dmgNum ? '开' : '关'), () => { save.settings.dmgNum = !save.settings.dmgNum; b.showDamage = save.settings.dmgNum; }, save.settings.dmgNum],
+    ];
+    toggles.forEach(([id, label, fn, on], i) => {
+      if (ui.button(id, x + (i % 3) * (tw + 20 * u), y + Math.floor(i / 3) * 90 * u, tw, 76 * u, label, on ? C.btnGreen : C.btnGray, { size: 22 })) { fn(); markDirty(); }
+    });
+    y += 90 * u;
     y += 100 * u;
     const bw = (w - 100 * u) / 2;
     if (!this.confirmQuit) {
@@ -534,7 +542,9 @@ export class ResultDialog implements Dialog {
       }
       this.tierCount = w.rewards.length;
     } else {
-      this.res = b.chapter.endless
+      this.res = b.chapter.tutorial
+        ? settleTutorial(win, b.coins, b.kills)
+        : b.chapter.endless
         ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
         : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
     }

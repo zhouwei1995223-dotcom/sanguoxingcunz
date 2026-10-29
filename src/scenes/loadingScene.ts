@@ -62,8 +62,8 @@ export class LoadingScene implements Scene {
 
   private route() {
     if (save.guide === 0) {
-      // 新玩家直接进入第一章教学战斗（不消耗体力）
-      game.setScene(new BattleScene(1));
+      // 新玩家直接进入一分钟的新手试炼（不消耗体力，不算通关第一章）
+      game.setScene(new BattleScene(-2));
     } else {
       playBgm('bgm_home');
       game.setScene(new HomeScene());

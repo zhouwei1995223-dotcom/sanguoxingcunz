@@ -16,6 +16,8 @@ export interface ChapterEvent {
   enemy?: string;
   count?: number;
   text?: string;
+  /** 首领血量倍率（新手试炼的首领更弱） */
+  hpScale?: number;
 }
 
 export interface ChapterDef {
@@ -38,6 +40,8 @@ export interface ChapterDef {
   power: number;
   /** 无尽模式 */
   endless?: boolean;
+  /** 新手试炼：第一次进游戏的短关卡 */
+  tutorial?: boolean;
 }
 
 // —— 难度 ——
@@ -216,6 +220,23 @@ CHAPTERS.push(
 );
 
 /** 无尽模式：刷怪与事件由 spawner 动态生成 */
+/**
+ * 新手试炼：第一次进游戏时打的短关卡（不消耗体力，不算通关第一章）。
+ * 0~30 秒割小兵升级，32 秒首领夏侯恩登场，击败即胜利；最长 75 秒自动结束。
+ */
+export const TUTORIAL: ChapterDef = {
+  id: 1, name: '新手试炼', subtitle: '长坂初阵', theme: 'changban', tutorial: true,
+  story: '曹军追兵已至，赵云拍马挺枪，先试一试身手！',
+  duration: 75, hpMul: 0.8, dmgMul: 0.6, growth: 0, goldBase: 0, power: 0,
+  waves: [
+    { from: 0, to: 15, density: [6, 16], pool: [['wei_spear', 10]], interval: 0.6 },
+    { from: 15, to: 30, density: [16, 34], pool: [['wei_spear', 10], ['bandit', 4]], interval: 0.5 },
+    { from: 30, to: 9999, density: [34, 48], pool: [['wei_spear', 8], ['wei_shield', 2], ['bandit', 4]], interval: 0.45 },
+  ],
+  events: [{ t: 10, type: 'lanterns' }, { t: 32, type: 'boss', enemy: 'xiahouen', hpScale: 0.7 }],
+  midBoss: 'xiahouen', boss: 'xiahouen',
+};
+
 export const ENDLESS: ChapterDef = {
   id: 0, name: '无尽战场', subtitle: '能撑多久？', theme: 'changban',
   story: '敌军源源不断，没有尽头。坚持得越久，奖励越丰厚。',

@@ -68,6 +68,19 @@ export interface RunResult {
   best?: number;
 }
 
+/** 新手试炼的结算：固定奖励 + 必得兵器（装备引导用），不记通关、不记最佳 */
+export function settleTutorial(win: boolean, coins: number, kills: number): RunResult {
+  const gold = 300 + coins * 2, yuanbao = win ? 60 : 30;
+  const items: EquipItem[] = [];
+  if (!save.items.some((i) => i.tid === 'yajiao')) items.push(newItem('yajiao', 1));
+  save.gold += gold;
+  save.yuanbao += yuanbao;
+  progressTask('battle', 1);
+  progressTask('kill', kills);
+  markDirty();
+  return { win, firstClear: false, gold, iron: 0, yuanbao, items, newBest: false };
+}
+
 export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number): RunResult {
   const d = diff.id;
   const progress = Math.min(1, t / ch.duration);

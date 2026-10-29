@@ -28,7 +28,10 @@ function stats(): HeroStats {
   return { atk, hp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0, revive: 0, reroll: 0, potion: Number(process.env.POTION || 0), hero: process.env.HERO || 'zhaoyun', cleared: Number(process.env.UNLOCK ?? 10) };
 }
 
+// 按分钟汇总（所有局平均）：一击秒杀比例、击杀耗时、每分钟受到伤害（占生命上限的百分比）
+const per: { n: number; one: number; kills: number; age: number; dmg: number; alive: number }[] = [];
 for (let r = 0; r < runs; r++) {
+  let mk = 0, mo = 0, md = 0;
   resetSpawner();
   const b = new Battle(chId === 0 ? ENDLESS : CHAPTERS[chId - 1], stats(), Number(process.env.VW || 308), Number(process.env.VH || 667));
   const D = DIFFICULTIES[Number(process.env.DIFF || 0)];
@@ -108,10 +111,20 @@ for (let r = 0; r < runs; r++) {
         b.applyChoice(ch);
       }
     }
+    if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) {
+      const m = Math.round(b.t / 60) - 1;
+      const row = per[m] || (per[m] = { n: 0, one: 0, kills: 0, age: 0, dmg: 0, alive: 0 });
+      row.n++; row.kills += b.statKills - mk; row.one += b.statOneShots - mo; row.age += b.killAge; row.dmg += (b.statDmgTaken - md) / b.player.maxHp * 100; row.alive++;
+      mk = b.statKills; mo = b.statOneShots; md = b.statDmgTaken;
+    }
     if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) log.push(`${b.t.toFixed(0)}s fill${b.screenFill.toFixed(2)} dens${Math.round(b.targetDensity)} dir${b.director.toFixed(2)} lv${b.level} hp${Math.round(b.player.hp)}/${b.player.maxHp} kills${b.kills} enemies${b.enemies.filter(e=>!e.dead).length}`);
     if (b.dead && b.revives > 0) { b.revives--; b.revive(); log.push(`${b.t.toFixed(0)}s 复活`); }
   }
   console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 耗时${Date.now() - t0}ms`);
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));
+}
+if (process.env.CURVE) {
+  console.log('分钟 | 一击秒杀 | 击杀耗时 | 每分钟受伤(%血) | 存活局数');
+  per.forEach((r, m) => r && console.log(`${String(m + 1).padStart(2)}   | ${(r.one / Math.max(1, r.kills) * 100).toFixed(0).padStart(4)}%   | ${(r.age / r.n).toFixed(1).padStart(5)}s  | ${(r.dmg / r.n).toFixed(0).padStart(5)}%  | ${r.alive}`));
 }

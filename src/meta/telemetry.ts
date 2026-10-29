@@ -17,7 +17,7 @@ export function reportError(msg: string) {
 }
 
 export type FunnelStep =
-  | 'privacy_ok' | 'b1_start' | 'b1_levelup' | 'b1_2min' | 'b1_end' | 'home_first' | 'b2_start' | 'b2_end';
+  | 'privacy_ok' | 'b1_start' | 'b1_levelup' | 'b1_45s' | 'b1_end' | 'home_first' | 'b2_start' | 'b2_end';
 
 /** 新手漏斗：每个步骤每位玩家只上报一次 */
 export function funnel(step: FunnelStep) {

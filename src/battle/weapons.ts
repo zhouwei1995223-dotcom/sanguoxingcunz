@@ -187,8 +187,10 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     pr.r = 3;
     pr.life = 1.6;
     pr.sprite = w.evo ? 'bolt_evo' : 'bolt';
+    pr.scale = 2;
     b.projs.push(pr);
   });
+  b.fx.push({ kind: 'spark', x: ox + Math.cos(Math.atan2(targets[0].y - oy, targets[0].x - ox)) * 8, y: oy, t: 0, dur: 0.15 });
   b.hooks.sfx('shoot');
 }
 

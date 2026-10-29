@@ -4,7 +4,7 @@ import type { TouchKind, TouchPoint } from '../platform/types';
 import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
-import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS } from '../data/chapters';
+import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName } from '../meta/goals';
@@ -53,12 +53,16 @@ export class BattleScene implements Scene {
   /** 每周挑战规则（每周挑战模式下有值） */
   weekly: WeeklyDef | null = null;
   private speedMul = 1;
+  /** 玩家开的加速：1 或 2 倍 */
+  private userSpeed = 1;
   videoPath: Promise<string | null> | null = null;
 
-  /** chapterId：0 为无尽模式，-1 为每周挑战 */
+  /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼 */
   constructor(chapterId: number, diff = 0) {
     const themes = Object.keys(THEMES);
-    if (chapterId === 0) {
+    if (chapterId === -2) {
+      this.chapter = TUTORIAL;
+    } else if (chapterId === 0) {
       this.chapter = { ...ENDLESS, theme: themes[(Math.random() * themes.length) | 0] };
     } else if (chapterId === -1) {
       this.weekly = currentWeekly();
@@ -189,12 +193,13 @@ export class BattleScene implements Scene {
       // 调试加速：拆成多个小步长，保证碰撞稳定
       // 顿帧：命中瞬间画面停一下，增强打击感
       if (b.hitStop > 0) b.hitStop -= dt;
-      else for (let i = 0; i < DEBUG.speed && !b.dead && !b.won; i++) b.update(dt * this.speedMul);
+      // 加速（2 倍速）：一帧里多走一步，而不是把步长放大，碰撞依然稳定
+      else for (let i = 0; i < DEBUG.speed * this.userSpeed && !b.dead && !b.won; i++) b.update(dt * this.speedMul);
       const keys = (typeof window !== 'undefined' && (window as any).__keys) || null;
       if (keys && keys[' ']) this.tryUlt();
       if (keys && keys['q'] && b.potionCd <= 0) this.pressPotion();
       save.stats.playSec += dt;
-      if (save.stats.runs === 0 && b.t >= 120) funnel('b1_2min');
+      if (save.stats.runs === 0 && b.t >= 45) funnel('b1_45s');
       this.tutorialT += dt;
       this.adaptDensity(dt);
       this.checkTips(dt);
@@ -285,6 +290,7 @@ export class BattleScene implements Scene {
   get label(): string {
     if (this.weekly) return `每周挑战 · ${this.weekly.name}`;
     if (this.chapter.endless) return '无尽战场';
+    if (this.chapter.tutorial) return '新手试炼';
     return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
   }
 
@@ -340,6 +346,7 @@ export class BattleScene implements Scene {
     const u = ui.u;
     const b = this.battle;
     const top = ui.safeTop + 8 * u;
+    const g = ui.ctx;
     // 经验条
     const bw = ui.W - 32 * u;
     ui.bar(16 * u, top, bw, 30 * u, b.exp / b.expNeed, '#2ce8f5', '#1a2236');
@@ -368,6 +375,23 @@ export class BattleScene implements Scene {
     if (ui.clicked('pause', px, py, ps, ps)) game.openDialog(new PauseDialog(this));
     ui.panel(px, py, ps, ps, 'dark');
     ui.icon('pause', px + ps / 2, py + ps / 2, 30 * u);
+    // 加速：1 倍 / 2 倍（新手试炼和每周挑战不提供）
+    if (!this.chapter.tutorial && !this.weekly) {
+      const sx = px - ps - 12 * u;
+      if (ui.clicked('speed', sx, py, ps, ps)) { this.userSpeed = this.userSpeed === 1 ? 2 : 1; ui.toast(this.userSpeed === 2 ? '已开启 2 倍速' : '恢复正常速度'); }
+      ui.panel(sx, py, ps, ps, 'dark');
+      ui.text(this.userSpeed === 2 ? '×2' : '×1', sx + ps / 2, py + ps / 2, 30, this.userSpeed === 2 ? C.gold : '#fff');
+    }
+    // 直取敌将：已经稳稳压制敌军时出现，跳过小兵直接挑战下一个敌将
+    if (b.canRush() && !b.dead && !b.won) {
+      const rw = 260 * u, rh = 72 * u, rx = ui.W / 2 - rw / 2, ry = top + 136 * u;
+      const pulse = 1 + 0.05 * Math.sin(ui.time * 6);
+      g.save();
+      g.translate(ui.W / 2, ry + rh / 2); g.scale(pulse, pulse); g.translate(-ui.W / 2, -(ry + rh / 2));
+      if (ui.button('rush', rx, ry, rw, rh, '直取敌将 ▶', C.btnRed, { size: 28 })) { b.rush(); getPlatform().report('rush', { chapter: this.chapter.id, sec: Math.floor(b.t) }); }
+      g.restore();
+      this.tip('rush', '点「直取敌将」可跳过小兵，直接挑战敌将');
+    }
 
     // 已获得的锦囊
     b.strats.forEach((id, i) => {

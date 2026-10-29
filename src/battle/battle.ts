@@ -14,7 +14,7 @@ import {
   Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
 } from './entities';
 import { updateWeapons } from './weapons';
-import { updateSpawner } from './spawner';
+import { skipHordesBefore, updateSpawner } from './spawner';
 import { updateBoss } from './boss';
 
 export type Choice =
@@ -57,6 +57,24 @@ export interface BattleHooks {
 }
 
 const noopHooks: BattleHooks = { sfx() {}, shake() {}, banner() {}, vibrate() {}, bossAppear() {} };
+
+/**
+ * 章节难度节奏（敌人血量倍率）：爽是一个过程——先轻松上手，再逐步加压，
+ * 5:00 首领 + 宝箱进化后迎来一波疯狂割草，然后再加压直到最终决战。
+ *   0:00~1:00 热身   1:30~5:00 加压   5:00 首领出场后回落，进化后爽割到 7:00   7:00~9:00 再加压
+ */
+const TENSION: [number, number][] = [[0, 0.8], [60, 0.9], [90, 1.45], [270, 2.4], [300, 2.4], [345, 1.3], [420, 1.3], [540, 1.55], [9999, 1.55]];
+/** 接触伤害倍率：小怪出手变慢（贴身蓄力 + 玩家受击后短暂无敌）后，单次伤害相应提高 */
+const CONTACT_DMG = 1.25;
+export function tension(t: number, chapterId = 2): number {
+  let v = TENSION[TENSION.length - 1][1];
+  for (let i = 1; i < TENSION.length; i++) {
+    const [t1, v1] = TENSION[i];
+    if (t <= t1) { const [t0, v0] = TENSION[i - 1]; v = v0 + ((v1 - v0) * (t - t0)) / (t1 - t0); break; }
+  }
+  // 第 1 章是新玩家的第一关：起伏减半
+  return chapterId === 1 ? 1 + (v - 1) * 0.5 : v;
+}
 
 export class Battle {
   chapter: ChapterDef;
@@ -244,13 +262,16 @@ export class Battle {
     this.player.hp = Math.min(this.player.hp, newMax);
     this.regen = b.regen + 0.3 * P('lingzhi') + (auraEvo ? newMax * 0.01 : 0);
     this.pickupR = this.hero.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl'));
-    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1);
+    // 新手试炼只有一分多钟：经验和怒气加快，升级、大招都能体验到
+    const tut = this.chapter.tutorial ? 3 : 1;
+    const tutRage = this.chapter.tutorial ? 6 : 1;
+    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut;
     if (this.mods?.playerDmg) this.dmgMul *= this.mods.playerDmg;
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
     this.crit = b.crit / 100 + this.critBonus + 0.04 * P('wine');
     this.critDmg = 1 + b.critDmg / 100 + this.critDmgBonus + 0.15 * P('wine');
     this.countBonus = P('map');
-    this.rageMul = 1 + 0.15 * P('horn');
+    this.rageMul = (1 + 0.15 * P('horn')) * tutRage;
     this.eliteDmg = 0.15 * P('whetstone');
     this.mirrorCd = P('mirror') ? 14 - 2 * P('mirror') : 0;
     // 锦囊妙计
@@ -456,13 +477,14 @@ export class Battle {
     // 大招期间：赵云正常速度冲杀，其余一切慢动作
     if (this.ult) dt = rawDt * this.updateUlt(rawDt);
     this.t += dt;
-    // 每周挑战：坚持到时间即胜利
-    if (this.chapter.endless && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
+    // 每周挑战 / 新手试炼：坚持到时间即胜利
+    if ((this.chapter.endless || this.chapter.tutorial) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
       for (const e of this.enemies) if (!e.dead) { e.dead = true; this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
       this.won = true;
       return;
     }
     this.hitStopCd = Math.max(0, this.hitStopCd - rawDt);
+    this.contactIframe = Math.max(0, this.contactIframe - dt);
     this.updateRage(dt);
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
 
@@ -536,6 +558,46 @@ export class Battle {
   // —— 敌人 ——
   /** 普通敌人从出生到被击杀的平均秒数（指数平均） */
   killAge = 8;
+  /** 平衡统计：普通敌人击杀数、其中一击即死的数量、玩家受到的总伤害 */
+  statKills = 0;
+  statOneShots = 0;
+  statDmgTaken = 0;
+  /** 接触伤害的无敌时间（远程攻击不受影响） */
+  contactIframe = 0;
+  /** 最近受到的伤害（约 10 秒的滑动累计）；伤害很少、身边也没几个敌人，说明已经稳稳压制住了 */
+  recentDmg = 0;
+  /** 持续压制的秒数（每秒在 updateDirector 里更新） */
+  dominantT = 0;
+
+  /** 下一个首领事件（没有就返回 null） */
+  private nextBossEvent() {
+    const evs = this.chapter.events;
+    for (let i = this.eventIdx; i < evs.length; i++) if (evs[i].type === 'boss' || evs[i].type === 'midboss') return evs[i];
+    return null;
+  }
+  /** 可以「直取敌将」：普通章节、场上没有首领、开局 1 分钟后、已经稳稳压制敌军 10 秒以上 */
+  canRush(): boolean {
+    const ch = this.chapter;
+    if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.t < 60) return false;
+    return this.dominantT >= 10 && !!this.nextBossEvent();
+  }
+  /** 直取敌将：时间直接推进到下一个首领登场前，中间的小规模事件跳过（锦囊照常补发） */
+  rush(): boolean {
+    const ev = this.nextBossEvent();
+    if (!ev || !this.canRush()) return false;
+    const to = ev.t - 0.5;
+    if (to <= this.t) return false;
+    while (this.eventIdx < this.chapter.events.length && this.chapter.events[this.eventIdx].t < to && this.chapter.events[this.eventIdx] !== ev) this.eventIdx++;
+    skipHordesBefore(to);
+    this.t = to;
+    this.dominantT = 0;
+    this.rushes++;
+    this.hooks.banner('直取敌将！', '#ff8a80');
+    this.hooks.shake(4);
+    this.hooks.sfx('horse');
+    return true;
+  }
+  rushes = 0;
   /** 身边敌人 / 目标数量（平滑） */
   screenFill = 0.1;
 
@@ -550,6 +612,8 @@ export class Battle {
     for (const e of this.enemies) if (!e.dead && !e.boss && Math.abs(e.x - p.x) < 100 && Math.abs(e.y - p.y) < 100) near++;
     const fill = near / this.targetDensity;
     this.screenFill += (fill - this.screenFill) * 0.15;
+    this.recentDmg *= 0.9;
+    this.dominantT = this.screenFill < 0.08 && this.recentDmg < this.player.maxHp * 0.04 ? this.dominantT + 1 : 0;
     if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(3, this.director + 0.04);
     else if (this.screenFill > 0.06) this.director = Math.max(1, this.director - 0.02);
   }
@@ -568,7 +632,7 @@ export class Battle {
     const late = Math.max(0, minute - 4);
     const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
-    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul;
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial ? 1 : tension(this.t, ch.id));
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -683,10 +747,14 @@ export class Battle {
 
       // 接触伤害
       const cr = e.r + p.r * 0.7;
-      if (d < cr && e.atkCd <= 0) {
-        e.atkCd = 1;
-        this.hurtPlayer(e.dmg);
-      }
+      if (d < cr) {
+        if (!e.touching) { e.touching = true; e.atkCd = Math.max(e.atkCd, 0.35); }
+        if (e.atkCd <= 0) {
+          e.atkCd = 1.1;
+          if (this.contactIframe <= 0 && p.iframe <= 0 && !this.ult) this.fx.push({ kind: 'slash', x: p.x, y: p.y - 8, t: 0, dur: 0.2, a: Math.atan2(-dy, -dx), w: 1.1, r: 11, color: '#e43b44' });
+          this.hurtPlayer(e.dmg * CONTACT_DMG, true);
+        }
+      } else e.touching = false;
 
       // 远离玩家的普通敌人：重新放到玩家前进方向的视野外
       if (!e.boss && !e.elite && !e.fixedDir && d > viewR + 120) {
@@ -701,9 +769,10 @@ export class Battle {
     this.shots.push({ x, y, vx: dx * speed, vy: dy * speed, r: 3, dmg, life: 4, sprite, rot: Math.atan2(dy, dx), spin: sprite === 'stone' || sprite === 'fork' });
   }
 
-  hurtPlayer(dmg: number) {
+  hurtPlayer(dmg: number, contact = false) {
     const p = this.player;
     if (p.iframe > 0 || this.dead || this.ult) return;
+    if (contact && this.contactIframe > 0) return;
     if (this.mirrorCd > 0 && this.mirrorT <= 0) {
       // 护心镜：抵挡这次伤害
       this.mirrorT = this.mirrorCd;
@@ -714,8 +783,11 @@ export class Battle {
     }
     const v = Math.max(1, dmg * this.dmgTakenMul);
     p.hp -= v;
+    this.recentDmg += v;
+    this.statDmgTaken += v;
     p.iframe = 0.12;
-    if (this.hero.id === 'zhangfei' && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + 3 * this.rageMul);
+    if (contact) this.contactIframe = 0.3;
+    if (this.hero.id === 'zhangfei' && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + 6 * this.rageMul);
     p.hurtFlash = 0.2;
     this.hooks.sfx('hurt');
     this.hooks.vibrate();
@@ -735,6 +807,7 @@ export class Battle {
     if (!opts.noCrit && Math.random() < this.crit) { dmg *= this.critDmg; crit = true; }
     dmg = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
     e.hp -= dmg;
+    e.hits++;
     e.flash = 0.08;
     if (kx || ky) { e.hx = kx; e.hy = ky; }
     if (knock && !e.boss) {
@@ -758,7 +831,11 @@ export class Battle {
     this.combo++;
     this.comboT = 2.5;
     if (e.def) this.killsBy[e.def.id] = (this.killsBy[e.def.id] || 0) + 1;
-    if (!e.boss && !e.elite && !e.fixedDir) this.killAge += (this.t - e.born - this.killAge) * 0.01;
+    if (!e.boss && !e.elite && !e.fixedDir) {
+      this.killAge += (this.t - e.born - this.killAge) * 0.01;
+      this.statKills++;
+      if (e.hits <= 1) this.statOneShots++;
+    }
     if (e.boss) this.bossesKilled.push(e.boss.id);
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
     if (this.combo === 100 || this.combo === 300 || this.combo === 500 || this.combo % 1000 === 0) {

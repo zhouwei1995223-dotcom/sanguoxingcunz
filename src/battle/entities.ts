@@ -28,6 +28,10 @@ export interface Enemy {
   slow: number;
   slowT: number;
   atkCd: number;
+  /** 受击次数（统计「一击秒杀」比例，平衡用） */
+  hits: number;
+  /** 正贴着玩家（刚贴上时先蓄力再出手） */
+  touching: boolean;
   shootT: number;
   dead: boolean;
   /** 冲锋类（骑兵冲阵）：固定方向移动 */
@@ -210,7 +214,7 @@ export function newEnemy(): Enemy {
   return {
     uid: 0, def: null, boss: null, isMidBoss: false, x: 0, y: 0, r: 6, hp: 1, maxHp: 1, speed: 30, dmg: 5, mass: 1, exp: 1,
     sprite: 'u_wei_spear', scale: 1, elite: false, anim: Math.random() * 4, left: false, flash: 0, kx: 0, ky: 0, slow: 0, slowT: 0,
-    atkCd: 0, shootT: Math.random() * 2, dead: false, fixedDir: false, vx: 0, vy: 0, life: 0, hx: 0, hy: 0,
+    atkCd: 0, hits: 0, touching: false, shootT: Math.random() * 2, dead: false, fixedDir: false, vx: 0, vy: 0, life: 0, hx: 0, hy: 0,
     state: 'move', stateT: 0, skillIdx: 0, tx: 0, ty: 0, born: 0,
   };
 }
