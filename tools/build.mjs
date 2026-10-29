@@ -56,6 +56,8 @@ function writeShells() {
     deviceOrientation: 'portrait',
     showStatusBar: false,
     openDataContext: 'openDataContext',
+    // iOS 高性能模式：JS 跑得更快、CPU 占用更低（普通模式在 iPhone 上发热明显）；温控模式也要求先开它
+    iOSHighPerformance: true,
     networkTimeout: { request: 10000, connectSocket: 10000, uploadFile: 10000, downloadFile: 10000 },
   }, null, 2));
   fs.writeFileSync('dist/wechat/project.config.json', JSON.stringify({
