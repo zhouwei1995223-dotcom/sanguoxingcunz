@@ -17,7 +17,7 @@ import { isCleared, getBest, chapterOpen } from '../meta/run';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
-import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS } from '../data/platformConfig';
+import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5 } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -442,8 +442,8 @@ export class SettingsDialog implements Dialog {
     y += 90 * u;
     ui.text(`${GAME_INFO.name}  v${GAME_INFO.version}`, ui.W / 2, y, 22, C.textDim);
     ui.text(GAME_INFO.copyright, ui.W / 2, y + 36 * u, 18, C.textDim);
-    // 备案号拿到前不显示占位文字
-    if (!GAME_INFO.icp.includes('待填写')) ui.text(GAME_INFO.icp, ui.W / 2, y + 66 * u, 18, C.textDim);
+    // 备案号拿到前不显示占位文字；备案号是微信小程序的，小红书 / TapTap 版不显示
+    if (!IS_H5 && !GAME_INFO.icp.includes('待填写')) ui.text(GAME_INFO.icp, ui.W / 2, y + 66 * u, 18, C.textDim);
     ui.text(`适龄提示：${GAME_INFO.ageRating}+`, ui.W / 2, y + 96 * u, 18, C.textDim);
   }
 }
