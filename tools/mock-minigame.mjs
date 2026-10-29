@@ -40,6 +40,7 @@ const api = {
   setUserCloudStorage: () => note('cloudStorage'), setImRankData: () => note('imRank'), getImRankList: () => {},
   showToast: () => {}, showModal: () => {}, getUpdateManager: () => ({ onUpdateReady() {} }),
   addShortcut: (o) => o.success && o.success(),
+  createPageManager: () => ({ load: () => { note('pageManager.load'); return Promise.resolve({}); }, show: () => note('pageManager.show') }),
 };
 const store = {};
 const sandbox = {

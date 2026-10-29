@@ -211,6 +211,11 @@ export class HomeScene implements Scene {
     ];
     const sideR: typeof side = [
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
+      ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, on: () => {
+        save.daily.club = true; markDirty();
+        getPlatform().report('game_club', { from: 'home' });
+        getPlatform().openGameClub().then((ok) => { if (!ok) ui.toast('游戏圈暂时打不开，请稍后再试'); });
+      } }] : []),
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
       { id: 'settings', icon: 'gear', label: '设置', dot: false, on: () => game.openDialog(new SettingsDialog()) },
       ...(IS_H5 ? [] : [{ id: 'share', icon: 'share', label: '分享', dot: false, on: () => getPlatform().share('长坂坡七进七出，你能撑过几分钟？') }]),

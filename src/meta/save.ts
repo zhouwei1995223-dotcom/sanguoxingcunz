@@ -30,6 +30,8 @@ export interface DailyState {
   chestAd: Record<string, number>;
   freeGift: boolean;
   sidebar: boolean;
+  /** 今天点过游戏圈（红点只在每天第一次显示） */
+  club?: boolean;
   patrolQuick: number;
   levelupAds: number;
   adShards: number;

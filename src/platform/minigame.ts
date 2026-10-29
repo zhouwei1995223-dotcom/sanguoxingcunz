@@ -1,5 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG } from '../data/platformConfig';
+import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG, GAME_CLUB } from '../data/platformConfig';
 
 // 微信 / 抖音小游戏通用实现。两家 API 绝大部分同名，差异点单独判断。
 
@@ -227,6 +227,17 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     supportsSidebar() { return kind === 'tt' && sidebarSupported; },
     isFromSidebar() { return fromSidebar; },
     navigateToSidebar() { try { api.navigateToScene({ scene: 'sidebar', fail: () => {} }); } catch (e) {} },
+    supportsGameClub() { return kind === 'wx' && !!GAME_CLUB.wx && typeof api.createPageManager === 'function'; },
+    openGameClub() {
+      return new Promise<boolean>((resolve) => {
+        try {
+          const pm = api.createPageManager();
+          Promise.resolve(pm.load({ openlink: GAME_CLUB.wx }))
+            .then(() => { pm.show(); resolve(true); })
+            .catch(() => resolve(false));
+        } catch (e) { resolve(false); }
+      });
+    },
     supportsAddShortcut() { return kind === 'tt' && typeof api.addShortcut === 'function'; },
     addShortcut() {
       return new Promise((resolve) => {

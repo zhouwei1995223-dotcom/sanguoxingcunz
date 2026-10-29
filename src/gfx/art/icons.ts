@@ -572,6 +572,17 @@ const ICONS: Record<string, () => PixelImage> = {
     '..yyy..',
     '.UUUUU.',
   ]),
+  // 游戏圈：两个对话气泡
+  club: () => art([
+    '.gggggg....',
+    'gwwwwwwg...',
+    'gwkwkwkg...',
+    'gwwwwwwgbb.',
+    '.gggggbBBBb',
+    '..gg..bBBBb',
+    '......bbbBb',
+    '.........b.',
+  ]),
   share: () => art([
     '.....gg.',
     '...gggg.',

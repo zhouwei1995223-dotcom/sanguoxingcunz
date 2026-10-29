@@ -151,6 +151,9 @@ export function createWebPlatform(): Platform {
     supportsSidebar() { return /sidebar/.test(location.search); },
     isFromSidebar() { return /fromSidebar/.test(location.search); },
     navigateToSidebar() { showToast('（模拟）前往侧边栏'); },
+    // 浏览器里没有游戏圈；自动化测试可以设 window.__clubTest 看按钮效果
+    supportsGameClub() { return !!(window as any).__clubTest; },
+    openGameClub() { showToast('打开游戏圈'); return Promise.resolve(true); },
     supportsAddShortcut() { return false; },
     addShortcut() { return Promise.resolve(false); },
     submitScore() {},

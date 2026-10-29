@@ -59,6 +59,9 @@ export interface Platform {
 
   /** 添加到桌面 / 我的小程序 */
   supportsAddShortcut(): boolean;
+  /** 微信游戏圈（页面管理器打开游戏圈链接） */
+  supportsGameClub(): boolean;
+  openGameClub(): Promise<boolean>;
   addShortcut(): Promise<boolean>;
 
   /** 排行榜 */
