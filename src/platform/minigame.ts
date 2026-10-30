@@ -247,11 +247,20 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     submitScore(key, value) {
       try {
         if (kind === 'wx') {
-          api.setUserCloudStorage({ KVDataList: [{ key, value: JSON.stringify({ wxgame: { score: value, update_time: Math.floor(Date.now() / 1000) } }) }] });
+          const upload = () => api.setUserCloudStorage({ KVDataList: [{ key, value: JSON.stringify({ wxgame: { score: value, update_time: Math.floor(Date.now() / 1000) } }) }] });
+          // 还没同意隐私保护指引时不上传，等玩家打开排行榜同意后，下次结算再传
+          if (typeof api.getPrivacySetting === 'function') api.getPrivacySetting({ success: (r: any) => { if (!r.needAuthorization) upload(); } });
+          else upload();
         } else if (api.setImRankData) {
           api.setImRankData({ dataType: 0, value: String(value), priority: 0, zoneId: key === 'endless' ? 'endless' : 'default' });
         }
       } catch (e) {}
+    },
+    requirePrivacy() {
+      return new Promise((resolve) => {
+        if (typeof api.requirePrivacyAuthorize !== 'function') { resolve(true); return; }
+        try { api.requirePrivacyAuthorize({ success: () => resolve(true), fail: () => resolve(false) }); } catch (e) { resolve(true); }
+      });
     },
     supportsRank() { return kind === 'wx' ? !!openData : typeof api.getImRankList === 'function'; },
     getSharedCanvas() { return openData ? openData.canvas : null; },

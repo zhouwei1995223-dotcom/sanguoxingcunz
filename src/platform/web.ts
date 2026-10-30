@@ -157,6 +157,7 @@ export function createWebPlatform(): Platform {
     supportsAddShortcut() { return false; },
     addShortcut() { return Promise.resolve(false); },
     submitScore() {},
+    requirePrivacy() { return Promise.resolve(true); },
     supportsRank() { return false; },
     getSharedCanvas() { return null; },
     postToOpenData() {},

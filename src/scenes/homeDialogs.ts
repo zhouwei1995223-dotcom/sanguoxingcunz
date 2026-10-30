@@ -475,6 +475,12 @@ export class RankDialog implements Dialog {
   t?: number;
   private key: 'score' | 'endless' = 'score';
   private requested = false;
+  /** 好友排行要用微信朋友关系：先过平台的隐私授权，同意后才请求开放数据域 */
+  private privacy: 'idle' | 'wait' | 'ok' | 'no' = 'idle';
+  private askPrivacy() {
+    this.privacy = 'wait';
+    getPlatform().requirePrivacy().then((ok) => { this.privacy = ok ? 'ok' : 'no'; });
+  }
   draw(ui: UI) {
     const u = ui.u;
     const p = getPlatform();
@@ -484,7 +490,13 @@ export class RankDialog implements Dialog {
     const score = bestScore();
     const ch = Math.floor(score / 10000), sec = score % 10000;
     ui.text(`我的最佳：${ch >= 1 ? `通关第${ch}章` : '未通关'}${sec ? ` · 第${Math.min(5, ch + 1)}章坚守${fmtTime(sec)}` : ''}`, ui.W / 2, f.y + 80 * u, 22, C.gold);
-    if (p.name === 'wx') {
+    if (p.name === 'wx' && this.privacy !== 'ok') {
+      if (this.privacy === 'idle') this.askPrivacy();
+      if (this.privacy === 'no') {
+        ui.wrapText('好友排行需要获取你的微信朋友关系（昵称、头像和分数），请先同意《用户隐私保护指引》。', f.x + 60 * u, f.y + 200 * u, w - 120 * u, 24, '#fff4d6');
+        if (ui.button('rk_privacy', ui.W / 2 - 180 * u, f.y + 400 * u, 360 * u, 96 * u, '查看并同意', C.btnGold)) this.askPrivacy();
+      }
+    } else if (p.name === 'wx') {
       const shared = p.getSharedCanvas();
       const tbw = 200 * u;
       (['score', 'endless'] as const).forEach((k, i) => {
@@ -619,7 +631,8 @@ export class PrivacyDialog implements Dialog {
     const u = ui.u;
     const w = ui.W - 80 * u, h = 760 * u;
     const f = dialogFrame(ui, w, h, '温馨提示', this.t);
-    ui.wrapText(`欢迎来到《${GAME_INFO.name}》！在开始游戏前，请仔细阅读《用户协议》与《隐私政策》。我们仅在本地保存您的游戏进度，不会收集您的个人敏感信息。`, f.x + 60 * u, f.y + 80 * u, w - 120 * u, 24, '#fff4d6');
+    const rankNote = getPlatform().name === 'wx' ? '使用好友排行榜时，会在你同意后获取你的微信朋友关系（昵称、头像和分数）。' : '';
+    ui.wrapText(`欢迎来到《${GAME_INFO.name}》！在开始游戏前，请仔细阅读《用户协议》与《隐私政策》。我们仅在本地保存您的游戏进度，不会收集您的个人敏感信息。${rankNote}`, f.x + 60 * u, f.y + 80 * u, w - 120 * u, 24, '#fff4d6');
     const bw = (w - 140 * u) / 2;
     if (ui.button('pv_agree_doc', f.x + 40 * u, f.y + 380 * u, bw, 80 * u, '《用户协议》', C.btnBlue, { size: 24 })) game.openDialog(new TextDialog('用户协议', USER_AGREEMENT));
     if (ui.button('pv_privacy_doc', f.x + 100 * u + bw, f.y + 380 * u, bw, 80 * u, '《隐私政策》', C.btnBlue, { size: 24 })) game.openDialog(new TextDialog('隐私政策', PRIVACY_POLICY));
@@ -631,7 +644,8 @@ export class PrivacyDialog implements Dialog {
       funnel('privacy_ok');
       markDirty();
       flushSave(true);
-      this.onAgree();
+      // 接着弹平台统一的隐私授权（微信《用户隐私保护指引》）；不同意也能玩，只是用不了好友排行
+      getPlatform().requirePrivacy().then(() => this.onAgree());
       return false;
     }
   }

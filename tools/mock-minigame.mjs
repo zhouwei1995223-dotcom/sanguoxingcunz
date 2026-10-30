@@ -37,6 +37,7 @@ const api = {
   getLaunchOptionsSync: () => ({ scene: target === 'douyin' ? '021036' : 1001 }),
   checkScene: (o) => o.success({ isExist: true }), navigateToScene: () => {},
   getOpenDataContext: () => ({ canvas: mkCanvas(), postMessage: () => note('openData.post') }),
+  requirePrivacyAuthorize: (o) => { note('privacy'); o.success && o.success(); }, getPrivacySetting: (o) => o.success({ needAuthorization: false }),
   setUserCloudStorage: () => note('cloudStorage'), setImRankData: () => note('imRank'), getImRankList: () => {},
   showToast: () => {}, showModal: () => {}, getUpdateManager: () => ({ onUpdateReady() {} }),
   addShortcut: (o) => o.success && o.success(),

@@ -66,6 +66,8 @@ export interface Platform {
 
   /** 排行榜 */
   submitScore(key: string, value: number): void;
+  /** 调用涉及个人信息的接口（好友排行）前确认用户已同意平台的《用户隐私保护指引》；没同意过时平台会弹出统一的隐私授权弹窗 */
+  requirePrivacy(): Promise<boolean>;
   supportsRank(): boolean;
   /** 微信开放数据域画布，用于好友排行 */
   getSharedCanvas(): HTMLCanvasElement | null;
