@@ -2,6 +2,7 @@ import type { Platform } from './types';
 import { createWebPlatform } from './web';
 import { createMiniGamePlatform } from './minigame';
 import { NO_ADS } from '../data/platformConfig';
+import { pauseForAd } from '../audio/sound';
 
 declare const wx: any;
 declare const tt: any;
@@ -21,10 +22,14 @@ export function getPlatform(): Platform {
   // 所有激励视频统一上报（点位、是否看完）
   const p = instance;
   const raw = p.showRewardedAd.bind(p);
-  p.showRewardedAd = (placement: string) => raw(placement).then((ok) => {
-    p.report('ad_reward', { placement, ok: ok ? 1 : 0 });
-    return ok;
-  });
+  p.showRewardedAd = (placement: string) => {
+    if (!NO_ADS) pauseForAd(true);
+    return raw(placement).then((ok) => {
+      if (!NO_ADS) pauseForAd(false);
+      p.report('ad_reward', { placement, ok: ok ? 1 : 0 });
+      return ok;
+    });
+  };
   return instance;
 }
 

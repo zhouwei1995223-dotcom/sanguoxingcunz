@@ -121,6 +121,14 @@ export function playBgm(b: Bgm | null) {
   if (save.settings.music && !hidden) bgms[b]!.play();
 }
 
+/** 播放激励视频时暂停背景音乐和音效，关掉广告后恢复 */
+export function pauseForAd(on: boolean) {
+  hidden = on;
+  if (!currentBgm) return;
+  if (on) bgms[currentBgm]?.stop();
+  else if (save.settings.music) bgms[currentBgm]?.play();
+}
+
 export function refreshMusic() {
   if (!currentBgm) return;
   if (save.settings.music) bgms[currentBgm]?.play();

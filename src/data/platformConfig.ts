@@ -14,7 +14,7 @@ export const NO_ADS_PRICE = { skinPerAd: 60, revive: 100 };
 
 export const AD_CONFIG = {
   wx: {
-    rewarded: '', // 激励视频广告位 ID，例如 'adunit-xxxxxxxx'
+    rewarded: 'adunit-58a7793eb5931638', // 激励视频广告位 ID（2026-10-30 开通流量主）
     interstitial: '', // 插屏广告位 ID
   },
   tt: {

@@ -202,7 +202,9 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
         }
         const onClose = (res: any) => {
           ad.offClose(onClose);
-          resolve(!res || res.isEnded);
+          const ended = !res || res.isEnded;
+          if (!ended) try { api.showToast({ title: '看完视频才能领取奖励哦', icon: 'none' }); } catch (e) {}
+          resolve(ended);
         };
         ad.onClose(onClose);
         ad.show().catch(() => ad.load().then(() => ad.show()).catch(() => {
