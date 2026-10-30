@@ -164,6 +164,24 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     b.hooks.sfx('shoot');
     return;
   }
+  if (w.link && b.hero.id === 'huangzhong') {
+    // 定军神射：专射血最多的敌人
+    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
+    if (!cands.length) return;
+    cands.sort((a, c) => c.hp - a.hp);
+    for (let i = 0; i < L.count; i++) {
+      const t = cands[i % cands.length];
+      const a = Math.atan2(t.y - 4 * t.scale - oy, t.x - ox) + (i >= cands.length ? (i % 2 ? 0.1 : -0.1) : 0);
+      const pr = newProjectile('bolt');
+      pr.x = ox; pr.y = oy;
+      pr.vx = Math.cos(a) * (L.speed || 400); pr.vy = Math.sin(a) * (L.speed || 400);
+      pr.rot = a; pr.dmg = dmg; pr.pierce = L.pierce || 6; pr.knock = 20; pr.r = 4; pr.life = 1.4;
+      pr.sprite = 'bolt_evo'; pr.scale = 2;
+      b.projs.push(pr);
+    }
+    b.hooks.sfx('shoot');
+    return;
+  }
   if (w.evo) {
     // 随机射向附近的敌人
     const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));

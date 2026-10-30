@@ -330,6 +330,7 @@ WEAPONS.sword.links = [
 WEAPONS.horse.links = [
   { hero: 'zhaoyun', name: '白马义从', desc: '赵云专属：十二骑白马义从纵横冲阵', evo: { count: 12, dmg: 3.0, cd: 2.6 } },
   { hero: 'guanyu', name: '千里走单骑', desc: '关羽专属：骑兵冲阵伤害大增，自身移动速度+20%', evo: { dmg: 4.0, cd: 2.8 } },
+  { hero: 'machao', name: '割须弃袍', desc: '马超专属：十路西凉骑兵追杀，冲阵更快更狠', evo: { count: 10, dmg: 3.4, cd: 2.4 } },
 ];
 WEAPONS.drum.links = [
   { hero: 'guanyu', name: '温酒斩华雄', desc: '关羽专属：每通鼓响，四道青龙刀气斩向四方', evo: { dmg: 3.6 } },
@@ -337,16 +338,36 @@ WEAPONS.drum.links = [
 ];
 WEAPONS.rock.links = [
   { hero: 'zhangfei', name: '智取瓦口', desc: '张飞专属：滚木礌石倾泻而下，砸晕敌军', evo: { count: 14, cd: 1.3, stun: 1.0 } },
+  { hero: 'dianwei', name: '宛城死战', desc: '典韦专属：十二块巨石齐落，重砸并长时间眩晕', evo: { count: 12, dmg: 5.0, stun: 0.9 } },
 ];
 WEAPONS.crossbow.links = [
   { hero: 'zhuge', name: '元戎弩', desc: '诸葛亮专属：一弩十矢扇形齐射，穿透八人', evo: { count: 10, pierce: 8, cd: 0.55, dmg: 1.6 } },
   { hero: 'lvbu', name: '辕门射戟', desc: '吕布专属：连发巨箭，贯穿一线所有敌人', evo: { dmg: 8, cd: 0.7, pierce: 999, speed: 380 } },
+  { hero: 'huangzhong', name: '定军神射', desc: '黄忠专属：三箭连珠，专射血最多的敌人（敌将、精英）', evo: { count: 3, dmg: 2.4, cd: 0.3, pierce: 6, speed: 400 } },
 ];
 WEAPONS.fire.links = [
   { hero: 'zhuge', name: '火烧博望', desc: '诸葛亮专属：火海连片，范围与持续时间大增', evo: { count: 6, area: 32, duration: 5, slow: 0.55, dmg: 0.52 } },
+  { hero: 'huangzhong', name: '火箭焚营', desc: '黄忠专属：火箭齐发，九处火海同时燃起', evo: { count: 9, dmg: 0.5, cd: 2.0 } },
 ];
 WEAPONS.catapult.links = [
   { hero: 'lvbu', name: '虎牢关', desc: '吕布专属：五石齐发，砸出巨坑震飞敌军', evo: { count: 5, area: 60, dmg: 9 } },
+  { hero: 'jiangwei', name: '剑阁死守', desc: '姜维专属：六石连发，冷却更短，范围更大', evo: { count: 6, area: 62, dmg: 10.5, cd: 2.6 } },
+];
+// 1.0.3 新武将的联动
+WEAPONS.caltrop.links = [
+  { hero: 'machao', name: '渭水伏兵', desc: '马超专属：铁蒺藜范围更大，伤害更高，敌军几乎寸步难行', evo: { dmg: 0.75, area: 38, slow: 0.7 } },
+];
+WEAPONS.knife.links = [
+  { hero: 'sunshangxiang', name: '枭姬飞刃', desc: '孙尚香专属：十二把飞刃往复不休，飞得更快', evo: { count: 12, dmg: 1.8, speed: 280 } },
+];
+WEAPONS.sword.links.push(
+  { hero: 'sunshangxiang', name: '百婢持刀', desc: '孙尚香专属：八柄飞剑护身，转得更快、伤害更高', evo: { count: 8, dmg: 3.2, speed: 6.0, area: 54 } },
+);
+WEAPONS.aura.links = [
+  { hero: 'dianwei', name: '恶来护卫', desc: '典韦专属：罡风范围与伤害大增，震退贴身的敌人', evo: { dmg: 1.8, area: 66, knock: 30 } },
+];
+WEAPONS.thunder.links = [
+  { hero: 'jiangwei', name: '天水麒麟', desc: '姜维专属：六道天雷，连锁十八人并长时间麻痹', evo: { count: 6, pierce: 18, stun: 0.6, dmg: 12 } },
 ];
 
 // 进化形态整体伤害系数：进化后约为满级的 1.5 倍，避免后期一边倒
