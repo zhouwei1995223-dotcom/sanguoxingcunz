@@ -106,7 +106,7 @@ export class BattleScene implements Scene {
     this.battle.showDamage = save.settings.dmgNum;
     this.battle.hooks = {
       sfx: (n) => playSfx(n as Sfx),
-      shake: (pw) => { this.renderer.shake = Math.max(this.renderer.shake, pw); },
+      shake: (pw) => { if (save.settings.screenShake) this.renderer.shake = Math.max(this.renderer.shake, pw * 0.7); },
       banner: (text, color) => this.banners.push({ text, color: color || C.gold, t: 0 }),
       vibrate: (l) => vibrate(l),
       bossAppear: (d: BossDef) => this.onBoss(d),
@@ -566,7 +566,7 @@ export class BattleScene implements Scene {
 
   private tryUlt() {
     const b = this.battle;
-    if (b.castUlt()) { this.renderer.shake = Math.max(this.renderer.shake, 4); getPlatform().recorderMark(); }
+    if (b.castUlt()) { b.hooks.shake(4); getPlatform().recorderMark(); }
   }
 
   /** 大招按钮：怒气环 + 满怒发光；未满时可看视频充满 */

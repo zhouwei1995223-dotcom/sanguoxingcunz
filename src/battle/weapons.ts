@@ -85,7 +85,7 @@ function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     for (let s = 0.3; s <= 1; s += 0.35) b.hitBreakables(ox + dx * len * s, oy + dy * len * s, width / 2);
   }
   // 一枪捅穿多人：轻震屏 + 短暂顿帧
-  if (hits >= 3) { b.hooks.shake(w.evo ? 2.5 : 1.5); b.addHitStop(0.03); }
+  if (hits >= 3) b.addHitStop(0.03);
   b.hooks.sfx('thrust');
 }
 
@@ -140,7 +140,6 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     pr.rot = a; pr.dmg = dmg; pr.pierce = 9999; pr.knock = 60; pr.r = 9; pr.life = 1.4;
     pr.sprite = 'bolt_evo'; pr.scale = 3;
     b.projs.push(pr);
-    b.hooks.shake(1.5);
     b.hooks.sfx('shoot');
     return;
   }
@@ -224,7 +223,6 @@ function horse(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     pr.sprite = 'u_baima';
     b.projs.push(pr);
   }
-  b.hooks.shake(w.evo ? 3 : 2);
   b.hooks.sfx('horse');
 }
 
@@ -313,7 +311,7 @@ function blade(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     hits += sweep(b, p.x, p.y - 8, R, a, arc, L.dmg * b.base.atk, L.knock || 80);
     b.fx.push({ kind: 'slash', x: p.x, y: p.y - 8, t: 0, dur: 0.25, a, r: R, w: arc, color: w.evo ? '#fee761' : '#63c74d' });
   }
-  if (hits >= 3) { b.hooks.shake(w.evo ? 3 : 2); b.addHitStop(0.04); }
+  if (hits >= 3) b.addHitStop(0.04);
   b.hooks.sfx('thrust');
 }
 
@@ -328,7 +326,7 @@ function snake(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 70, L.stun || 0);
   b.fx.push({ kind: 'slash', x: p.x, y: p.y - 6, t: 0, dur: 0.28, a: w.angle, r: R, w: Math.PI, color: w.evo ? '#fee761' : '#ff8a80' });
   if (w.evo) b.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.35, r: R * 1.4, color: '#ffffff' });
-  if (hits >= 3) { b.hooks.shake(w.evo ? 3 : 2); b.addHitStop(0.04); }
+  if (hits >= 3) b.addHitStop(0.04);
   b.hooks.sfx('thrust');
 }
 
@@ -375,7 +373,6 @@ function halberd(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.burst = L.tick || 0.2;
   const R = L.area * b.areaMul;
   const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 40);
-  if (hits >= 4 && Math.random() < 0.4) b.hooks.shake(1.2);
   b.hooks.sfx('thrust');
 }
 
@@ -437,7 +434,7 @@ function thunder(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     }
     b.fx.push({ kind: 'lightning', x: 0, y: 0, t: 0, dur: 0.28, pts, color: w.evo ? '#fee761' : '#8be9ff' });
   }
-  if (strikes) { b.hooks.shake(w.evo ? 2 : 1); b.hooks.sfx('explode'); }
+  if (strikes) b.hooks.sfx('explode');
 }
 
 /** 滚木礌石：从天而降砸向敌群 */
@@ -515,7 +512,6 @@ function drum(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       }
       w.angle += Math.PI / 4;
     }
-    if (hits >= 3) b.hooks.shake(w.evo ? 2.5 : 1.5);
     b.hooks.sfx('boss');
     return;
   }

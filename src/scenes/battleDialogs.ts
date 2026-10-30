@@ -405,12 +405,13 @@ export class PauseDialog implements Dialog {
       ui.text(s[1], sx + 130 * u, sy, 22, '#fff', 'left');
     });
     y += 140 * u;
-    // 设置开关：两行，每行三个（开着的显示绿色）
+    // 设置开关：每行三个（开着的显示绿色）
     const tw = (w - 80 * u - 40 * u) / 3;
     const toggles: [string, string, () => void, boolean][] = [
       ['p_music', '音乐:' + (save.settings.music ? '开' : '关'), () => { save.settings.music = !save.settings.music; refreshMusic(); }, save.settings.music],
       ['p_sfx', '音效:' + (save.settings.sfx ? '开' : '关'), () => { save.settings.sfx = !save.settings.sfx; }, save.settings.sfx],
       ['p_vib', '震动:' + (save.settings.vibrate ? '开' : '关'), () => { save.settings.vibrate = !save.settings.vibrate; }, save.settings.vibrate],
+      ['p_shake', '震屏:' + (save.settings.screenShake ? '开' : '关'), () => { save.settings.screenShake = !save.settings.screenShake; }, save.settings.screenShake],
       ['p_ult', '大招:' + (save.settings.ultRight ? '右' : '左'), () => { save.settings.ultRight = !save.settings.ultRight; }, false],
       ['p_power', '省电:' + (save.settings.lowPower ? '开' : '关'), () => { save.settings.lowPower = !save.settings.lowPower; }, save.settings.lowPower],
       ['p_num', '伤害数字:' + (save.settings.dmgNum ? '开' : '关'), () => { save.settings.dmgNum = !save.settings.dmgNum; b.showDamage = save.settings.dmgNum; }, save.settings.dmgNum],
@@ -418,8 +419,8 @@ export class PauseDialog implements Dialog {
     toggles.forEach(([id, label, fn, on], i) => {
       if (ui.button(id, x + (i % 3) * (tw + 20 * u), y + Math.floor(i / 3) * 90 * u, tw, 76 * u, label, on ? C.btnGreen : C.btnGray, { size: 22 })) { fn(); markDirty(); }
     });
-    y += 90 * u;
-    y += 100 * u;
+    y += Math.ceil(toggles.length / 3) * 90 * u;
+    y += 10 * u;
     const bw = (w - 100 * u) / 2;
     if (!this.confirmQuit) {
       if (ui.button('p_quit', x, y, bw, 92 * u, '撤退', C.btnRed)) this.confirmQuit = true;

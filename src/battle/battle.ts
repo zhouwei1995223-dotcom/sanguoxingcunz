@@ -955,7 +955,6 @@ export class Battle {
             if (d < pr.area + e.r) this.damage(e, pr.dmg * 4, dx / d, dy / d, 40);
           }
           this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.35 });
-          this.hooks.shake(1.2);
           this.pools.push({ x: pr.tx, y: pr.ty, r: pr.area, dmg: pr.dmg, tick: pr.tick, tickT: 0, life: pr.burn, maxLife: pr.burn, slow: pr.slow });
           this.hooks.sfx('fire');
           this.projs.splice(i, 1);
@@ -970,7 +969,6 @@ export class Battle {
           if (pr.kind === 'boulder') {
             this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.4 });
             this.fx.push({ kind: 'ring', x: pr.tx, y: pr.ty, t: 0, dur: 0.35, r: pr.area * 1.2, color: '#feae34' });
-            this.hooks.shake(pr.scale >= 4 ? 4 : 2.5);
             this.hooks.sfx('explode');
             if (pr.second) {
               // 霹雳炮：碎石二次爆裂
@@ -982,7 +980,6 @@ export class Battle {
           } else {
             this.fx.push({ kind: 'puff', x: pr.tx, y: pr.ty - 2, t: 0, dur: 0.3, big: pr.scale >= 3 });
             if (pr.scale === 0) this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.35 });
-            this.hooks.shake(pr.scale >= 3 ? 1.5 : 0.8);
             this.hooks.sfx('hit');
           }
           this.projs.splice(i, 1);
@@ -1262,7 +1259,8 @@ export class Battle {
     if (this.ult) return;
     if (!force && this.hitStopCd > 0) return;
     this.hitStop = Math.max(this.hitStop, sec);
-    this.hitStopCd = 0.18;
+    // 普通命中的顿帧至少隔 0.6 秒一次，太密会像画面一卡一卡
+    this.hitStopCd = 0.6;
   }
 
   private spawnCorpse(e: Enemy) {
@@ -1459,7 +1457,6 @@ export class Battle {
             if (d < R + e.r) this.damage(e, atk * 2.6, dx / d, dy / d, 90, { force: true });
           }
           this.hitBreakables(p.x, p.y, R);
-          if (Math.random() < 0.3) this.hooks.shake(1.5);
           this.hooks.sfx('thrust');
         }
         if (u.t >= u.dur) this.ultEnd(u);

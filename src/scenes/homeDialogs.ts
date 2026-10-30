@@ -394,7 +394,7 @@ export class SettingsDialog implements Dialog {
     const w = ui.W - 80 * u, h = 1320 * u;
     const f = dialogFrame(ui, w, h, '设置', this.t, 'st_close');
     if (f.close) return false;
-    const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['震动', 'vibrate'], ['伤害数字', 'dmgNum'], ['省电模式（手机发烫时打开）', 'lowPower'], ['大招按钮位置', 'ultRight']];
+    const toggles: [string, keyof typeof save.settings][] = [['背景音乐', 'music'], ['音效', 'sfx'], ['手机震动', 'vibrate'], ['画面震动', 'screenShake'], ['伤害数字', 'dmgNum'], ['省电模式（手机发烫时打开）', 'lowPower'], ['大招按钮位置', 'ultRight']];
     let y = f.y + 100 * u;
     for (const [name, key] of toggles) {
       ui.text(name, f.x + 60 * u, y + 40 * u, 28, '#fff4d6', 'left');
