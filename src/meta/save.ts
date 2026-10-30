@@ -109,7 +109,7 @@ function freshDaily(): DailyState {
 
 function freshHeroes(): Record<string, HeroState> {
   const h: Record<string, HeroState> = {};
-  for (const id of ['zhaoyun', 'guanyu', 'zhangfei', 'zhuge', 'lvbu']) h[id] = { owned: id === 'zhaoyun', lv: 1, star: id === 'zhaoyun' ? 1 : 0, shards: 0 };
+  for (const id of ['zhaoyun', 'guanyu', 'zhangfei', 'zhuge', 'lvbu', 'huangzhong', 'machao', 'sunshangxiang', 'dianwei', 'jiangwei']) h[id] = { owned: id === 'zhaoyun', lv: 1, star: id === 'zhaoyun' ? 1 : 0, shards: 0 };
   return h;
 }
 
@@ -197,6 +197,9 @@ export function loadSave() {
       if (!save.heroes[save.hero] || !save.heroes[save.hero].owned) save.hero = 'zhaoyun';
       // 已通关第2章的老玩家直接获得关羽
       if (save.maxCleared >= 2 && !save.heroes.guanyu.owned) { save.heroes.guanyu.owned = true; save.heroes.guanyu.star = 1; }
+      // 1.0.3：已通关第4 / 6章的老玩家直接获得黄忠 / 姜维
+      if (save.maxCleared >= 4 && !save.heroes.huangzhong.owned) { save.heroes.huangzhong.owned = true; save.heroes.huangzhong.star = 1; }
+      if (save.maxCleared >= 6 && !save.heroes.jiangwei.owned) { save.heroes.jiangwei.owned = true; save.heroes.jiangwei.star = 1; }
     } catch (e) {
       save = freshSave();
     }

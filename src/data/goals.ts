@@ -131,6 +131,11 @@ export const SKINS: Record<string, SkinDef> = {
   zhangfei: { hero: 'zhangfei', name: '燕山猛虎', ads: 6, bonus: '伤害+5%' },
   zhuge: { hero: 'zhuge', name: '天枢紫袍', ads: 6, bonus: '伤害+5%' },
   lvbu: { hero: 'lvbu', name: '暗金魔神', ads: 8, bonus: '伤害+5%' },
+  huangzhong: { hero: 'huangzhong', name: '定军赤羽', ads: 6, bonus: '伤害+5%' },
+  machao: { hero: 'machao', name: '西凉锦袍', ads: 6, bonus: '伤害+5%' },
+  sunshangxiang: { hero: 'sunshangxiang', name: '江东碧影', ads: 6, bonus: '伤害+5%' },
+  dianwei: { hero: 'dianwei', name: '赤铁恶来', ads: 6, bonus: '伤害+5%' },
+  jiangwei: { hero: 'jiangwei', name: '麒麟金甲', ads: 6, bonus: '伤害+5%' },
 };
 export const SKIN_DMG_BONUS = 5;
 

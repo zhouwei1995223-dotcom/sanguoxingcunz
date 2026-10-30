@@ -274,8 +274,8 @@ export function anyHeroRedDot(): boolean {
 
 /** 随机碎片：偏向需要碎片解锁的诸葛亮与吕布 */
 /** 武将碎片的武将分布：名将宝匣 / 其他来源 */
-export const SHARD_WEIGHTS_RARE: Record<string, number> = { zhuge: 35, lvbu: 40, guanyu: 10, zhangfei: 10, zhaoyun: 5 };
-export const SHARD_WEIGHTS_COMMON: Record<string, number> = { zhuge: 50, lvbu: 10, guanyu: 15, zhangfei: 15, zhaoyun: 10 };
+export const SHARD_WEIGHTS_RARE: Record<string, number> = { zhuge: 25, lvbu: 30, machao: 20, sunshangxiang: 5, dianwei: 5, guanyu: 4, zhangfei: 4, zhaoyun: 3, huangzhong: 2, jiangwei: 2 };
+export const SHARD_WEIGHTS_COMMON: Record<string, number> = { zhuge: 30, sunshangxiang: 18, dianwei: 18, lvbu: 8, machao: 6, guanyu: 6, zhangfei: 6, zhaoyun: 4, huangzhong: 2, jiangwei: 2 };
 /** 军资箱附带武将碎片的概率 */
 export const WOOD_SHARD_RATE = 0.4;
 

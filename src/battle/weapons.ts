@@ -38,6 +38,11 @@ export function updateWeapons(b: Battle, dt: number) {
       case 'drum': drum(b, w, L, dt); break;
       case 'catapult': catapult(b, w, L, dt); break;
       case 'caltrop': caltrop(b, w, L, dt); break;
+      case 'bow': bow(b, w, L, dt); break;
+      case 'lance': lance(b, w, L, dt); break;
+      case 'chakram': chakram(b, w, L, dt); break;
+      case 'ji': ji(b, w, L, dt); break;
+      case 'meteor': meteor(b, w, L, dt); break;
     }
   }
 }
@@ -537,4 +542,157 @@ function caltrop(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     kind: 'caltrop', x: p.x - p.dirX * 10 + rand(-4, 4), y: p.y - p.dirY * 8 + rand(-3, 3), r: L.area * b.areaMul,
     dmg: L.dmg * b.base.atk, tick: L.tick || 0.4, tickT: 0, life, maxLife: life, slow: L.slow || 0.3,
   });
+}
+
+// —— 1.0.3 新武将专属武器 ——
+
+/** 黄忠 · 宝雕弓：重箭优先射向血最多的敌人（敌将、精英） */
+function bow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
+  if (!cands.length) { w.t = 0.2; return; }
+  cands.sort((a, c) => c.hp - a.hp);
+  const ox = p.x, oy = p.y - 10;
+  for (let i = 0; i < L.count; i++) {
+    const t = cands[i % cands.length];
+    let a = Math.atan2(t.y - 4 * t.scale - oy, t.x - ox);
+    if (i >= cands.length) a += (i % 2 ? 1 : -1) * 0.1;
+    const pr = newProjectile('bolt');
+    pr.x = ox; pr.y = oy;
+    const sp = L.speed || 360;
+    pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
+    pr.rot = a; pr.dmg = L.dmg * b.base.atk; pr.pierce = L.pierce || 3; pr.knock = L.knock || 30;
+    pr.r = w.evo ? 7 : 4; pr.life = 1.6;
+    pr.sprite = w.evo ? 'bolt_evo' : 'bolt';
+    pr.scale = w.evo ? 3 : 2;
+    b.projs.push(pr);
+  }
+  b.hooks.sfx('shoot');
+}
+
+/** 马超 · 虎头湛金枪：朝前进方向长距离突刺 */
+function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const len = L.area * b.areaMul;
+  const width = 13 * Math.sqrt(b.areaMul) * (w.evo ? 1.3 : 1);
+  const baseA = Math.atan2(p.dirY, p.dirX);
+  const dmg = L.dmg * b.base.atk;
+  let hits = 0;
+  for (let i = 0; i < L.count; i++) {
+    const a = baseA + (i - (L.count - 1) / 2) * 0.32;
+    const ox = p.x, oy = p.y - 8;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    b.fx.push({ kind: 'thrust', x: ox, y: oy, a, len, w: width, t: 0, dur: 0.22, color: w.evo ? '#fee761' : '#feae34' });
+    b.grid.query(ox + dx * len / 2, oy + dy * len / 2, len / 2 + width + 16, near);
+    for (const e of near) {
+      if (e.dead) continue;
+      const ex = e.x - ox, ey = e.y - 4 * e.scale - oy;
+      const proj = ex * dx + ey * dy;
+      if (proj < -e.r || proj > len + e.r) continue;
+      if (Math.abs(ex * -dy + ey * dx) > width / 2 + e.r) continue;
+      b.damage(e, dmg, dx, dy, L.knock || 0);
+      if (hits++ < 8) b.fx.push({ kind: 'spark', x: e.x, y: e.y - 5 * e.scale, t: 0, dur: 0.18 });
+    }
+    for (let s = 0.3; s <= 1; s += 0.35) b.hitBreakables(ox + dx * len * s, oy + dy * len * s, width / 2);
+  }
+  if (hits >= 3) b.addHitStop(0.03);
+  b.hooks.sfx('thrust');
+}
+
+/** 孙尚香 · 乾坤圈：从身边掷出，在敌人之间弹射 */
+function chakram(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const dmg = L.dmg * b.base.atk;
+  const jump = L.area * Math.sqrt(b.areaMul);
+  const hit = new Set<number>();
+  let thrown = 0;
+  for (let s = 0; s < L.count; s++) {
+    let cur = s === 0 ? b.nearestEnemy(b.viewW * 0.6) : b.randomVisibleEnemy();
+    if (!cur || hit.has(cur.uid)) cur = b.randomVisibleEnemy();
+    if (!cur || hit.has(cur.uid)) continue;
+    thrown++;
+    const pts = [p.x, p.y - 10];
+    for (let c = 0; c < (L.pierce || 4) && cur; c++) {
+      hit.add(cur.uid);
+      pts.push(cur.x, cur.y - 6 * cur.scale);
+      const dx = cur.x - pts[pts.length - 4], dy = cur.y - pts[pts.length - 3];
+      const d = Math.hypot(dx, dy) || 1;
+      b.damage(cur, dmg, dx / d, dy / d, L.knock || 0);
+      if (c < 4) b.fx.push({ kind: 'ring', x: cur.x, y: cur.y - 6 * cur.scale, t: 0, dur: 0.25, r: 10, color: w.evo ? '#f6757a' : '#fee761' });
+      b.grid.query(cur.x, cur.y, jump, near);
+      let next: Enemy | null = null, bd = jump * jump;
+      for (const e of near) {
+        if (e.dead || hit.has(e.uid) || (!e.boss && !b.canHit(e))) continue;
+        const dd = (e.x - cur.x) ** 2 + (e.y - cur.y) ** 2;
+        if (dd < bd) { bd = dd; next = e; }
+      }
+      cur = next;
+    }
+    b.fx.push({ kind: 'lightning', x: 0, y: 0, t: 0, dur: 0.3, pts, color: w.evo ? '#f6757a' : '#fee761' });
+  }
+  if (thrown) b.hooks.sfx('shoot');
+}
+
+/** 典韦 · 双铁戟：向敌群掷出旋转铁戟，落地重砸 */
+function ji(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -16));
+  vis.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
+  for (let i = 0; i < L.count; i++) {
+    const t = vis.length ? vis[Math.floor(Math.random() * Math.min(vis.length, 10))] : null;
+    const a = rand(TAU);
+    const pr = newProjectile('boulder');
+    pr.x = p.x; pr.y = p.y - 10;
+    pr.tx = t ? t.x : p.x + Math.cos(a) * 70;
+    pr.ty = t ? t.y : p.y + Math.sin(a) * 70;
+    pr.dur = 0.45 + i * 0.06;
+    pr.vx = (pr.tx - pr.x) / pr.dur;
+    pr.vy = (pr.ty - pr.y) / pr.dur;
+    pr.area = L.area * b.areaMul;
+    pr.dmg = L.dmg * b.base.atk;
+    pr.knock = L.knock || 90;
+    pr.stun = L.stun || 0;
+    pr.sprite = w.evo ? 'icon_w_ji_evo' : 'icon_w_ji';
+    pr.scale = 2;
+    pr.life = 3;
+    b.projs.push(pr);
+  }
+  b.hooks.sfx('horse');
+}
+
+/** 姜维 · 天水星落：星辰坠向敌群，落地迸出星芒 */
+function meteor(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player;
+  for (let i = 0; i < L.count; i++) {
+    const t = b.randomVisibleEnemy();
+    const a = rand(TAU);
+    const pr = newProjectile('rock');
+    pr.tx = t ? t.x + rand(-6, 6) : p.x + Math.cos(a) * rand(30, 90);
+    pr.ty = t ? t.y + rand(-5, 5) : p.y + Math.sin(a) * rand(30, 90);
+    pr.x = pr.tx; pr.y = pr.ty;
+    pr.dur = 0.45 + i * 0.08;
+    pr.area = L.area * b.areaMul;
+    pr.dmg = L.dmg * b.base.atk;
+    pr.knock = L.knock || 50;
+    pr.life = 3;
+    pr.scale = w.evo ? 3 : 2;
+    pr.sprite = 'icon_w_meteor';
+    pr.second = w.evo;
+    b.projs.push(pr);
+  }
 }

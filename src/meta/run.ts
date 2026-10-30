@@ -109,6 +109,8 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   let heroReward: string | undefined;
   let shardReward: { hero: string; n: number } | undefined;
   if (firstClear && d === 0 && ch.id === 2) { grantHero('guanyu'); heroReward = 'guanyu'; }
+  else if (firstClear && d === 0 && ch.id === 4) { grantHero('huangzhong'); heroReward = 'huangzhong'; }
+  else if (firstClear && d === 0 && ch.id === 6) { grantHero('jiangwei'); heroReward = 'jiangwei'; }
   else if (firstClear && (ch.id >= 3 || d > 0)) {
     shardReward = { hero: d > 0 || ch.id >= 4 ? 'lvbu' : 'zhuge', n: 10 + d * 5 };
     grantShards(shardReward.hero, shardReward.n);

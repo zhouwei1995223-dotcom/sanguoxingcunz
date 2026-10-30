@@ -182,6 +182,92 @@ const ICONS: Record<string, () => PixelImage> = {
     p.line(3, 12, 12, 3, 'Y'); p.rect(10, 2, 3, 3, 'y'); p.set(13, 1, 'w'); p.set(4, 4, 'R'); p.set(11, 11, 'R');
     return p.outline();
   },
+  // —— 1.0.3 新武将专属武器 ——
+  w_bow: () => art([
+    '...UU....',
+    '..U..S...',
+    '.U...S...',
+    'U....S...',
+    'U....S..w',
+    'U....SSww',
+    'U....S...',
+    '.U...S...',
+    '..U..S...',
+    '...UU....',
+  ]),
+  w_bow_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'y');
+    p.line(2, 8, 13, 8, 'w'); p.set(13, 7, 'Y'); p.set(13, 9, 'Y'); p.set(14, 8, 'Y');
+    p.line(3, 3, 3, 13, 'U'); p.set(2, 7, 'R'); p.set(2, 9, 'R');
+    return p.outline();
+  },
+  w_lance: () => art([
+    '........YY.',
+    '.......YwY.',
+    '......YY...',
+    '.....R.....',
+    '....y......',
+    '...y.......',
+    '..y........',
+    '.y.........',
+  ]),
+  w_lance_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'Y');
+    for (const dy of [-3, 0, 3]) { p.line(3, 8 + dy, 12, 8 + dy, 'y'); p.set(13, 8 + dy, 'w'); }
+    return p.outline();
+  },
+  w_chakram: () => art([
+    '..YYYY..',
+    '.Y....Y.',
+    'Y..ww..Y',
+    'Y.w..w.Y',
+    'Y.w..w.Y',
+    'Y..ww..Y',
+    '.Y....Y.',
+    '..YYYY..',
+  ]),
+  w_chakram_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'f');
+    p.ring(5, 7.5, 3, 'Y'); p.ring(10.5, 7.5, 3, 'c');
+    return p.outline();
+  },
+  w_ji: () => art([
+    '...SS....SS...',
+    '..SwS....SwS..',
+    '..SSU....USS..',
+    '....U....U....',
+    '.....U..U.....',
+    '......UU......',
+    '......UU......',
+    '.....U..U.....',
+  ]),
+  w_ji_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'r');
+    p.line(3, 12, 12, 3, 'U'); p.line(3, 3, 12, 12, 'U');
+    p.rect(10, 2, 3, 3, 'S'); p.rect(3, 2, 3, 3, 'S');
+    return p.outline();
+  },
+  w_meteor: () => art([
+    '.......w.',
+    '......wYw',
+    '.....YYw.',
+    '....YY...',
+    '...cY....',
+    '..cc.....',
+    '.c.......',
+    'c........',
+  ]),
+  w_meteor_evo: () => {
+    const p = new PixelImage(16, 16);
+    p.ring(7.5, 7.5, 7, 'B');
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 - Math.PI / 2; p.line(8, 8, Math.round(8 + Math.cos(a) * 5), Math.round(8 + Math.sin(a) * 5), 'Y'); }
+    p.disc(8, 8, 1, 'w');
+    return p.outline();
+  },
   w_knife: () => art([
     '......SS.',
     '.....SwS.',

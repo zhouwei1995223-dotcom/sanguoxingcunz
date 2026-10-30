@@ -427,11 +427,13 @@ export class HomeScene implements Scene {
     const u = ui.u;
     const top = this.contentTop(ui);
     if (!this.viewHero) this.viewHero = save.hero;
-    // 武将列表
-    const cw = (ui.W - 40 * u) / HEROES.length;
+    // 武将列表：每行 5 个
+    const cols = 5;
+    const cw = (ui.W - 40 * u) / cols;
+    const rowH = cw + 22 * u;
     HEROES.forEach((h, i) => {
       const st = save.heroes[h.id];
-      const x = 20 * u + i * cw, y = top;
+      const x = 20 * u + (i % cols) * cw, y = top + Math.floor(i / cols) * rowH;
       const sz = cw - 12 * u;
       const sel = this.viewHero === h.id;
       ui.qualityFrame(x + 6 * u, y, sz, sel ? '#feae34' : st.owned ? '#8b9bb4' : '#3a3040');
@@ -445,7 +447,7 @@ export class HomeScene implements Scene {
     });
     const h = HERO_BY_ID[this.viewHero];
     const st = save.heroes[h.id];
-    const py = top + cw + 30 * u;
+    const py = top + Math.ceil(HEROES.length / cols) * rowH + 8 * u;
     const ph = this.contentBottom(ui) - py - 10 * u;
     ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
     const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1290 + 108 * heroLinks(this.viewHero || save.hero).length) * u);

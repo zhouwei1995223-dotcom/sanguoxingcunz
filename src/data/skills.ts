@@ -2,7 +2,8 @@
 
 export type WeaponId =
   | 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd'
-  | 'rock' | 'knife' | 'catapult' | 'thunder' | 'caltrop' | 'drum';
+  | 'rock' | 'knife' | 'catapult' | 'thunder' | 'caltrop' | 'drum'
+  | 'bow' | 'lance' | 'chakram' | 'ji' | 'meteor';
 export type PassiveId =
   | 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal'
   | 'map' | 'mirror' | 'wine' | 'ration' | 'horn' | 'whetstone';
@@ -181,6 +182,67 @@ Object.assign(WEAPONS, {
       { dmg: 1.55, cd: 1.8, count: 1, area: 48, duration: 1.2, tick: 0.16, knock: 55, desc: '全面强化' },
     ],
     evo: { dmg: 1.6, cd: 0, count: 1, area: 58, duration: 9999, tick: 0.2, knock: 50, desc: '无双乱舞：画戟永不停歇，横扫八方' },
+  },
+  // 1.0.3 新武将
+  bow: {
+    id: 'bow', name: '宝雕弓', icon: 'w_bow', evoName: '百步穿杨', evoIcon: 'w_bow_evo', evoPassive: 'wine', hero: 'huangzhong',
+    intro: '重箭优先射向血最多的敌人（敌将、精英），贯穿一线',
+    levels: [
+      { dmg: 3.0, cd: 1.5, count: 1, area: 0, pierce: 3, speed: 360, knock: 30, desc: '重箭射向血最多的敌人' },
+      { dmg: 3.6, cd: 1.5, count: 1, area: 0, pierce: 4, speed: 360, knock: 30, desc: '伤害提升，穿透+1' },
+      { dmg: 3.6, cd: 1.4, count: 2, area: 0, pierce: 4, speed: 380, knock: 35, desc: '重箭+1' },
+      { dmg: 4.5, cd: 1.3, count: 2, area: 0, pierce: 5, speed: 380, knock: 35, desc: '伤害提升，冷却缩短' },
+      { dmg: 5.0, cd: 1.2, count: 3, area: 0, pierce: 6, speed: 400, knock: 40, desc: '重箭+1，穿透+1' },
+    ],
+    evo: { dmg: 7.0, cd: 0.9, count: 4, area: 0, pierce: 999, speed: 440, knock: 50, desc: '百步穿杨：四支巨箭贯穿全屏' },
+  },
+  lance: {
+    id: 'lance', name: '虎头湛金枪', icon: 'w_lance', evoName: '神威天将军', evoIcon: 'w_lance_evo', evoPassive: 'horseshoe', hero: 'machao',
+    intro: '朝前进方向长距离突刺，贯穿一线所有敌人',
+    levels: [
+      { dmg: 1.9, cd: 1.3, count: 1, area: 80, knock: 80, desc: '朝前进方向长枪突刺' },
+      { dmg: 2.3, cd: 1.3, count: 1, area: 86, knock: 80, desc: '伤害与距离提升' },
+      { dmg: 2.3, cd: 1.2, count: 2, area: 90, knock: 85, desc: '两路突刺' },
+      { dmg: 2.9, cd: 1.1, count: 2, area: 96, knock: 90, desc: '伤害提升，冷却缩短' },
+      { dmg: 3.3, cd: 1.0, count: 3, area: 104, knock: 95, desc: '三路突刺' },
+    ],
+    evo: { dmg: 4.2, cd: 0.7, count: 5, area: 130, knock: 120, desc: '神威天将军：五路金枪，横扫千军' },
+  },
+  chakram: {
+    id: 'chakram', name: '乾坤圈', icon: 'w_chakram', evoName: '日月乾坤', evoIcon: 'w_chakram_evo', evoPassive: 'flag', hero: 'sunshangxiang',
+    intro: '掷出乾坤圈，在敌人之间来回弹射',
+    levels: [
+      { dmg: 1.3, cd: 1.3, count: 1, area: 60, pierce: 4, knock: 20, desc: '乾坤圈弹射4名敌人' },
+      { dmg: 1.6, cd: 1.3, count: 1, area: 64, pierce: 5, knock: 20, desc: '伤害提升，弹射+1' },
+      { dmg: 1.6, cd: 1.2, count: 2, area: 66, pierce: 5, knock: 24, desc: '乾坤圈+1' },
+      { dmg: 2.0, cd: 1.1, count: 2, area: 70, pierce: 6, knock: 24, desc: '伤害提升，弹射+1' },
+      { dmg: 2.3, cd: 1.0, count: 3, area: 74, pierce: 7, knock: 28, desc: '乾坤圈+1' },
+    ],
+    evo: { dmg: 3.0, cd: 0.7, count: 4, area: 90, pierce: 10, knock: 30, desc: '日月乾坤：四圈齐飞，弹射十名敌人' },
+  },
+  ji: {
+    id: 'ji', name: '双铁戟', icon: 'w_ji', evoName: '古之恶来', evoIcon: 'w_ji_evo', evoPassive: 'armor', hero: 'dianwei',
+    intro: '向敌群掷出旋转铁戟，落地重砸一片',
+    levels: [
+      { dmg: 3.2, cd: 2.0, count: 2, area: 30, knock: 90, desc: '掷出两柄铁戟，落地重砸' },
+      { dmg: 3.8, cd: 2.0, count: 2, area: 32, knock: 90, desc: '伤害提升' },
+      { dmg: 3.8, cd: 1.9, count: 3, area: 34, knock: 95, desc: '铁戟+1' },
+      { dmg: 4.6, cd: 1.8, count: 3, area: 38, knock: 100, desc: '伤害与范围提升' },
+      { dmg: 5.2, cd: 1.6, count: 4, area: 40, knock: 110, desc: '铁戟+1，冷却缩短' },
+    ],
+    evo: { dmg: 6.5, cd: 1.3, count: 6, area: 50, knock: 140, stun: 0.5, desc: '古之恶来：六戟齐飞，砸晕敌军' },
+  },
+  meteor: {
+    id: 'meteor', name: '天水星落', icon: 'w_meteor', evoName: '九伐中原', evoIcon: 'w_meteor_evo', evoPassive: 'seal', hero: 'jiangwei',
+    intro: '星辰坠向敌群，落地后迸出星芒',
+    levels: [
+      { dmg: 2.2, cd: 2.2, count: 2, area: 22, knock: 50, desc: '两颗星辰坠向敌群' },
+      { dmg: 2.6, cd: 2.2, count: 2, area: 24, knock: 50, desc: '伤害与范围提升' },
+      { dmg: 2.6, cd: 2.0, count: 3, area: 24, knock: 55, desc: '星辰+1' },
+      { dmg: 3.2, cd: 1.9, count: 3, area: 26, knock: 60, desc: '伤害提升，冷却缩短' },
+      { dmg: 3.6, cd: 1.7, count: 4, area: 28, knock: 65, desc: '星辰+1' },
+    ],
+    evo: { dmg: 4.6, cd: 1.2, count: 6, area: 34, knock: 80, desc: '九伐中原：六星连坠，星芒四射' },
   },
 } as Record<string, WeaponDef>);
 

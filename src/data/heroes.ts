@@ -4,7 +4,7 @@ import type { HeroId } from '../gfx/art/heroes';
 // 武将：基础属性、专属武器、大招、天赋、获取方式
 
 export type { HeroId };
-export type UltKind = 'dragon' | 'crescent' | 'roar' | 'tornado' | 'whirl';
+export type UltKind = 'dragon' | 'crescent' | 'roar' | 'tornado' | 'whirl' | 'arrowrain' | 'cavalry' | 'arrowstorm' | 'frenzy' | 'starfall';
 
 export interface HeroDef {
   id: HeroId;
@@ -66,6 +66,42 @@ export const HEROES: HeroDef[] = [
     baseAtk: 30, baseHp: 150, atkPerLv: 3, hpPerLv: 12, moveSpeed: 82, pickup: 40,
     weapon: 'halberd', ult: 'whirl', ultName: '天下无双', ultDesc: '5秒内无敌，方天画戟旋风横扫所到之处',
     unlockText: '收集100个碎片解锁（名将宝匣、商店）', unlockShards: 100, color: '#feae34',
+  },
+  // 1.0.3 新增
+  {
+    id: 'huangzhong', name: '黄忠', title: '老将黄汉升', quote: '老夫虽老，尚能开三石之弓！', role: '远程狙击',
+    passive: '老当益壮：暴击率+10%，对敌将伤害+20%',
+    baseAtk: 24, baseHp: 110, atkPerLv: 2.4, hpPerLv: 9, moveSpeed: 74, pickup: 40,
+    weapon: 'bow', ult: 'arrowrain', ultName: '定军斩将', ultDesc: '四轮箭雨覆盖全屏，再一支神箭重创最强的敌人',
+    unlockText: '通关第4章获得', unlockShards: 50, color: '#d9a066',
+  },
+  {
+    id: 'machao', name: '马超', title: '锦马超孟起', quote: '西凉马孟起在此！', role: '突进骑将',
+    passive: '神威天将军：移动速度+10%，移动时伤害+15%',
+    baseAtk: 23, baseHp: 135, atkPerLv: 2.3, hpPerLv: 11, moveSpeed: 84, pickup: 40,
+    weapon: 'lance', ult: 'cavalry', ultName: '西凉铁骑', ultDesc: '召来八路西凉铁骑往返冲阵，踏平全屏敌军',
+    unlockText: '收集80个碎片解锁（名将宝匣、商店）', unlockShards: 80, color: '#e8e8f0',
+  },
+  {
+    id: 'sunshangxiang', name: '孙尚香', title: '弓腰姬孙尚香', quote: '本小姐的箭，可不长眼睛！', role: '灵动射手',
+    passive: '枭姬：技能冷却-8%，拾取范围+30%',
+    baseAtk: 21, baseHp: 105, atkPerLv: 2.1, hpPerLv: 9, moveSpeed: 80, pickup: 40,
+    weapon: 'chakram', ult: 'arrowstorm', ultName: '弓腰姬', ultDesc: '2.5秒内向四面八方连珠齐射，期间无敌',
+    unlockText: '收集50个碎片解锁（宝箱、商店、活跃度）', unlockShards: 50, color: '#f5a3c7',
+  },
+  {
+    id: 'dianwei', name: '典韦', title: '古之恶来典韦', quote: '主公快走，典韦在此！', role: '狂战坦克',
+    passive: '古之恶来：生命上限+20%，生命低于50%时伤害+25%',
+    baseAtk: 22, baseHp: 200, atkPerLv: 2.2, hpPerLv: 17, moveSpeed: 70, pickup: 40,
+    weapon: 'ji', ult: 'frenzy', ultName: '恶来护主', ultDesc: '回复30%生命，6秒内无敌、伤害+60%、技能冷却减半',
+    unlockText: '收集50个碎片解锁（宝箱、商店、活跃度）', unlockShards: 50, color: '#a05b3a',
+  },
+  {
+    id: 'jiangwei', name: '姜维', title: '麒麟儿姜伯约', quote: '丞相之志，维必继之！', role: '智勇双全',
+    passive: '麒麟儿：经验获取+15%，技能范围+10%',
+    baseAtk: 22, baseHp: 120, atkPerLv: 2.2, hpPerLv: 10, moveSpeed: 77, pickup: 40,
+    weapon: 'meteor', ult: 'starfall', ultName: '星落五丈原', ultDesc: '3秒内群星连坠，砸向全屏敌军',
+    unlockText: '通关第6章获得', unlockShards: 50, color: '#8fb8ff',
   },
 ];
 

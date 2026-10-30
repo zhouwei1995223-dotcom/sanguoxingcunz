@@ -366,14 +366,16 @@ export class WorldRenderer {
         g.fillStyle = '#181425';
         this.ellipse(pr.tx, pr.ty, pr.area * (0.4 + 0.6 * k), pr.area * 0.5 * (0.4 + 0.6 * k));
         g.globalAlpha = 1;
-        this.blitScaled(sprite('stone'), pr.tx, pr.ty - (1 - k) * (1 - k) * 140, pr.scale);
+        if (pr.sprite === 'icon_w_meteor') this.blitRot(sprite(pr.sprite), pr.tx + (1 - k) * (1 - k) * 60, pr.ty - (1 - k) * (1 - k) * 140, 0, pr.scale >= 3 ? 2 : 1);
+        else this.blitScaled(sprite('stone'), pr.tx, pr.ty - (1 - k) * (1 - k) * 140, pr.scale);
       } else if (pr.kind === 'boulder') {
         const k = Math.min(1, pr.t / pr.dur);
         g.globalAlpha = 0.2 + 0.3 * k;
         g.fillStyle = '#181425';
         this.ellipse(pr.tx, pr.ty, pr.area * 0.8, pr.area * 0.4);
         g.globalAlpha = 1;
-        this.blitScaled(sprite('stone'), pr.x, pr.y - Math.sin(k * Math.PI) * 60, pr.scale);
+        if (pr.sprite.startsWith('icon_')) this.blitRot(sprite(pr.sprite), pr.x, pr.y - Math.sin(k * Math.PI) * 50, pr.rot);
+        else this.blitScaled(sprite('stone'), pr.x, pr.y - Math.sin(k * Math.PI) * 60, pr.scale);
       }
       else if (pr.kind === 'pot') {
         const k = pr.t / pr.dur;
