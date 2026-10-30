@@ -573,7 +573,7 @@ function bow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   b.hooks.sfx('shoot');
 }
 
-/** 马超 · 虎头湛金枪：朝前进方向长距离突刺 */
+/** 马超 · 虎头湛金枪：朝最近的敌人长距离突刺（多路时成扇形） */
 function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
@@ -581,7 +581,8 @@ function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const p = b.player;
   const len = L.area * b.areaMul;
   const width = 13 * Math.sqrt(b.areaMul) * (w.evo ? 1.3 : 1);
-  const baseA = Math.atan2(p.dirY, p.dirX);
+  const t = b.nearestEnemy(len * 1.3);
+  const baseA = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   const dmg = L.dmg * b.base.atk;
   let hits = 0;
   for (let i = 0; i < L.count; i++) {

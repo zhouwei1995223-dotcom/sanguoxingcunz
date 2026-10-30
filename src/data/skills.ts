@@ -198,9 +198,9 @@ Object.assign(WEAPONS, {
   },
   lance: {
     id: 'lance', name: '虎头湛金枪', icon: 'w_lance', evoName: '神威天将军', evoIcon: 'w_lance_evo', evoPassive: 'horseshoe', hero: 'machao',
-    intro: '朝前进方向长距离突刺，贯穿一线所有敌人',
+    intro: '向最近的敌人长距离突刺，贯穿一线所有敌人',
     levels: [
-      { dmg: 1.9, cd: 1.3, count: 1, area: 80, knock: 80, desc: '朝前进方向长枪突刺' },
+      { dmg: 1.9, cd: 1.3, count: 1, area: 80, knock: 80, desc: '向最近的敌人长枪突刺' },
       { dmg: 2.3, cd: 1.3, count: 1, area: 86, knock: 80, desc: '伤害与距离提升' },
       { dmg: 2.3, cd: 1.2, count: 2, area: 90, knock: 85, desc: '两路突刺' },
       { dmg: 2.9, cd: 1.1, count: 2, area: 96, knock: 90, desc: '伤害提升，冷却缩短' },
