@@ -1,5 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG, GAME_CLUB } from '../data/platformConfig';
+import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG, GAME_CLUB, NO_ADS } from '../data/platformConfig';
 
 // 微信 / 抖音小游戏通用实现。两家 API 绝大部分同名，差异点单独判断。
 
@@ -85,6 +85,8 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     return rewardedAds[unitId];
   };
   const adCfg = kind === 'wx' ? AD_CONFIG.wx : AD_CONFIG.tt;
+  // 启动时就创建激励视频实例，让平台提前加载，第一次点「看视频」不用等
+  if (!NO_ADS) getRewarded(adCfg.rewarded);
   let interstitial: any = null;
   let lastInterstitial = 0;
   if (adCfg.interstitial) {
