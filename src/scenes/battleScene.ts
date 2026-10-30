@@ -19,7 +19,7 @@ import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog } from './battleDialogs';
+import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
@@ -113,6 +113,8 @@ export class BattleScene implements Scene {
     };
     playBgm('bgm_battle');
     this.banners.push({ text: this.label, color: this.chapter.endless ? '#ff8a80' : this.diff.color, t: 0 });
+    // 开局奇遇（新手试炼没有）
+    if (!this.chapter.tutorial) game.openDialog(new QiyuDialog(this));
   }
 
   /** 切到后台时自动暂停 */
@@ -432,9 +434,14 @@ export class BattleScene implements Scene {
     if (boss && this.bossBar) {
       const y = top + 250 * u;
       const w = ui.W * 0.8;
-      ui.text(`${boss.boss!.title} · ${boss.boss!.name}`, ui.W / 2, y - 22 * u, 26, '#ffd0d0');
+      ui.text(`${boss.boss!.title} · ${boss.boss!.name}${boss.enraged ? ' · 狂暴' : ''}`, ui.W / 2, y - 22 * u, 26, boss.enraged ? '#ff8a80' : '#ffd0d0');
       ui.bar(ui.W / 2 - w / 2, y, w, 26 * u, boss.hp / boss.maxHp, '#e43b44', '#3a0d12');
       ui.text(`${Math.max(0, Math.ceil((boss.hp / boss.maxHp) * 100))}%`, ui.W / 2, y + 13 * u, 18, '#fff');
+      if (boss.shield > 0) {
+        // 护盾条 + 倒计时
+        ui.bar(ui.W / 2 - w / 2, y + 32 * u, w, 18 * u, boss.shield / boss.shieldMax, '#2ce8f5', '#0d2a3a');
+        ui.text(`护盾 · ${Math.ceil(boss.shieldT)}秒内打破，否则狂暴`, ui.W / 2, y + 66 * u, 20, '#2ce8f5');
+      }
     }
 
     // 横幅提示

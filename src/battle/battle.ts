@@ -1,7 +1,7 @@
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef } from '../data/chapters';
-import { ENEMIES, BOSSES, BossDef } from '../data/enemies';
+import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
@@ -9,6 +9,7 @@ import {
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
+import { QiyuId, QIYUS } from '../data/qiyu';
 import { STRATS, STRAT_TIMES, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
 import {
   Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
@@ -70,6 +71,30 @@ const CONTACT_DMG = 1.25;
 const SHOT_DMG = 0.8;
 /** 敌将血量 / 伤害倍率（新手试炼除外） */
 const BOSS_HP = 1.4, BOSS_DMG = 1.1;
+/** 敌将护盾：最大血量的 15%，限时 12 秒 */
+const BOSS_SHIELD = 0.15, BOSS_SHIELD_TIME = 12;
+
+/** 点 (x,y) 是否在预警范围内（margin 用来算上角色的身体半径）。和 render.ts 画出来的形状一致 */
+export function inWarning(w: Warning, x: number, y: number, margin = 0): boolean {
+  const dx = x - w.x, dy = y - w.y;
+  if (w.kind === 'circle') {
+    const R = w.r + margin;
+    return dx * dx + (dy / 0.8) * (dy / 0.8) < R * R;
+  }
+  if (w.kind === 'line') {
+    const c = Math.cos(w.a), s = Math.sin(w.a);
+    const along = dx * c + dy * s, side = -dx * s + dy * c;
+    return along > -margin && along < w.len + margin && Math.abs(side) < w.r / 2 + margin;
+  }
+  const fy = dy / 0.85;
+  const d = Math.hypot(dx, fy);
+  if (d > w.len + margin) return false;
+  if (d < margin + 4) return true;
+  let da = Math.atan2(fy, dx) - w.a;
+  while (da > Math.PI) da -= TAU;
+  while (da < -Math.PI) da += TAU;
+  return Math.abs(da) < w.r;
+}
 /** 直取敌将按钮：敌将登场前多少秒内出现 */
 const RUSH_WINDOW = 120;
 export function tension(t: number, chapterId = 2): number {
@@ -119,6 +144,12 @@ export class Battle {
   adReviveUsed = false;
   dead = false;
   won = false;
+  /** 平衡统计：护盾 [打破次数, 狂暴次数]；敌将战总秒数 */
+  statShield = [0, 0];
+  statBossSec = 0;
+  /** 当前这场敌将战打了多久（spawner 用：前 50 秒不刷小怪） */
+  bossFightT = 0;
+  reinforced = false;
   finalBoss: Enemy | null = null;
   midBoss: Enemy | null = null;
   eventIdx = 0;
@@ -132,6 +163,8 @@ export class Battle {
   // 锦囊妙计
   strats: StratId[] = [];
   private stratSet = new Set<StratId>();
+  /** 开局奇遇（整局生效） */
+  qiyu: QiyuId | null = null;
   /** 已触发到第几次锦囊 */
   stratRound = 0;
   /** 待选择的锦囊：品质与第几计 */
@@ -262,7 +295,8 @@ export class Battle {
     const qianli = this.weapon('horse')?.link && hid === 'guanyu';
     this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (qianli ? 0.2 : 0));
     this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1);
-    const hpStrat = (this.stratSet.has('shengou') ? 1.15 : 1) * (this.stratSet.has('kurou') ? 0.8 : 1);
+    const Q = (id: QiyuId) => this.qiyu === id;
+    const hpStrat = (this.stratSet.has('shengou') ? 1.15 : 1) * (this.stratSet.has('kurou') ? 0.8 : 1) * (Q('hanzhong') ? 1.25 : 1) * (Q('pofu') ? 0.75 : 1);
     const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')) * hpStrat);
     if (newMax > this.player.maxHp) this.player.hp += newMax - this.player.maxHp;
     this.player.maxHp = newMax;
@@ -294,6 +328,38 @@ export class Battle {
     this.potionHeal = this.potionBase.heal + (S('yangjing') ? 0.1 : 0);
     this.potionCdMax = Math.round(this.potionBase.cd * (S('yangjing') ? 0.6 : 1));
     this.potionCd = Math.min(this.potionCd, this.potionCdMax);
+    // 开局奇遇
+    if (Q('qinggang')) this.dmgMul += 0.15;
+    if (Q('pofu')) this.dmgMul += 0.3;
+    if (Q('qixingdao')) { this.crit += 0.08; this.critDmg += 0.3; }
+    if (Q('dilu')) { this.speed *= 1.12; this.pickupR *= 1.4; }
+    if (Q('chitu')) this.rageMul *= 1.4;
+    if (Q('huatuo')) { this.potionHeal += 0.1; this.potionCdMax = Math.round(this.potionCdMax * 0.7); this.potionCd = Math.min(this.potionCd, this.potionCdMax); }
+    if (Q('tengjia')) this.dmgTakenMul *= 0.85;
+    if (Q('shuijing')) this.expMul *= 1.25;
+    if (Q('dunjia')) this.cdMul = Math.max(0.3, this.cdMul * 0.9);
+    if (Q('sunzi')) { this.areaMul += 0.15; this.durMul += 0.15; }
+    if (Q('tongque')) this.goldMul += 0.5;
+    if (Q('zhanjiang')) this.eliteDmg += 0.3;
+  }
+
+  /** 开局奇遇：随机 3 个 */
+  rollQiyu(n = 3): QiyuId[] {
+    return shuffle(QIYUS.map((q) => q.id)).slice(0, n);
+  }
+
+  applyQiyu(id: QiyuId) {
+    this.qiyu = id;
+    if (id === 'shenbing' && this.weapons.length < WEAPON_SLOTS) {
+      // 神兵天降：送一件还没有的兵器，直接 2 级
+      const ids = weaponsForHero(this.hero.id, this.cleared).filter((w) => !this.weapon(w));
+      if (ids.length) {
+        const w = pick(ids);
+        this.addWeapon(w);
+        this.weapon(w)!.lv = 2;
+      }
+    }
+    this.recalc();
   }
 
   // —— 锦囊妙计 ——
@@ -491,6 +557,7 @@ export class Battle {
       return;
     }
     this.hitStopCd = Math.max(0, this.hitStopCd - rawDt);
+    if (this.finalBoss || this.midBoss) { this.statBossSec += dt; this.bossFightT += dt; } else this.bossFightT = 0;
     this.contactIframe = Math.max(0, this.contactIframe - dt);
     this.updateRage(dt);
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
@@ -699,6 +766,7 @@ export class Battle {
     e.scale = 2;
     e.state = 'move';
     e.stateT = 2;
+    e.bskills = this.chapter.tutorial ? d.skills.filter((s) => BASIC_BOSS_SKILLS.includes(s)) : d.skills.slice();
     this.enemies.push(e);
     if (isFinal) this.finalBoss = e; else this.midBoss = e;
     this.hooks.bossAppear(d);
@@ -828,12 +896,20 @@ export class Battle {
     if (!opts.force && !e.boss && !this.canHit(e)) return false;
     let dmg = base * this.dmgMul * this.dynMul;
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
-    if (e.boss) dmg *= 1 + this.base.bossDmg / 100;
+    if (e.boss) dmg *= (1 + this.base.bossDmg / 100) * (this.hero.id === 'zhangfei' ? 1.3 : 1);
     if (e.boss || e.elite) dmg *= 1 + this.eliteDmg;
     let crit = false;
     if (!opts.noCrit && Math.random() < this.crit) { dmg *= this.critDmg; crit = true; }
     dmg = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
-    e.hp -= dmg;
+    if (e.shield > 0) {
+      // 护盾先挡伤害，打破时敌将硬直
+      const a = Math.min(e.shield, dmg);
+      e.shield -= a;
+      e.hp -= dmg - a;
+      if (e.shield <= 0) this.breakShield(e);
+    } else e.hp -= dmg;
+    // 敌将战没有小怪攒怒气：打敌将本身也涨怒气（打掉一整条血约 80 点）
+    if (e.boss && !this.ult && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + (dmg / e.maxHp) * 80 * this.rageMul);
     e.hits++;
     e.flash = 0.08;
     if (kx || ky) { e.hx = kx; e.hy = ky; }
@@ -850,6 +926,43 @@ export class Battle {
       return true;
     }
     return false;
+  }
+
+  /** 敌将举盾：限时内打破就硬直，打不破就狂暴（boss.ts 里计时） */
+  raiseShield(e: Enemy) {
+    e.shieldDone = true;
+    e.shieldMax = e.shield = Math.round(e.maxHp * BOSS_SHIELD);
+    e.shieldT = BOSS_SHIELD_TIME;
+    this.hooks.banner(`${e.boss!.name}举盾固守！${BOSS_SHIELD_TIME}秒内打破护盾`, '#2ce8f5');
+    this.hooks.sfx('boss');
+    this.fx.push({ kind: 'ring', x: e.x, y: e.y - 10, t: 0, dur: 0.6, r: 60, color: '#2ce8f5' });
+  }
+
+  private breakShield(e: Enemy) {
+    this.statShield[0]++;
+    e.shield = 0;
+    e.shieldT = 0;
+    e.state = 'rest';
+    e.stateT = 3.5;
+    e.slow = 1;
+    e.slowT = 3.5;
+    this.hooks.banner('护盾击破！敌将硬直', '#fee761');
+    this.hooks.shake(5);
+    this.hooks.sfx('explode');
+    this.fx.push({ kind: 'ring', x: e.x, y: e.y - 10, t: 0, dur: 0.5, r: 70, color: '#ffffff' });
+    this.fx.push({ kind: 'text', x: e.x, y: e.y - 44, t: 0, dur: 1.4, text: '破盾！', color: '#2ce8f5' });
+  }
+
+  enrageBoss(e: Enemy) {
+    this.statShield[1]++;
+    e.shield = 0;
+    e.shieldT = 0;
+    e.enraged = true;
+    e.dmg *= 1.25;
+    e.speed *= 1.25;
+    this.hooks.banner(`${e.boss!.name}狂暴了！`, '#e43b44');
+    this.hooks.sfx('boss');
+    this.fx.push({ kind: 'text', x: e.x, y: e.y - 44, t: 0, dur: 1.4, text: '狂暴！', color: '#e43b44' });
   }
 
   killEnemy(e: Enemy) {
@@ -1476,7 +1589,9 @@ export class Battle {
       const d = Math.hypot(dx, dy) || 1;
       e.slow = 1;
       e.slowT = e.boss ? 1.5 : 4;
-      this.damage(e, this.base.atk * 6, dx / d, dy / d, 220, { force: true });
+      // 敌将：断喝震碎护盾并重创
+      if (e.boss && e.shield > 0) this.breakShield(e);
+      this.damage(e, this.base.atk * (e.boss ? 30 : 6), dx / d, dy / d, 220, { force: true });
     }
     this.shots.length = 0;
     for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.1 + i * 0.05, r: Math.max(this.viewW, this.viewH) * (0.5 + i * 0.15), color: '#ffffff' });
@@ -1548,8 +1663,26 @@ export class Battle {
     for (let i = this.warnings.length - 1; i >= 0; i--) {
       const w = this.warnings[i];
       w.t += dt;
-      if (w.t >= w.dur) this.warnings.splice(i, 1);
+      if (w.t >= w.dur) {
+        this.warnings.splice(i, 1);
+        if (w.dmg) this.fireWarning(w);
+      }
     }
+  }
+
+  /** 预警结束：放出特效，玩家还在范围里就受伤 */
+  private fireWarning(w: Warning) {
+    const p = this.player;
+    if (w.hitFx === 'slash') {
+      this.fx.push({ kind: 'slash', x: w.x, y: w.y - 6, t: 0, dur: 0.3, r: w.len, w: w.r, a: w.a, color: '#e43b44' });
+    } else if (w.hitFx === 'blade') {
+      this.fx.push({ kind: 'blade', x: w.x, y: w.y, t: 0, dur: 0.35, a: w.a, len: w.len, w: w.r });
+    } else {
+      this.fx.push({ kind: 'explo', x: w.x, y: w.y, t: 0, dur: 0.4 });
+      this.fx.push({ kind: 'ring', x: w.x, y: w.y, t: 0, dur: 0.35, r: w.r * 1.1, color: '#feae34' });
+    }
+    if (w.kind === 'circle' && w.r >= 80) { this.hooks.shake(3); this.hooks.sfx('explode'); }
+    if (inWarning(w, p.x, p.y, p.r * 0.6)) this.hurtPlayer(w.dmg!);
   }
 
   // —— 升级选项 ——

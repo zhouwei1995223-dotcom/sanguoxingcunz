@@ -38,6 +38,8 @@ for (let r = 0; r < runs; r++) {
   b.enemyHpMul *= D.hp; b.enemyDmgMul *= D.dmg;
   if (chId === 0) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
   if (process.env.EASY) { b.enemyHpMul = 0.75; b.enemyDmgMul = 0.6; }
+  // 开局奇遇：QIYU=none 不选，QIYU=<id> 指定，默认随机三选一里随便拿一个
+  if (process.env.QIYU !== 'none') b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
   const dt = 1 / 30;
   let ang = 0;
   const log: string[] = [];
@@ -120,7 +122,7 @@ for (let r = 0; r < runs; r++) {
     if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) log.push(`${b.t.toFixed(0)}s fill${b.screenFill.toFixed(2)} dens${Math.round(b.targetDensity)} dir${b.director.toFixed(2)} lv${b.level} hp${Math.round(b.player.hp)}/${b.player.maxHp} kills${b.kills} enemies${b.enemies.filter(e=>!e.dead).length}`);
     if (b.dead && b.revives > 0) { b.revives--; b.revive(); log.push(`${b.t.toFixed(0)}s 复活`); }
   }
-  console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 耗时${Date.now() - t0}ms`);
+  console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 破盾/狂暴=${b.statShield.join("/")} 敌将战=${b.statBossSec.toFixed(0)}s 受伤=${Math.round(b.statDmgTaken)} 耗时${Date.now() - t0}ms`);
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));
 }

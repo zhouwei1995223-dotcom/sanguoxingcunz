@@ -6,6 +6,8 @@ import type { Battle } from './battle';
 // 刷怪：按时间轴维持场上敌人密度 + 触发特殊事件
 
 const MAX_ENEMIES = 460;
+/** 敌将登场后多少秒内不刷小怪 */
+const BOSS_SOLO_SEC = 50;
 
 /** 每轮补怪数量：缺口越大补得越快，保证后期击杀再快屏幕上也是满的 */
 function refill(need: number, density: number) {
@@ -77,15 +79,25 @@ export function updateSpawner(b: Battle, dt: number) {
     breakableT -= dt;
     return;
   }
+  // 敌将在场时专心打敌将：不刷小怪、不触发小事件（跳过），击败后恢复。无尽模式不受影响。
+  // 打了 50 秒还没打下来，援兵按一半密度补上，输出低的阵容也能继续拿经验、攒怒气
+  const bossAlive = !!(b.finalBoss || b.midBoss);
+  const bossFight = bossAlive && b.bossFightT < BOSS_SOLO_SEC;
+  if (bossAlive && !bossFight && !b.reinforced) {
+    b.reinforced = true;
+    b.hooks.banner('敌军援兵赶到！', '#e43b44');
+  }
+  if (!bossAlive) b.reinforced = false;
   while (b.eventIdx < ch.events.length && ch.events[b.eventIdx].t <= t) {
-    runEvent(b, ch.events[b.eventIdx]);
+    const ev = ch.events[b.eventIdx];
+    if (!bossFight || ev.type === 'boss' || ev.type === 'midboss' || ev.type === 'lanterns') runEvent(b, ev);
     b.eventIdx++;
   }
 
-  const seg = ch.waves.find((s) => t >= s.from && t < s.to);
+  const seg = bossFight ? undefined : ch.waves.find((s) => t >= s.from && t < s.to);
   if (seg) {
     let density = lerp(seg.density[0], seg.density[1], Math.min(1, (t - seg.from) / Math.max(1, Math.min(seg.to, ch.duration) - seg.from)));
-    if (b.finalBoss) density *= 0.55;
+    if (bossAlive) density *= 0.5;
     // 后期敌人更多、单个更脆：割草感更强
     density *= (1 + 0.6 * b.crowdRamp()) * b.densityMul;
     b.targetDensity = density;
@@ -109,7 +121,7 @@ export function updateSpawner(b: Battle, dt: number) {
   // 大军压境：成片的弱小敌人从四面涌来
   if (ch.duration >= 600) {
     const at = HORDE_AT;
-    if (hordeIdx < at.length && t >= at[hordeIdx]) {
+    if (hordeIdx < at.length && t >= at[hordeIdx] && !bossFight) {
       const weakest = ch.waves[0].pool[0][0] as string;
       runEvent(b, { t, type: 'horde', enemy: weakest, count: Math.round((110 + hordeIdx * 50) * b.densityMul), text: '敌军大举压境！' });
       hordeIdx++;

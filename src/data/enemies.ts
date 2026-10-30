@@ -45,7 +45,13 @@ export const ENEMIES: Record<string, EnemyDef> = {
   elite_guard: { id: 'elite_guard', name: '魏军精锐', sprite: 'elite_guard', hp: 120, speed: 24, dmg: 14, radius: 8, exp: 8, ai: 'chase', mass: 6 },
 };
 
-export type BossSkill = 'charge' | 'spin' | 'throw' | 'slam' | 'summon' | 'ring';
+/**
+ * 首领技能。charge 冲锋、spin 旋风、throw 扇形飞射、slam 跳劈、summon 召唤、ring 环射；
+ * 1.0.3 新增（都有红色预警，躲开就不掉血）：fan 扇形横扫、rain 箭雨 / 落石、cross 十字刀气、nova 震地。
+ */
+export type BossSkill = 'charge' | 'spin' | 'throw' | 'slam' | 'summon' | 'ring' | 'fan' | 'rain' | 'cross' | 'nova';
+/** 新手试炼的敌将只用这些基础技能 */
+export const BASIC_BOSS_SKILLS: BossSkill[] = ['charge', 'spin', 'throw', 'slam', 'summon', 'ring'];
 
 export interface BossDef {
   id: string;
@@ -59,6 +65,8 @@ export interface BossDef {
   skills: BossSkill[];
   summon?: string;
   proj?: string;
+  /** 血量降到 60% 时举盾：12 秒内打破则敌将硬直，打不破则狂暴（终章敌将才有） */
+  shield?: boolean;
   /** 击败时的台词 */
   /** 败北台词，{name} 替换为玩家武将名 */
   quote: string;
@@ -67,24 +75,24 @@ export interface BossDef {
 }
 
 export const BOSSES: Record<string, BossDef> = {
-  xiahouen: { id: 'xiahouen', name: '夏侯恩', title: '曹操背剑将', sprite: 'xiahouen', hp: 1800, speed: 34, dmg: 14, radius: 13, skills: ['charge', 'spin'], quote: '丞相的宝剑……竟护不住我！', zyQuote: '青釭剑……竟落入你手！' },
-  caochun: { id: 'caochun', name: '曹纯', title: '虎豹骑统领', sprite: 'caochun', hp: 10000, speed: 38, dmg: 18, radius: 13, skills: ['charge', 'summon', 'charge', 'ring'], summon: 'tiger_cavalry', quote: '虎豹骑……竟拦不住一人一骑！' },
-  chenying: { id: 'chenying', name: '陈应', title: '桂阳管军校尉', sprite: 'chenying', hp: 4200, speed: 36, dmg: 18, radius: 13, skills: ['throw', 'charge'], proj: 'fork', quote: '飞叉竟伤不得他分毫……' },
-  baolong: { id: 'baolong', name: '鲍隆', title: '射虎猛士', sprite: 'baolong', hp: 22000, speed: 32, dmg: 24, radius: 14, skills: ['slam', 'summon', 'slam', 'throw'], summon: 'gy_shield', proj: 'stone', quote: '{name}之勇，名不虚传！', zyQuote: '常山赵子龙，名不虚传！' },
-  xuhuang: { id: 'xuhuang', name: '徐晃', title: '魏国大将', sprite: 'xuhuang', hp: 9000, speed: 36, dmg: 26, radius: 14, skills: ['spin', 'charge', 'slam'], quote: '{name}如此骁勇，今日方知！', zyQuote: '子龙一身是胆，今日方知！' },
-  zhanghe: { id: 'zhanghe', name: '张郃', title: '河北名将', sprite: 'zhanghe', hp: 45000, speed: 40, dmg: 30, radius: 14, skills: ['charge', 'ring', 'summon', 'throw'], summon: 'wei_cavalry', proj: 'arrow', quote: '汉水之战，是我输了……' },
-  hanying: { id: 'hanying', name: '韩瑛', title: '韩德长子', sprite: 'hanying', hp: 16000, speed: 38, dmg: 32, radius: 13, skills: ['charge', 'spin'], quote: '父亲，替孩儿报仇……' },
-  hande: { id: 'hande', name: '韩德', title: '西凉大将', sprite: 'hande', hp: 80000, speed: 34, dmg: 40, radius: 15, skills: ['slam', 'summon', 'spin', 'charge'], summon: 'qiang_cavalry', quote: '西凉铁骑……竟挡不住{name}！', zyQuote: '老将军宝刀未老啊……' },
-  suyong: { id: 'suyong', name: '苏颙', title: '曹真先锋', sprite: 'suyong', hp: 28000, speed: 40, dmg: 44, radius: 13, skills: ['charge', 'throw', 'spin'], proj: 'arrow', quote: '{name}竟如此难缠！', zyQuote: '赵云竟然还活着！' },
-  huaxiong: { id: 'huaxiong', name: '华雄', title: '董卓骁将', sprite: 'huaxiong', hp: 60000, speed: 38, dmg: 60, radius: 13, skills: ['charge', 'spin', 'charge'], quote: '温酒未凉，竟败于此……' },
-  dongzhuo: { id: 'dongzhuo', name: '董卓', title: '相国', sprite: 'dongzhuo', hp: 210000, speed: 30, dmg: 75, radius: 15, skills: ['summon', 'slam', 'ring', 'summon'], summon: 'xl_heavy', proj: 'stone', quote: '吾儿奉先何在！' },
-  yanliang: { id: 'yanliang', name: '颜良', title: '河北上将', sprite: 'yanliang', hp: 90000, speed: 40, dmg: 80, radius: 13, skills: ['charge', 'slam', 'spin'], quote: '插标卖首……竟是我自己……' },
-  wenchou: { id: 'wenchou', name: '文丑', title: '河北名将', sprite: 'wenchou', hp: 300000, speed: 40, dmg: 95, radius: 14, skills: ['charge', 'throw', 'summon', 'ring'], summon: 'yuan_cavalry', proj: 'arrow', quote: '颜良兄，我来陪你了……' },
-  caimao: { id: 'caimao', name: '蔡瑁', title: '水军都督', sprite: 'caimao', hp: 140000, speed: 36, dmg: 105, radius: 13, skills: ['throw', 'ring', 'charge'], proj: 'fork', quote: '水寨……完了……' },
-  caocao: { id: 'caocao', name: '曹操', title: '魏王', sprite: 'caocao', hp: 460000, speed: 36, dmg: 120, radius: 15, skills: ['summon', 'ring', 'charge', 'throw', 'slam'], summon: 'tiger_cavalry', proj: 'arrow', quote: '宁教我负天下人……撤！' },
-  zhuran: { id: 'zhuran', name: '朱然', title: '东吴先锋', sprite: 'zhuran', hp: 210000, speed: 40, dmg: 135, radius: 13, skills: ['charge', 'throw', 'spin'], proj: 'arrow', quote: '大都督，末将先走一步……' },
-  luxun: { id: 'luxun', name: '陆逊', title: '东吴大都督', sprite: 'luxun', hp: 700000, speed: 38, dmg: 160, radius: 15, skills: ['ring', 'summon', 'throw', 'ring', 'charge'], summon: 'wu_archer', proj: 'arrow', quote: '火烧连营……竟困不住你！' },
-  guohuai: { id: 'guohuai', name: '郭淮', title: '雍州刺史', sprite: 'guohuai', hp: 320000, speed: 40, dmg: 180, radius: 13, skills: ['charge', 'slam', 'throw'], proj: 'arrow', quote: '蜀军……果然难缠。' },
-  simayi: { id: 'simayi', name: '司马懿', title: '魏国太尉', sprite: 'simayi', hp: 1100000, speed: 38, dmg: 210, radius: 15, skills: ['ring', 'summon', 'slam', 'throw', 'ring', 'charge'], summon: 'elite_guard', proj: 'fork', quote: '死诸葛……竟吓走活仲达？' },
-  caozhen: { id: 'caozhen', name: '曹真', title: '魏国大都督', sprite: 'caozhen', hp: 140000, speed: 36, dmg: 52, radius: 15, skills: ['ring', 'summon', 'charge', 'slam', 'throw'], summon: 'elite_guard', proj: 'arrow', quote: '撤军……速速撤军！' },
+  xiahouen: { id: 'xiahouen', name: '夏侯恩', title: '曹操背剑将', sprite: 'xiahouen', hp: 1800, speed: 34, dmg: 14, radius: 13, skills: ['charge', 'spin', 'fan'], quote: '丞相的宝剑……竟护不住我！', zyQuote: '青釭剑……竟落入你手！' },
+  caochun: { id: 'caochun', name: '曹纯', title: '虎豹骑统领', sprite: 'caochun', hp: 10000, speed: 38, dmg: 18, radius: 13, skills: ['charge', 'summon', 'fan', 'ring', 'rain'], shield: true, summon: 'tiger_cavalry', quote: '虎豹骑……竟拦不住一人一骑！' },
+  chenying: { id: 'chenying', name: '陈应', title: '桂阳管军校尉', sprite: 'chenying', hp: 4200, speed: 36, dmg: 18, radius: 13, skills: ['throw', 'charge', 'fan'], proj: 'fork', quote: '飞叉竟伤不得他分毫……' },
+  baolong: { id: 'baolong', name: '鲍隆', title: '射虎猛士', sprite: 'baolong', hp: 22000, speed: 32, dmg: 24, radius: 14, skills: ['slam', 'summon', 'nova', 'throw', 'rain'], shield: true, summon: 'gy_shield', proj: 'stone', quote: '{name}之勇，名不虚传！', zyQuote: '常山赵子龙，名不虚传！' },
+  xuhuang: { id: 'xuhuang', name: '徐晃', title: '魏国大将', sprite: 'xuhuang', hp: 9000, speed: 36, dmg: 26, radius: 14, skills: ['spin', 'fan', 'charge', 'slam', 'cross'], quote: '{name}如此骁勇，今日方知！', zyQuote: '子龙一身是胆，今日方知！' },
+  zhanghe: { id: 'zhanghe', name: '张郃', title: '河北名将', sprite: 'zhanghe', hp: 45000, speed: 40, dmg: 30, radius: 14, skills: ['charge', 'ring', 'rain', 'summon', 'throw', 'cross'], shield: true, summon: 'wei_cavalry', proj: 'arrow', quote: '汉水之战，是我输了……' },
+  hanying: { id: 'hanying', name: '韩瑛', title: '韩德长子', sprite: 'hanying', hp: 16000, speed: 38, dmg: 32, radius: 13, skills: ['charge', 'spin', 'fan'], quote: '父亲，替孩儿报仇……' },
+  hande: { id: 'hande', name: '韩德', title: '西凉大将', sprite: 'hande', hp: 80000, speed: 34, dmg: 40, radius: 15, skills: ['slam', 'summon', 'nova', 'spin', 'charge', 'fan'], shield: true, summon: 'qiang_cavalry', quote: '西凉铁骑……竟挡不住{name}！', zyQuote: '老将军宝刀未老啊……' },
+  suyong: { id: 'suyong', name: '苏颙', title: '曹真先锋', sprite: 'suyong', hp: 28000, speed: 40, dmg: 44, radius: 13, skills: ['charge', 'throw', 'rain', 'spin'], proj: 'arrow', quote: '{name}竟如此难缠！', zyQuote: '赵云竟然还活着！' },
+  huaxiong: { id: 'huaxiong', name: '华雄', title: '董卓骁将', sprite: 'huaxiong', hp: 60000, speed: 38, dmg: 60, radius: 13, skills: ['charge', 'fan', 'spin', 'charge', 'nova'], quote: '温酒未凉，竟败于此……' },
+  dongzhuo: { id: 'dongzhuo', name: '董卓', title: '相国', sprite: 'dongzhuo', hp: 210000, speed: 30, dmg: 75, radius: 15, skills: ['summon', 'slam', 'ring', 'nova', 'summon', 'rain'], shield: true, summon: 'xl_heavy', proj: 'stone', quote: '吾儿奉先何在！' },
+  yanliang: { id: 'yanliang', name: '颜良', title: '河北上将', sprite: 'yanliang', hp: 90000, speed: 40, dmg: 80, radius: 13, skills: ['charge', 'slam', 'fan', 'spin', 'cross'], quote: '插标卖首……竟是我自己……' },
+  wenchou: { id: 'wenchou', name: '文丑', title: '河北名将', sprite: 'wenchou', hp: 300000, speed: 40, dmg: 95, radius: 14, skills: ['charge', 'throw', 'rain', 'summon', 'ring', 'cross'], shield: true, summon: 'yuan_cavalry', proj: 'arrow', quote: '颜良兄，我来陪你了……' },
+  caimao: { id: 'caimao', name: '蔡瑁', title: '水军都督', sprite: 'caimao', hp: 140000, speed: 36, dmg: 105, radius: 13, skills: ['throw', 'ring', 'rain', 'charge'], proj: 'fork', quote: '水寨……完了……' },
+  caocao: { id: 'caocao', name: '曹操', title: '魏王', sprite: 'caocao', hp: 460000, speed: 36, dmg: 120, radius: 15, skills: ['summon', 'ring', 'cross', 'charge', 'throw', 'rain', 'slam'], shield: true, summon: 'tiger_cavalry', proj: 'arrow', quote: '宁教我负天下人……撤！' },
+  zhuran: { id: 'zhuran', name: '朱然', title: '东吴先锋', sprite: 'zhuran', hp: 210000, speed: 40, dmg: 135, radius: 13, skills: ['charge', 'throw', 'fan', 'spin', 'rain'], proj: 'arrow', quote: '大都督，末将先走一步……' },
+  luxun: { id: 'luxun', name: '陆逊', title: '东吴大都督', sprite: 'luxun', hp: 700000, speed: 38, dmg: 160, radius: 15, skills: ['ring', 'rain', 'summon', 'throw', 'cross', 'ring', 'charge'], shield: true, summon: 'wu_archer', proj: 'arrow', quote: '火烧连营……竟困不住你！' },
+  guohuai: { id: 'guohuai', name: '郭淮', title: '雍州刺史', sprite: 'guohuai', hp: 320000, speed: 40, dmg: 180, radius: 13, skills: ['charge', 'slam', 'cross', 'throw', 'fan'], proj: 'arrow', quote: '蜀军……果然难缠。' },
+  simayi: { id: 'simayi', name: '司马懿', title: '魏国太尉', sprite: 'simayi', hp: 1100000, speed: 38, dmg: 210, radius: 15, skills: ['ring', 'summon', 'cross', 'slam', 'rain', 'throw', 'nova', 'charge'], shield: true, summon: 'elite_guard', proj: 'fork', quote: '死诸葛……竟吓走活仲达？' },
+  caozhen: { id: 'caozhen', name: '曹真', title: '魏国大都督', sprite: 'caozhen', hp: 140000, speed: 36, dmg: 52, radius: 15, skills: ['ring', 'summon', 'cross', 'charge', 'slam', 'rain'], shield: true, summon: 'elite_guard', proj: 'arrow', quote: '撤军……速速撤军！' },
 };

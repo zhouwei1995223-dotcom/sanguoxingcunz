@@ -48,9 +48,9 @@ export const HEROES: HeroDef[] = [
   },
   {
     id: 'zhangfei', name: '张飞', title: '燕人张翼德', quote: '燕人张翼德在此！', role: '坦克控场',
-    passive: '万人敌：受到伤害-15%，受到伤害时积攒怒气',
+    passive: '万人敌：受到伤害-15%，受到伤害时积攒怒气，对敌将伤害+30%',
     baseAtk: 18, baseHp: 190, atkPerLv: 1.8, hpPerLv: 16, moveSpeed: 72, pickup: 40,
-    weapon: 'snake', ult: 'roar', ultName: '据水断桥', ultDesc: '一声断喝，全屏敌人震退并眩晕4秒',
+    weapon: 'snake', ult: 'roar', ultName: '据水断桥', ultDesc: '一声断喝，全屏敌人震退并眩晕4秒；重创敌将并震碎护盾',
     unlockText: '七日签到第7天获得', unlockShards: 50, color: '#e43b44',
   },
   {

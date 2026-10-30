@@ -48,6 +48,15 @@ export interface Enemy {
   skillIdx: number;
   tx: number;
   ty: number;
+  /** 本场用的技能表（新手试炼只用基础技能） */
+  bskills: string[];
+  /** 护盾：剩余量 / 总量 / 剩余时间；shieldDone 表示这场已经开过盾 */
+  shield: number;
+  shieldMax: number;
+  shieldT: number;
+  shieldDone: boolean;
+  /** 护盾没在时限内打破：狂暴 */
+  enraged: boolean;
   /** 出生时间（动态难度：统计敌人存活多久被击杀） */
   born: number;
 }
@@ -174,7 +183,7 @@ export interface Breakable {
 }
 
 export interface Fx {
-  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum' | 'volley';
+  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum' | 'volley' | 'blade';
   x: number;
   y: number;
   t: number;
@@ -200,7 +209,8 @@ export interface Fx {
 
 /** 首领技能预警 */
 export interface Warning {
-  kind: 'circle' | 'line';
+  /** circle：半径 r 的椭圆；line：从 (x,y) 沿角度 a 长 len、宽 r；fan：半径 len、半张角 r 的扇形 */
+  kind: 'circle' | 'line' | 'fan';
   x: number;
   y: number;
   r: number;
@@ -208,6 +218,10 @@ export interface Warning {
   len: number;
   t: number;
   dur: number;
+  /** 预警结束时玩家还在范围内就受到的伤害（不填则只是提示） */
+  dmg?: number;
+  /** 命中时的特效 */
+  hitFx?: 'explo' | 'slash' | 'blade';
 }
 
 export function newEnemy(): Enemy {
@@ -215,7 +229,7 @@ export function newEnemy(): Enemy {
     uid: 0, def: null, boss: null, isMidBoss: false, x: 0, y: 0, r: 6, hp: 1, maxHp: 1, speed: 30, dmg: 5, mass: 1, exp: 1,
     sprite: 'u_wei_spear', scale: 1, elite: false, anim: Math.random() * 4, left: false, flash: 0, kx: 0, ky: 0, slow: 0, slowT: 0,
     atkCd: 0, hits: 0, touching: false, shootT: Math.random() * 2, dead: false, fixedDir: false, vx: 0, vy: 0, life: 0, hx: 0, hy: 0,
-    state: 'move', stateT: 0, skillIdx: 0, tx: 0, ty: 0, born: 0,
+    state: 'move', stateT: 0, skillIdx: 0, tx: 0, ty: 0, bskills: [], shield: 0, shieldMax: 0, shieldT: 0, shieldDone: false, enraged: false, born: 0,
   };
 }
 

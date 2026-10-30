@@ -266,6 +266,14 @@ export class WorldRenderer {
         this.ellipse(w.x, w.y, w.r, w.r * 0.8);
         g.globalAlpha = 0.6;
         this.ellipse(w.x, w.y, w.r * k, w.r * 0.8 * k);
+      } else if (w.kind === 'fan') {
+        g.save();
+        g.translate(Math.round(w.x - this.camX), Math.round(w.y - this.camY));
+        g.scale(1, 0.85);
+        g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, w.len, w.a - w.r, w.a + w.r); g.closePath(); g.fill();
+        g.globalAlpha = 0.6;
+        g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, w.len * k, w.a - w.r, w.a + w.r); g.closePath(); g.fill();
+        g.restore();
       } else {
         g.save();
         g.translate(Math.round(w.x - this.camX), Math.round(w.y - this.camY));
@@ -443,14 +451,22 @@ export class WorldRenderer {
     const sc = e.scale;
     if (!this.crowded || e.boss || e.elite) this.blitScaled(sprite(sc > 1 || e.boss ? 'shadow_l' : e.r > 8 ? 'shadow_m' : 'shadow_s'), e.x, e.y + 1, sc > 1 && !e.boss ? 1 : sc > 1 ? 2 : 1);
     if (e.elite || e.boss) {
-      g.globalAlpha = 0.25 + 0.15 * Math.sin(b.t * 6);
+      g.globalAlpha = (e.enraged ? 0.45 : 0.25) + 0.15 * Math.sin(b.t * (e.enraged ? 14 : 6));
       g.fillStyle = e.boss ? '#e43b44' : '#feae34';
-      this.ellipse(e.x, e.y, e.r * 1.3, e.r * 0.6);
+      this.ellipse(e.x, e.y, e.r * (e.enraged ? 1.7 : 1.3), e.r * (e.enraged ? 0.8 : 0.6));
       g.globalAlpha = 1;
     }
     if (e.slow > 0) g.globalAlpha = 0.85;
     this.blitScaled(s, e.x, e.y, sc);
     g.globalAlpha = 1;
+    if (e.shield > 0) {
+      // 护盾：罩住敌将的青色光圈
+      g.strokeStyle = '#2ce8f5';
+      g.lineWidth = 2;
+      g.globalAlpha = 0.5 + 0.3 * Math.sin(b.t * 8);
+      this.ellipse(e.x, e.y - s.h * sc * 0.45, s.w * sc * 0.65, s.h * sc * 0.6, true);
+      g.globalAlpha = 1;
+    }
     if (e.slow >= 1) {
       // 眩晕：头顶转圈的星星
       const hy = e.y - s.h * sc - 1;
@@ -602,6 +618,22 @@ export class WorldRenderer {
         // 龙鳞纹
         g.fillStyle = '#fee761';
         for (let i = 0; i < f.len!; i += 8) g.fillRect(i, Math.sin(i * 0.4 + f.t * 30) * w * 0.35 - 1, 4, 2);
+        g.restore();
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'blade': {
+        // 敌将的十字刀气：红白长条，迅速变细消失
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.rotate(f.a!);
+        const w = f.w! * (1 - k * 0.7);
+        g.globalAlpha = 0.6 * (1 - k);
+        g.fillStyle = '#e43b44';
+        g.fillRect(0, -w / 2, f.len!, w);
+        g.globalAlpha = 1 - k;
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, -w / 6, f.len!, w / 3);
         g.restore();
         g.globalAlpha = 1;
         break;

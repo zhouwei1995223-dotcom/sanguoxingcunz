@@ -18,6 +18,7 @@ import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier } from '../data/strategies';
+import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
@@ -188,6 +189,62 @@ export class LevelUpDialog implements Dialog {
   t?: number;
 }
 
+/** 开局奇遇：三选一，整局生效 */
+export class QiyuDialog implements Dialog {
+  t?: number;
+  private choices: QiyuId[];
+  private freeRerolls = 1;
+  private firstTime = false;
+  constructor(private scene: BattleScene) {
+    this.choices = scene.battle.rollQiyu();
+    if (!save.tips.qiyu) { this.firstTime = true; save.tips.qiyu = true; markDirty(); }
+  }
+  draw(ui: UI) {
+    const u = ui.u;
+    const t = this.t || 0;
+    const top = ui.H * 0.17;
+    ui.ribbon(ui.W / 2, top, 440 * u, '开局奇遇', '#1d6b4a');
+    ui.text('三选一 · 本局一直生效', ui.W / 2, top + 62 * u, 26, '#9be37a');
+    const cw = ui.W - 70 * u, ch = 200 * u;
+    let y = top + 104 * u;
+    for (let i = 0; i < this.choices.length; i++) {
+      const k = Math.max(0, Math.min(1, (t - i * 0.08) * 4));
+      const x = ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
+      if (this.card(ui, 'qiyu_' + i, this.choices[i], x, y, cw, ch) && t > 0.3) {
+        this.scene.battle.applyQiyu(this.choices[i]);
+        playSfx('evolve');
+        return false;
+      }
+      y += ch + 18 * u;
+    }
+    const bh = 92 * u, bw = 320 * u;
+    y += 10 * u;
+    if (this.freeRerolls > 0 && ui.button('qiyu_reroll', ui.W / 2 - bw / 2, y, bw, bh, `免费刷新(${this.freeRerolls})`, C.btnBlue)) {
+      this.freeRerolls--;
+      this.choices = this.scene.battle.rollQiyu();
+      this.t = 0.15;
+      playSfx('click');
+    }
+    if (this.firstTime) guideHint(ui, '每局开始选一个奇遇，效果持续整局', y + bh + 60 * u);
+  }
+  private card(ui: UI, id: string, qid: QiyuId, x: number, y: number, w: number, h: number): boolean {
+    const u = ui.u;
+    const d = QIYU_BY_ID[qid];
+    const off = ui.isPressed(id) ? 4 * u : 0;
+    ui.pixRect(x, y + off, w, h, '#120d0c');
+    ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, '#4fb06a');
+    ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#1c3326');
+    const isz = h - 60 * u;
+    ui.qualityFrame(x + 20 * u, y + 30 * u + off, isz, '#4fb06a');
+    ui.icon(d.icon, x + 20 * u + isz / 2, y + 30 * u + isz / 2 + off, isz * 0.66);
+    const tx = x + 40 * u + isz;
+    ui.text(d.name, tx, y + 48 * u + off, 34, '#fff4d6', 'left');
+    ui.text(d.story, tx + ui.measure(d.name, 34) + 16 * u, y + 50 * u + off, 20, '#8fbf9a', 'left');
+    ui.wrapText(d.desc, tx, y + 92 * u + off, w - (tx - x) - 24 * u, 28, '#fee761');
+    return ui.clicked(id, x, y, w, h);
+  }
+}
+
 const ROUND_NAMES = ['第一计', '第二计', '第三计'];
 
 /** 锦囊妙计：三选一，本局生效 */
@@ -354,7 +411,7 @@ export class PauseDialog implements Dialog {
   draw(ui: UI) {
     const u = ui.u;
     const b = this.scene.battle;
-    const w = ui.W - 60 * u, h = 1130 * u;
+    const w = ui.W - 60 * u, h = (b.qiyu ? 1176 : 1130) * u;
     const f = dialogFrame(ui, w, h, '暂停', this.t);
     let y = f.y + 70 * u;
     const x = f.x + 40 * u;
@@ -390,6 +447,12 @@ export class PauseDialog implements Dialog {
         sx += ui.measure(d.name, 22) + 24 * u;
       }
     } else ui.text('2:00、5:00、7:30 各获得一条计策', x + 70 * u, y, 20, C.textDim, 'left');
+    if (b.qiyu) {
+      const q = QIYU_BY_ID[b.qiyu];
+      y += 46 * u;
+      ui.text('奇遇', x, y, 26, C.gold, 'left');
+      ui.text(`${q.name}：${q.desc}`, x + 70 * u, y, 22, '#9be37a', 'left');
+    }
     y += 56 * u;
     // 进化表
     if (ui.button('p_evo', ui.W / 2 - 180 * u, y - 30 * u, 360 * u, 64 * u, '查看进化表', C.btnGreen, { size: 24 })) game.openDialog(new EvoTableDialog(b));
