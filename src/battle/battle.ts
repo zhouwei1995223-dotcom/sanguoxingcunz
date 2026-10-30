@@ -142,6 +142,10 @@ export class Battle {
   adRerolls = 0;
   revives = 0;
   adReviveUsed = false;
+  /** 本局看广告复活的次数（最多 AD_REVIVE_MAX 次） */
+  adRevives = 0;
+  /** 锦囊免费刷新：每局 1 次，三计共用 */
+  stratFreeRerolls = 1;
   dead = false;
   won = false;
   /** 平衡统计：护盾 [打破次数, 狂暴次数]；敌将战总秒数 */
@@ -261,7 +265,8 @@ export class Battle {
     this.viewW = viewW;
     this.viewH = viewH;
     this.player = { x: 0, y: 0, r: 8, hp: base.hp, maxHp: base.hp, dirX: 1, dirY: 0, left: false, moving: false, anim: 0, iframe: 0, hurtFlash: 0 };
-    this.rerolls = base.reroll;
+    // 升级刷新：每局送 1 次免费，军略「奇谋」再加
+    this.rerolls = base.reroll + 1;
     this.revives = base.revive;
     this.potionBase = potionStats(base.potion || 0);
     this.hero = HERO_BY_ID[base.hero] || HERO_BY_ID.zhaoyun;

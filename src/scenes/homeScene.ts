@@ -589,7 +589,14 @@ export class HomeScene implements Scene {
       } else ui.text('可能获得：' + qs.map((q) => QUALITY_NAMES[q]).join('/') + '装备、武将碎片', 270 * u, y + 56 * u, 20, '#d9c6a0', 'left');
       const used = save.daily.chestAd[c.id] || 0;
       const bw = 200 * u;
-      if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
+      if (used < (c.freeDaily || 0)) {
+        // 每天第一次不用看广告
+        if (ui.button('chest_free_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', C.btnGreen, { sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
+          save.daily.chestAd[c.id] = used + 1;
+          markDirty();
+          this.openChestNow(c.id);
+        }
+      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
         getPlatform().showRewardedAd('chest_' + c.id).then((ok) => {
           if (!ok) return;
           save.daily.chestAd[c.id] = used + 1;

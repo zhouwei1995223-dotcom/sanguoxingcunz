@@ -22,6 +22,8 @@ import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
+/** 每局最多看广告复活几次 */
+const AD_REVIVE_MAX = 3;
 
 interface CardExtra {
   /** 推荐选择 */
@@ -251,7 +253,6 @@ const ROUND_NAMES = ['第一计', '第二计', '第三计'];
 export class StrategyDialog implements Dialog {
   t?: number;
   private choices: StratId[];
-  private freeRerolls = 1;
   private adRerolled = false;
   private firstTime = false;
   constructor(private scene: BattleScene, private tier: StratTier, private round: number) {
@@ -280,9 +281,9 @@ export class StrategyDialog implements Dialog {
     }
     const bh = 92 * u, bw = 320 * u;
     y += 10 * u;
-    if (this.freeRerolls > 0) {
-      if (ui.button('strat_reroll', ui.W / 2 - bw / 2, y, bw, bh, `免费刷新(${this.freeRerolls})`, C.btnBlue)) {
-        this.freeRerolls--;
+    if (b.stratFreeRerolls > 0) {
+      if (ui.button('strat_reroll', ui.W / 2 - bw / 2, y, bw, bh, '免费刷新', C.btnBlue, { sub: '本局1次' })) {
+        b.stratFreeRerolls--;
         this.reroll();
       }
     } else if (!NO_ADS && adButton(ui, 'strat_reroll_ad', ui.W / 2 - bw / 2, y, bw, bh, '刷新', { disabled: this.adRerolled, sub: this.adRerolled ? '本计已刷新' : '每计可再刷新1次' })) {
@@ -314,8 +315,8 @@ export class StrategyDialog implements Dialog {
     const d = STRAT_BY_ID[sid];
     const pressed = ui.isPressed(id);
     const off = pressed ? 4 * u : 0;
-    // 神机：边框流光
-    const border = d.tier === 2 ? `hsl(${(ui.time * 120) % 360},80%,65%)` : TIER_COLORS[d.tier];
+    // 边框按品质固定颜色（神机原来是流光变色，看着像在闪，改成固定的）
+    const border = TIER_COLORS[d.tier];
     ui.pixRect(x, y + off, w, h, '#120d0c');
     ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
     ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, d.tier === 2 ? '#3a2240' : d.tier === 1 ? '#4a3418' : '#1f2c40');
@@ -533,14 +534,13 @@ export class ReviveDialog implements Dialog {
         }
       }
       y += 116 * u;
-    } else if (!b.adReviveUsed) {
-      if (adButton(ui, 'rv_ad', bx, y, bw, 96 * u, '看视频复活') && !this.busy) {
+    } else if (!NO_ADS && b.adRevives < AD_REVIVE_MAX) {
+      if (adButton(ui, 'rv_ad', bx, y, bw, 96 * u, '看视频复活', { sub: `本局还可复活${AD_REVIVE_MAX - b.adRevives}次` }) && !this.busy) {
         this.busy = true;
         getPlatform().showRewardedAd('revive').then((ok) => {
           this.busy = false;
           if (ok) {
-            b.adReviveUsed = true;
-            save.daily.adStamina += 0;
+            b.adRevives++;
             progressTask('ad', 1);
             this.scene.revive();
             this.closed = true;
