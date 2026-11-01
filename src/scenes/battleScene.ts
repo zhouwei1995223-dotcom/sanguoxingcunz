@@ -6,7 +6,7 @@ import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
-import { endlessHpMul, endlessDmgMul } from '../meta/run';
+import { endlessHpMul, endlessDmgMul, recommendedPower } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName } from '../meta/goals';
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
@@ -14,7 +14,7 @@ import type { WeaponId } from '../data/skills';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
 import { BossDef } from '../data/enemies';
 import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
-import { computeStats } from '../meta/ops';
+import { computeStats, combatPower } from '../meta/ops';
 import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
@@ -81,6 +81,8 @@ export class BattleScene implements Scene {
     if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
     infoHero = this.battle.hero.id;
+    // 敌将血量跟玩家战力挂钩：战力 ÷ 推荐战力
+    if (!this.chapter.endless && !this.chapter.tutorial) this.battle.powerRatio = combatPower(stats) / Math.max(1, recommendedPower(this.chapter, this.diff));
     if (this.weekly) {
       this.battle.mods = this.weekly;
       if (this.weekly.enemyHp) this.battle.enemyHpMul *= this.weekly.enemyHp;
@@ -315,8 +317,8 @@ export class BattleScene implements Scene {
     if (c.kind === 'evo') { playSfx('evolve'); vibrate(true); getPlatform().recorderMark(); }
   }
 
-  revive() {
-    this.battle.revive();
+  revive(adRevive = 0) {
+    this.battle.revive(adRevive);
     this.reviveShown = false;
   }
 
@@ -391,15 +393,12 @@ export class BattleScene implements Scene {
       ui.panel(sx, py, ps, ps, 'dark');
       ui.text(this.userSpeed > 1 ? '×1.5' : '×1', sx + ps / 2, py + ps / 2, this.userSpeed > 1 ? 24 : 30, this.userSpeed > 1 ? C.gold : '#fff');
     }
-    // 直取敌将：敌将登场前 2 分钟内出现（3:00~5:00、8:00~10:00），确认后跳过小兵直接挑战敌将
+    // 直取敌将：没有敌将在场时常驻，确认（看一次广告）后跳过小兵直接挑战敌将
     if (b.canRush() && !b.dead && !b.won) {
-      const rw = 260 * u, rh = 72 * u, rx = ui.W / 2 - rw / 2, ry = top + 136 * u;
-      const pulse = 1 + 0.05 * Math.sin(ui.time * 6);
-      g.save();
-      g.translate(ui.W / 2, ry + rh / 2); g.scale(pulse, pulse); g.translate(-ui.W / 2, -(ry + rh / 2));
-      if (ui.button('rush', rx, ry, rw, rh, '直取敌将 ▶', C.btnRed, { size: 28 })) game.openDialog(new RushConfirmDialog(this));
-      g.restore();
-      this.tip('rush', '点「直取敌将」可跳过小兵，直接挑战敌将');
+      // 常驻按钮不再闪动，免得一直晃眼
+      const rw = 240 * u, rh = 64 * u, rx = ui.W / 2 - rw / 2, ry = top + 136 * u;
+      if (ui.button('rush', rx, ry, rw, rh, '直取敌将 ▶', C.btnRed, { size: 26 })) game.openDialog(new RushConfirmDialog(this));
+      if (b.t > 40) this.tip('rush', '阵容成型了？点「直取敌将」跳过小兵，直接挑战敌将');
     }
 
     // 已获得的锦囊

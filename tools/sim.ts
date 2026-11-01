@@ -38,6 +38,7 @@ for (let r = 0; r < runs; r++) {
   b.enemyHpMul *= D.hp; b.enemyDmgMul *= D.dmg;
   if (chId === 0) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
   if (process.env.EASY) { b.enemyHpMul = 0.75; b.enemyDmgMul = 0.6; }
+  if (chId > 0) b.powerRatio = Number(process.env.POWER) || 1;
   // 开局奇遇：QIYU=none 不选，QIYU=<id> 指定，默认随机三选一里随便拿一个
   if (process.env.QIYU !== 'none') b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
   const dt = 1 / 30;

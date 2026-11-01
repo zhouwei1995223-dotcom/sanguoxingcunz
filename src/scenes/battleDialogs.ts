@@ -4,7 +4,8 @@ import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries } from '../ui/widgets';
 import type { BattleScene } from './battleScene';
 import { choiceInfo } from './battleScene';
-import type { Battle, Choice } from '../battle/battle';
+import { Battle } from '../battle/battle';
+import type { Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, WeaponId } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
@@ -17,7 +18,7 @@ import { HomeScene } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
-import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier } from '../data/strategies';
+import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 
 /** 每局可看广告刷新技能的次数 */
@@ -303,7 +304,7 @@ export class StrategyDialog implements Dialog {
       const names = b.strats.map((id) => STRAT_BY_ID[id].name).join('、');
       ui.text('已有：' + names, ui.W / 2, y + bh + 40 * u, 22, C.textDim);
     }
-    if (this.firstTime) guideHint(ui, '2:00、5:00、7:30 各得一条锦囊，本局一直生效', y + bh + 100 * u);
+    if (this.firstTime) guideHint(ui, `${fmtStratTimes(b.stratTimes)} 各得一条锦囊，本局一直生效`, y + bh + 100 * u);
   }
   private reroll() {
     this.choices = this.scene.battle.rollStrats(this.tier);
@@ -447,7 +448,7 @@ export class PauseDialog implements Dialog {
         ui.text(d.name, sx, y, 22, TIER_COLORS[d.tier], 'left');
         sx += ui.measure(d.name, 22) + 24 * u;
       }
-    } else ui.text('2:00、5:00、7:30 各获得一条计策', x + 70 * u, y, 20, C.textDim, 'left');
+    } else ui.text(`${fmtStratTimes(b.stratTimes)} 各获得一条计策`, x + 70 * u, y, 20, C.textDim, 'left');
     if (b.qiyu) {
       const q = QIYU_BY_ID[b.qiyu];
       y += 46 * u;
@@ -535,14 +536,16 @@ export class ReviveDialog implements Dialog {
       }
       y += 116 * u;
     } else if (!NO_ADS && b.adRevives < AD_REVIVE_MAX) {
-      if (adButton(ui, 'rv_ad', bx, y, bw, 96 * u, '看视频复活', { sub: `本局还可复活${AD_REVIVE_MAX - b.adRevives}次` }) && !this.busy) {
+      const next = b.adRevives + 1;
+      const bonus = Battle.reviveBonusText(next);
+      if (adButton(ui, 'rv_ad', bx, y, bw, 96 * u, '看视频复活', { sub: bonus ? `并获得：${bonus}` : `本局还可复活${AD_REVIVE_MAX - b.adRevives}次` }) && !this.busy) {
         this.busy = true;
         getPlatform().showRewardedAd('revive').then((ok) => {
           this.busy = false;
           if (ok) {
             b.adRevives++;
             progressTask('ad', 1);
-            this.scene.revive();
+            this.scene.revive(b.adRevives);
             this.closed = true;
           }
         });
@@ -560,6 +563,8 @@ export class ReviveDialog implements Dialog {
 /** 直取敌将确认：跳过多久、补多少经验，确认后再跳，防止误触 */
 export class RushConfirmDialog implements Dialog {
   t?: number;
+  private busy = false;
+  private done = false;
   constructor(private scene: BattleScene) {}
   draw(ui: UI) {
     const u = ui.u;
@@ -572,14 +577,22 @@ export class RushConfirmDialog implements Dialog {
     y += 60 * u;
     ui.text(`直接迎战「${b.nextBossName()}」`, ui.W / 2, y, 32, C.gold);
     y += 60 * u;
-    ui.text('跳过的部分补 60% 经验，锦囊照常发放', ui.W / 2, y, 22, C.textDim);
+    ui.text('跳过的部分只补一半经验，锦囊照常发放', ui.W / 2, y, 22, C.textDim);
     y += 80 * u;
     const bw = (w - 140 * u) / 2;
     if (ui.button('rush_no', f.x + 50 * u, y, bw, 96 * u, '再等等', C.btnGray)) return false;
-    if (ui.button('rush_go', f.x + 90 * u + bw, y, bw, 96 * u, '出发！', C.btnRed)) {
-      if (b.rush()) getPlatform().report('rush', { chapter: b.chapter.id, sec: Math.floor(b.t) });
-      return false;
+    const go = () => { if (b.rush()) getPlatform().report('rush', { chapter: b.chapter.id, sec: Math.floor(b.t) }); };
+    if (NO_ADS) {
+      if (ui.button('rush_go', f.x + 90 * u + bw, y, bw, 96 * u, '出发！', C.btnRed)) { go(); return false; }
+    } else if (adButton(ui, 'rush_go', f.x + 90 * u + bw, y, bw, 96 * u, '出发！') && !this.busy) {
+      // 1.0.4：直取敌将要看一次广告
+      this.busy = true;
+      getPlatform().showRewardedAd('rush').then((ok) => {
+        this.busy = false;
+        if (ok) { progressTask('ad', 1); go(); this.done = true; }
+      });
     }
+    if (this.done) return false;
   }
 }
 

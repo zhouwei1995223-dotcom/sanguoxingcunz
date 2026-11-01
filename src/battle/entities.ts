@@ -57,6 +57,9 @@ export interface Enemy {
   shieldDone: boolean;
   /** 护盾没在时限内打破：狂暴 */
   enraged: boolean;
+  /** 1.0.4：敌将保底战斗时长（秒），0 表示不限；血量 30% 以下进入二阶段 */
+  minTime: number;
+  phase2: boolean;
   /** 出生时间（动态难度：统计敌人存活多久被击杀） */
   born: number;
 }
@@ -229,7 +232,7 @@ export function newEnemy(): Enemy {
     uid: 0, def: null, boss: null, isMidBoss: false, x: 0, y: 0, r: 6, hp: 1, maxHp: 1, speed: 30, dmg: 5, mass: 1, exp: 1,
     sprite: 'u_wei_spear', scale: 1, elite: false, anim: Math.random() * 4, left: false, flash: 0, kx: 0, ky: 0, slow: 0, slowT: 0,
     atkCd: 0, hits: 0, touching: false, shootT: Math.random() * 2, dead: false, fixedDir: false, vx: 0, vy: 0, life: 0, hx: 0, hy: 0,
-    state: 'move', stateT: 0, skillIdx: 0, tx: 0, ty: 0, bskills: [], shield: 0, shieldMax: 0, shieldT: 0, shieldDone: false, enraged: false, born: 0,
+    state: 'move', stateT: 0, skillIdx: 0, tx: 0, ty: 0, bskills: [], shield: 0, shieldMax: 0, shieldT: 0, shieldDone: false, enraged: false, minTime: 0, phase2: false, born: 0,
   };
 }
 

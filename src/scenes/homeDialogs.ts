@@ -10,7 +10,7 @@ import {
 } from '../meta/ops';
 import {
   SIGNIN, DAILY_TASKS, ACTIVITY_REWARDS, PATROL, EQUIP_BY_ID, QUALITY_NAMES, QUALITY_COLORS, QUALITY_MAX_LV, STAT_NAMES,
-  PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES,
+  PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES, adStep,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
 import { isCleared, getBest, chapterOpen } from '../meta/run';
@@ -208,8 +208,11 @@ export class PatrolDialog implements Dialog {
     }
     // 快速巡营
     const left = PATROL.quickDailyLimit - save.daily.patrolQuick;
-    const q = patrolReward(PATROL.quickAdMinutes);
-    if (adButton(ui, 'pt_quick', ui.W / 2 - 230 * u, by + 120 * u, 460 * u, 90 * u, `快速巡营 (${Math.max(0, left)}/${PATROL.quickDailyLimit})`, { disabled: left <= 0, size: 26 }) && !this.busy) {
+    // 一次比一次多：2 小时 / 2.4 小时 / 3 小时
+    const used = save.daily.patrolQuick;
+    const q = patrolReward(Math.round(PATROL.quickAdMinutes * adStep(PATROL.quickDailyLimit, used)));
+    const nextQ = left > 1 ? patrolReward(Math.round(PATROL.quickAdMinutes * adStep(PATROL.quickDailyLimit, used + 1))) : null;
+    if (adButton(ui, 'pt_quick', ui.W / 2 - 230 * u, by + 120 * u, 460 * u, 90 * u, `快速巡营 (${Math.max(0, left)}/${PATROL.quickDailyLimit})`, { disabled: left <= 0, size: 26, sub: left > 0 ? `本次金币×${fmtNum(q.gold)}${nextQ ? `，下次×${fmtNum(nextQ.gold)}` : ''}` : undefined }) && !this.busy) {
       this.busy = true;
       getPlatform().showRewardedAd('patrol_quick').then((ok) => {
         this.busy = false;
@@ -241,17 +244,19 @@ export class StaminaDialog implements Dialog {
     ui.text(s > 0 ? `${fmtTime(s)} 后恢复1点（每${STAMINA.regenSeconds / 60}分钟恢复1点）` : '体力已满', ui.W / 2, f.y + 316 * u, 20, C.textDim);
     const left = STAMINA.adDailyLimit - save.daily.adStamina;
     const bw = w - 140 * u;
-    if (adButton(ui, 'stm_ad', ui.W / 2 - bw / 2, f.y + 370 * u, bw, 100 * u, `体力+${STAMINA.adGain}`, { disabled: left <= 0, sub: `今日剩余${Math.max(0, left)}次` }) && !this.busy) {
+    const gain = staminaAdGain(save.daily.adStamina);
+    const next = left > 1 ? staminaAdGain(save.daily.adStamina + 1) : 0;
+    if (adButton(ui, 'stm_ad', ui.W / 2 - bw / 2, f.y + 370 * u, bw, 100 * u, `体力+${gain}`, { disabled: left <= 0, sub: `今日剩余${Math.max(0, left)}次${next ? ` · 下次+${next}` : ''}` }) && !this.busy) {
       this.busy = true;
       getPlatform().showRewardedAd('stamina').then((ok) => {
         this.busy = false;
         if (!ok) return;
         save.daily.adStamina++;
-        save.stamina += STAMINA.adGain;
+        save.stamina += gain;
         progressTask('ad', 1);
         markDirty();
         flushSave(true);
-        ui.toast(`体力+${STAMINA.adGain}`);
+        ui.toast(`体力+${gain}`);
       });
     }
     if (ui.button('stm_buy', ui.W / 2 - bw / 2, f.y + 490 * u, bw, 90 * u, '50 元宝购买10体力', save.yuanbao >= 50 ? C.btnGold : C.btnGray, { size: 26 })) {
@@ -578,14 +583,16 @@ export class ChapterStoryDialog implements Dialog {
       ui.icon(`u_${b.sprite}_0_L`, x + 75 * u, y + 75 * u, 130 * u);
       ui.text(b.name, x + 180 * u, y + 50 * u, 30, '#fff4d6', 'left');
       ui.text(b.title, x + 180 * u, y + 92 * u, 20, C.textDim, 'left');
-      ui.text(i ? '10:00 出现' : '05:00 出现', x + 180 * u, y + 126 * u, 18, '#ff8a80', 'left');
+      const at = ch.events.find((e) => e.type === (i ? 'boss' : 'midboss'))?.t || 0;
+      ui.text(`${fmtTime(at)} 出现`, x + 180 * u, y + 126 * u, 18, '#ff8a80', 'left');
     });
     y += 200 * u;
     const qn = ['普通', '优良', '精良', '史诗', '传说', '神话'];
     const q = Math.min(5, [1, 2, 2, 3, 3, 3, 4, 4, 4, 5][ch.id - 1] + this.d);
-    const extra = this.d === 0 && ch.id === 2 ? ' + 武将关羽' : ch.id >= 3 || this.d > 0 ? ` + 武将碎片×${10 + this.d * 5}` : '';
+    const heroGift: Record<number, string> = { 2: '关羽', 4: '黄忠', 6: '姜维' };
+    const extra = this.d === 0 && heroGift[ch.id] ? ` + 武将${heroGift[ch.id]}` : ch.id >= 3 || this.d > 0 ? ` + 武将碎片×${10 + this.d * 5}` : '';
     ui.text(`首通奖励：元宝×${100 * ch.id * (1 + this.d)} + ${qn[q]}装备${extra}`, ui.W / 2, y, 22, isCleared(this.d, ch.id) ? '#888' : '#9be37a');
-    ui.text('坚守10分钟并击败敌军主将即可通关', ui.W / 2, y + 50 * u, 22, C.textDim);
+    ui.text(`坚守${Math.round(ch.duration / 60)}分钟并击败敌军主将即可通关`, ui.W / 2, y + 50 * u, 22, C.textDim);
   }
 }
 
@@ -657,4 +664,9 @@ function subscribeEnabled(): boolean {
   if (p !== 'wx' && p !== 'tt') return false;
   const c = p === 'tt' ? SUBSCRIBE_CONFIG.tt : SUBSCRIBE_CONFIG.wx;
   return !!(c.stamina || c.patrol);
+}
+
+/** 看广告补体力：一次比一次多（10 / 12 / 15） */
+export function staminaAdGain(used: number): number {
+  return Math.round(STAMINA.adGain * adStep(STAMINA.adDailyLimit, used));
 }

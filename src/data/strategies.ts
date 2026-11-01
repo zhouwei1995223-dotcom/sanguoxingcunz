@@ -54,7 +54,10 @@ export const STRAT_BY_ID = {} as Record<StratId, StratDef>;
 STRATS.forEach((s) => (STRAT_BY_ID[s.id] = s));
 
 /** 每局三次锦囊的时间点（秒） */
-export const STRAT_TIMES = [120, 300, 450];
+/** 锦囊时间点：章节一局 6 分钟是 1:30 / 3:30 / 5:00；无尽 / 每周挑战仍是 2:00 / 5:00 / 7:30 */
+export const STRAT_TIMES = [90, 210, 300];
+export const STRAT_TIMES_ENDLESS = [120, 300, 450];
+export const fmtStratTimes = (ts: number[]) => ts.map((s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`).join('、');
 
 /** 每到一个锦囊时间点，之后出现的敌人（含敌将）血量 +15%（三次后 +45%），抵消计策带来的战力 */
 export const STRAT_HP_STEP = 0.15;

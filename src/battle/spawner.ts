@@ -15,7 +15,8 @@ function refill(need: number, density: number) {
 }
 let breakableT = 20;
 let hordeIdx = 0;
-const HORDE_AT = [270, 510];
+/** 大军压境的时间点（章节一局 6 分钟：2:42、5:06，相当于原来 10 分钟里的 4:30、8:30） */
+const HORDE_AT = [162, 306];
 
 /** 直取敌将时跳过的「大军压境」不再补发 */
 export function skipHordesBefore(t: number) {
@@ -119,7 +120,7 @@ export function updateSpawner(b: Battle, dt: number) {
   }
 
   // 大军压境：成片的弱小敌人从四面涌来
-  if (ch.duration >= 600) {
+  if (!ch.tutorial) {
     const at = HORDE_AT;
     if (hordeIdx < at.length && t >= at[hordeIdx] && !bossFight) {
       const weakest = ch.waves[0].pool[0][0] as string;

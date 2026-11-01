@@ -313,6 +313,19 @@ export const ACTIVITY_REWARDS: { points: number; reward: Reward }[] = [
 ];
 
 // —— 商店日常 ——
+/**
+ * 1.0.4：看广告领奖一次比一次多（按当天第几次取倍率，每天 0 点重置）。
+ * 一天总量比原来多 20~30%：2 次 ×2.4、3 次 ×3.7、5 次 ×6.3（原来分别是 2、3、5）。
+ */
+// 第 1 次不低于原来的数量，后面逐次加
+const AD_STEPS: Record<number, number[]> = { 2: [1, 1.4], 3: [1, 1.2, 1.5], 5: [1, 1.05, 1.2, 1.4, 1.65] };
+export function adStep(limit: number, used: number): number {
+  const s = AD_STEPS[limit];
+  return s ? s[Math.max(0, Math.min(used, s.length - 1))] : 1;
+}
+/** 军资箱看广告开箱额外送的元宝（当天第 1、2 次看广告开） */
+export const CHEST_AD_BONUS = [10, 25];
+
 export const SHOP_DAILY = {
   adShards: { amount: 4, limit: 2 },
   adYuanbao: { amount: 40, limit: 5 },

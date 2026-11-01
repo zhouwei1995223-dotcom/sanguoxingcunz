@@ -12,7 +12,7 @@ import {
 } from '../meta/ops';
 import {
   HERO, heroLevelCost, potionStats, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
-  CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS,
+  CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
 import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower } from '../meta/run';
@@ -22,7 +22,7 @@ import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, ChapterStoryDialog, ChapterListDialog, TextDialog,
+  SidebarDialog, ChapterStoryDialog, ChapterListDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
@@ -596,11 +596,14 @@ export class HomeScene implements Scene {
           markDirty();
           this.openChestNow(c.id);
         }
-      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
+      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}${c.freeDaily && used < c.adDaily ? ` 送${CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)]}元宝` : ''}`, size: 28 })) {
         getPlatform().showRewardedAd('chest_' + c.id).then((ok) => {
           if (!ok) return;
           save.daily.chestAd[c.id] = used + 1;
           progressTask('ad', 1);
+          // 1.0.4：军资箱看广告开箱额外送元宝，一次比一次多
+          const bonus = c.freeDaily ? CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)] || 0 : 0;
+          if (bonus) { save.yuanbao += bonus; ui.toast(`额外获得元宝×${bonus}`); }
           this.openChestNow(c.id);
         });
       }
@@ -613,12 +616,20 @@ export class HomeScene implements Scene {
     // 每日补给
     ui.ribbon(ui.W / 2, y + 30 * u, 360 * u, '每日补给');
     y += 80 * u;
+    // 1.0.4：看广告领的补给一次比一次多，卡片上显示「本次 / 下次」
+    const ybAmt = (k: number) => Math.round(SHOP_DAILY.adYuanbao.amount * adStep(SHOP_DAILY.adYuanbao.limit, k));
+    const goldAmt = (k: number) => Math.floor(SHOP_DAILY.adGold.minutes * adStep(SHOP_DAILY.adGold.limit, k) * (3 + save.maxCleared * 3));
+    const shardAmt = (k: number) => Math.round(SHOP_DAILY.adShards.amount * adStep(SHOP_DAILY.adShards.limit, k));
+    const dy = save.daily;
+    const nextTxt = (left: number, v: string) => (left > 1 ? `（下次×${v}）` : '');
+    const ybLeft = SHOP_DAILY.adYuanbao.limit - dy.adYuanbao, goldLeft = SHOP_DAILY.adGold.limit - dy.adGold;
+    const shardLeft = SHOP_DAILY.adShards.limit - dy.adShards, stmLeft = STAMINA.adDailyLimit - dy.adStamina;
     const cards: { id: string; icon: string; name: string; desc: string; left: number; limit: number; free?: boolean; on: () => void }[] = [
-      { id: 'gift', icon: 'gold', name: '每日礼包', desc: `金币×${SHOP_DAILY.freeGift.gold}`, left: save.daily.freeGift ? 0 : 1, limit: 1, free: true, on: () => { save.daily.freeGift = true; save.gold += SHOP_DAILY.freeGift.gold; ui.toast(`获得金币×${SHOP_DAILY.freeGift.gold}`); playSfx('coin'); } },
-      { id: 'yb', icon: 'yuanbao', name: '元宝', desc: `元宝×${SHOP_DAILY.adYuanbao.amount}`, left: SHOP_DAILY.adYuanbao.limit - save.daily.adYuanbao, limit: SHOP_DAILY.adYuanbao.limit, on: () => { save.daily.adYuanbao++; save.yuanbao += SHOP_DAILY.adYuanbao.amount; ui.toast(`获得元宝×${SHOP_DAILY.adYuanbao.amount}`); playSfx('coin'); } },
-      { id: 'gold', icon: 'chest', name: '军饷', desc: '2小时巡营金币', left: SHOP_DAILY.adGold.limit - save.daily.adGold, limit: SHOP_DAILY.adGold.limit, on: () => { save.daily.adGold++; const g = Math.floor(SHOP_DAILY.adGold.minutes * (3 + save.maxCleared * 3)); save.gold += g; ui.toast(`获得金币×${g}`); playSfx('coin'); } },
-      { id: 'shards', icon: 'shard', name: '武将碎片', desc: `随机武将碎片×${SHOP_DAILY.adShards.amount}`, left: SHOP_DAILY.adShards.limit - save.daily.adShards, limit: SHOP_DAILY.adShards.limit, on: () => { save.daily.adShards++; const h = randomShardHero(true); grantShards(h, SHOP_DAILY.adShards.amount); ui.toast(`获得${HERO_BY_ID[h].name}碎片×${SHOP_DAILY.adShards.amount}`); playSfx('chest'); } },
-      { id: 'stamina', icon: 'stamina', name: '体力', desc: `体力×${STAMINA.adGain}`, left: STAMINA.adDailyLimit - save.daily.adStamina, limit: STAMINA.adDailyLimit, on: () => { save.daily.adStamina++; save.stamina += STAMINA.adGain; ui.toast(`体力+${STAMINA.adGain}`); playSfx('coin'); } },
+      { id: 'gift', icon: 'gold', name: '每日礼包', desc: `金币×${SHOP_DAILY.freeGift.gold}`, left: dy.freeGift ? 0 : 1, limit: 1, free: true, on: () => { dy.freeGift = true; save.gold += SHOP_DAILY.freeGift.gold; ui.toast(`获得金币×${SHOP_DAILY.freeGift.gold}`); playSfx('coin'); } },
+      { id: 'yb', icon: 'yuanbao', name: '元宝', desc: `元宝×${ybAmt(dy.adYuanbao)}${nextTxt(ybLeft, String(ybAmt(dy.adYuanbao + 1)))}`, left: ybLeft, limit: SHOP_DAILY.adYuanbao.limit, on: () => { const n = ybAmt(dy.adYuanbao); dy.adYuanbao++; save.yuanbao += n; ui.toast(`获得元宝×${n}`); playSfx('coin'); } },
+      { id: 'gold', icon: 'chest', name: '军饷', desc: `金币×${fmtNum(goldAmt(dy.adGold))}${nextTxt(goldLeft, fmtNum(goldAmt(dy.adGold + 1)))}`, left: goldLeft, limit: SHOP_DAILY.adGold.limit, on: () => { const g = goldAmt(dy.adGold); dy.adGold++; save.gold += g; ui.toast(`获得金币×${g}`); playSfx('coin'); } },
+      { id: 'shards', icon: 'shard', name: '武将碎片', desc: `随机碎片×${shardAmt(dy.adShards)}${nextTxt(shardLeft, String(shardAmt(dy.adShards + 1)))}`, left: shardLeft, limit: SHOP_DAILY.adShards.limit, on: () => { const n = shardAmt(dy.adShards); dy.adShards++; const h = randomShardHero(true); grantShards(h, n); ui.toast(`获得${HERO_BY_ID[h].name}碎片×${n}`); playSfx('chest'); } },
+      { id: 'stamina', icon: 'stamina', name: '体力', desc: `体力×${staminaAdGain(dy.adStamina)}${nextTxt(stmLeft, String(staminaAdGain(dy.adStamina + 1)))}`, left: stmLeft, limit: STAMINA.adDailyLimit, on: () => { const n = staminaAdGain(dy.adStamina); dy.adStamina++; save.stamina += n; ui.toast(`体力+${n}`); playSfx('coin'); } },
       { id: 'iron', icon: 'iron', name: '玄铁兑换', desc: '50元宝换10玄铁', left: 99, limit: 99, free: true, on: () => { if (save.yuanbao < 50) { ui.toast('元宝不足'); return; } save.yuanbao -= 50; save.iron += 10; ui.toast('获得玄铁×10'); playSfx('coin'); } },
     ];
     const cw = (ui.W - 72 * u) / 2, chh = 300 * u;

@@ -1,6 +1,6 @@
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
-import { ChapterDef } from '../data/chapters';
+import { ChapterDef, CHAPTER_TIME_SCALE } from '../data/chapters';
 import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
@@ -10,7 +10,7 @@ import {
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
 import { QiyuId, QIYUS } from '../data/qiyu';
-import { STRATS, STRAT_TIMES, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
+import { STRATS, STRAT_TIMES, STRAT_TIMES_ENDLESS, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
 import {
   Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
 } from './entities';
@@ -63,6 +63,7 @@ const noopHooks: BattleHooks = { sfx() {}, shake() {}, banner() {}, vibrate() {}
  * 章节难度节奏（敌人血量倍率）：爽是一个过程——先轻松上手，再逐步加压，
  * 5:00 首领 + 宝箱进化后迎来一波疯狂割草，然后再加压直到最终决战。
  *   0:00~1:00 热身   1:30~5:00 加压   5:00 首领出场后回落，进化后爽割到 7:00   7:00~9:00 再加压
+ * 表里是「章节时间」（按 10 分钟写）；章节一局 6 分钟，实际时间 = 表里时间 × 0.6（见 ct）。
  */
 const TENSION: [number, number][] = [[0, 0.8], [60, 0.9], [90, 1.45], [270, 2.4], [300, 2.4], [345, 1.3], [420, 1.3], [540, 1.55], [9999, 1.55]];
 /** 接触伤害倍率：小怪出手变慢（贴身蓄力 + 玩家受击后短暂无敌）后，单次伤害相应提高 */
@@ -73,6 +74,13 @@ const SHOT_DMG = 0.8;
 const BOSS_HP = 1.4, BOSS_DMG = 1.1;
 /** 敌将护盾：最大血量的 15%，限时 12 秒 */
 const BOSS_SHIELD = 0.15, BOSS_SHIELD_TIME = 12;
+/**
+ * 1.0.4：敌将不能被秒杀。
+ * - 血量跟玩家战力部分挂钩：战力超出推荐值时 ×(战力比^0.6)，超出 1 倍约 ×1.5（第 1 章不加）
+ * - 保底战斗时长：血量掉得比「按时间匀速」快时，受到的伤害只剩 1/4（中途 / 最终敌将，第 1 章短一些）
+ */
+const BOSS_POWER_EXP = 0.6;
+const BOSS_MIN_TIME = { mid: 20, final: 35, ch1Mid: 10, ch1Final: 18 };
 
 /** 点 (x,y) 是否在预警范围内（margin 用来算上角色的身体半径）。和 render.ts 画出来的形状一致 */
 export function inWarning(w: Warning, x: number, y: number, margin = 0): boolean {
@@ -95,8 +103,6 @@ export function inWarning(w: Warning, x: number, y: number, margin = 0): boolean
   while (da < -Math.PI) da += TAU;
   return Math.abs(da) < w.r;
 }
-/** 直取敌将按钮：敌将登场前多少秒内出现 */
-const RUSH_WINDOW = 120;
 export function tension(t: number, chapterId = 2): number {
   let v = TENSION[TENSION.length - 1][1];
   for (let i = 1; i < TENSION.length; i++) {
@@ -151,6 +157,8 @@ export class Battle {
   /** 平衡统计：护盾 [打破次数, 狂暴次数]；敌将战总秒数 */
   statShield = [0, 0];
   statBossSec = 0;
+  /** 玩家战力 ÷ 推荐战力（场景里算好传进来，敌将血量用） */
+  powerRatio = 1;
   /** 当前这场敌将战打了多久（spawner 用：前 50 秒不刷小怪） */
   bossFightT = 0;
   reinforced = false;
@@ -171,6 +179,9 @@ export class Battle {
   qiyu: QiyuId | null = null;
   /** 典韦大招期间 */
   frenzy = false;
+  /** 1.0.4：看广告复活第 2 / 3 次给的本局加成 */
+  reviveDmg = 0;
+  reviveSpd = 0;
   /** 已触发到第几次锦囊 */
   stratRound = 0;
   /** 待选择的锦囊：品质与第几计 */
@@ -302,8 +313,9 @@ export class Battle {
     if (hid === 'huangzhong') this.critBonus = 0.1;
     if (hid === 'sunshangxiang') this.cdMul *= 0.92;
     if (this.frenzy) { this.dmgMul += 0.6; this.cdMul *= 0.5; }
+    this.dmgMul += this.reviveDmg;
     const qianli = this.weapon('horse')?.link && hid === 'guanyu';
-    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (hid === 'machao' ? 0.1 : 0) + (qianli ? 0.2 : 0));
+    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (hid === 'machao' ? 0.1 : 0) + (qianli ? 0.2 : 0) + this.reviveSpd);
     this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1);
     const Q = (id: QiyuId) => this.qiyu === id;
     const hpStrat = (this.stratSet.has('shengou') ? 1.15 : 1) * (this.stratSet.has('kurou') ? 0.8 : 1) * (Q('hanzhong') ? 1.25 : 1) * (Q('pofu') ? 0.75 : 1);
@@ -412,7 +424,8 @@ export class Battle {
 
   private updateStrats(dt: number) {
     // 到点发放锦囊
-    if (this.stratRound < STRAT_TIMES.length && this.t >= STRAT_TIMES[this.stratRound] && this.t < this.chapter.duration) {
+    const st = this.stratTimes;
+    if (this.stratRound < st.length && this.t >= st[this.stratRound] && this.t < this.chapter.duration) {
       const w = STRAT_TIER_WEIGHTS[this.stratRound];
       this.pendingStrats.push({ tier: weighted([0, 1, 2] as StratTier[], (k) => w[k]), round: this.stratRound });
       this.stratRound++;
@@ -663,12 +676,12 @@ export class Battle {
     for (let i = this.eventIdx; i < evs.length; i++) if (evs[i].type === 'boss' || evs[i].type === 'midboss') return evs[i];
     return null;
   }
-  /** 可以「直取敌将」：普通章节、场上没有敌将、离下一个敌将登场还有 2 分钟以内（3:00~5:00、8:00~10:00） */
+  /** 可以「直取敌将」：普通章节、场上没有敌将、后面还有敌将（1.0.4 起常驻，点了要看一次广告） */
   canRush(): boolean {
     const ch = this.chapter;
     if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.dead || this.won) return false;
     const ev = this.nextBossEvent();
-    return !!ev && ev.t - this.t <= RUSH_WINDOW && ev.t - this.t > 3;
+    return !!ev && ev.t - this.t > 3;
   }
   /** 下一个敌将的名字 */
   nextBossName(): string {
@@ -688,8 +701,8 @@ export class Battle {
     if (to <= this.t) return false;
     while (this.eventIdx < this.chapter.events.length && this.chapter.events[this.eventIdx].t < to && this.chapter.events[this.eventIdx] !== ev) this.eventIdx++;
     skipHordesBefore(to);
-    // 跳过的时间按最近的经验速度补 60%，到了敌将面前不至于等级太低
-    const bonus = this.expRate * (to - this.t) * 0.6;
+    // 跳过的时间按最近的经验速度补一半：适合已经成型、不想再刷小兵的玩家
+    const bonus = this.expRate * (to - this.t) * 0.5;
     this.t = to;
     if (bonus > 0) this.gainExp(bonus);
     this.dominantT = 0;
@@ -724,19 +737,30 @@ export class Battle {
 
   /** 后期人海程度：4 分钟起逐步提高，10 分钟达到最大 */
   crowdRamp(): number {
-    return clamp((this.t - 240) / 360, 0, 1);
+    return clamp((this.ct - 240) / 360, 0, 1);
+  }
+
+  /** 本模式的锦囊时间点 */
+  get stratTimes(): number[] {
+    return this.chapter.endless ? STRAT_TIMES_ENDLESS : STRAT_TIMES;
+  }
+
+  /** 章节时间：章节一局压到 6 分钟后，成长曲线仍按 10 分钟设计，用实际秒数 ÷ 0.6 换算；无尽 / 新手试炼就是实际秒数 */
+  get ct(): number {
+    const ch = this.chapter;
+    return ch.endless || ch.tutorial ? this.t : this.t / CHAPTER_TIME_SCALE;
   }
 
   spawnEnemy(id: string, x: number, y: number, opts: { elite?: boolean; hpMul?: number } = {}): Enemy {
     const d = ENEMIES[id];
     const e = newEnemy();
     const ch = this.chapter;
-    const minute = this.t / 60;
+    const minute = this.ct / 60;
     // 无尽模式：二次曲线成长，后期压力越来越大
     const late = Math.max(0, minute - 4);
     const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
-    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial ? 1 : tension(this.t, ch.id));
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial ? 1 : tension(this.ct, ch.id));
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -767,8 +791,13 @@ export class Battle {
     e.x = x;
     e.y = y;
     e.r = d.radius;
-    const strong = this.chapter.tutorial ? 1 : BOSS_HP;
-    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong);
+    const ch = this.chapter;
+    const strong = ch.tutorial ? 1 : BOSS_HP;
+    const normal = !ch.tutorial && !ch.endless;
+    const over = normal && ch.id > 1 ? Math.pow(Math.max(1, this.powerRatio), BOSS_POWER_EXP) : 1;
+    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong * over);
+    e.born = this.t;
+    if (normal) e.minTime = ch.id === 1 ? (isFinal ? BOSS_MIN_TIME.ch1Final : BOSS_MIN_TIME.ch1Mid) : isFinal ? BOSS_MIN_TIME.final : BOSS_MIN_TIME.mid;
     e.speed = d.speed;
     e.dmg = d.dmg * this.enemyDmgMul * (this.chapter.tutorial ? 1 : BOSS_DMG);
     e.mass = 50;
@@ -914,6 +943,8 @@ export class Battle {
     let crit = false;
     if (!opts.noCrit && Math.random() < this.crit) { dmg *= this.critDmg; crit = true; }
     dmg = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
+    // 敌将保底战斗时长：血量比「按时间匀速掉」还低时，伤害只剩 1/4
+    if (e.minTime > 0 && (e.hp - dmg) / e.maxHp < 1 - (this.t - e.born) / e.minTime) dmg = Math.max(1, Math.round(dmg * 0.25));
     if (e.shield > 0) {
       // 护盾先挡伤害，打破时敌将硬直
       const a = Math.min(e.shield, dmg);
@@ -1978,19 +2009,31 @@ export class Battle {
   }
 
   /** 复活：回满血并震开周围敌人 */
-  revive() {
+  /** 第 n 次看广告复活的本局加成：第 2 次伤害 +20%、移速 +10%；第 3 次伤害再 +30%、3 秒无敌、震开更大范围 */
+  static reviveBonusText(n: number): string {
+    return n === 2 ? '本局伤害+20%、移速+10%' : n === 3 ? '本局伤害再+30%、3秒无敌' : '';
+  }
+
+  revive(adRevive = 0) {
     const p = this.player;
     this.dead = false;
+    if (adRevive === 2) { this.reviveDmg += 0.2; this.reviveSpd += 0.1; }
+    if (adRevive === 3) this.reviveDmg += 0.3;
+    if (adRevive >= 2) {
+      this.recalc();
+      this.hooks.banner(Battle.reviveBonusText(adRevive), '#fee761');
+    }
     p.hp = p.maxHp;
     if (this.stratSet.has('qixing')) this.qixingBuff = true;
-    p.iframe = 2.5;
+    p.iframe = adRevive === 3 ? 3 : 2.5;
+    const R = adRevive === 3 ? 180 : 120;
     this.hooks.sfx('evolve');
-    this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: 120, color: '#fee761' });
+    this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: R, color: '#fee761' });
     for (const e of this.enemies) {
       if (e.dead) continue;
       const dx = e.x - p.x, dy = e.y - p.y;
       const d = Math.hypot(dx, dy) || 1;
-      if (d < 120) {
+      if (d < R) {
         if (!e.boss && !e.elite) this.killEnemy(e);
         else { e.kx += (dx / d) * 300; e.ky += (dy / d) * 300; }
       }

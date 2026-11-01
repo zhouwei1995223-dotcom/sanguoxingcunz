@@ -219,6 +219,21 @@ CHAPTERS.push(
   },
 );
 
+/**
+ * 1.0.4：章节一局从 10 分钟压到 6 分钟。上面的波次 / 事件仍按 10 分钟写，这里整体乘 0.6；
+ * 敌人成长、TENSION 起伏等按「章节时间」（实际秒数 ÷ 0.6）换算，见 battle.ts 的 ct。
+ */
+export const CHAPTER_TIME_SCALE = 0.6;
+for (const ch of CHAPTERS) {
+  const S = CHAPTER_TIME_SCALE;
+  ch.duration = Math.round(ch.duration * S);
+  for (const e of ch.events) e.t = Math.round(e.t * S);
+  for (const w of ch.waves) {
+    w.from = Math.round(w.from * S);
+    if (w.to < 9000) w.to = Math.round(w.to * S);
+  }
+}
+
 /** 无尽模式：刷怪与事件由 spawner 动态生成 */
 /**
  * 新手试炼：第一次进游戏时打的短关卡（不消耗体力，不算通关第一章）。

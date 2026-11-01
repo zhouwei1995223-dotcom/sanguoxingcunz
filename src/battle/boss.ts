@@ -12,7 +12,13 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
   const p = b.player;
   e.stateT -= dt;
   // 护盾：血量降到 60% 时举盾，计时结束还没打破就狂暴
-  if (boss.shield && !e.shieldDone && e.hp < e.maxHp * 0.6) b.raiseShield(e);
+  if (boss.shield && !e.shieldDone && e.hp < e.maxHp * 0.7) b.raiseShield(e);
+  // 二阶段：血量 30% 以下出招更快，范围技能放完有一半几率紧接着再放一个
+  if (!e.phase2 && e.minTime > 0 && e.hp < e.maxHp * 0.3) {
+    e.phase2 = true;
+    b.hooks.banner(`${boss.name}怒火中烧！`, '#ff8a80');
+    b.fx.push({ kind: 'ring', x: e.x, y: e.y - 10, t: 0, dur: 0.6, r: 64, color: '#e43b44' });
+  }
   if (e.shield > 0) {
     e.shieldT -= dt;
     if (e.shieldT <= 0) b.enrageBoss(e);
@@ -42,7 +48,9 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
       act(b, e, skill, dt, dx, dy, d);
       if (e.stateT <= 0) {
         e.state = 'rest';
-        e.stateT = e.enraged ? 0.35 : 0.7;
+        e.stateT = e.enraged ? 0.35 : e.phase2 ? 0.45 : 0.7;
+        // 二阶段连招：范围技能后有一半几率直接接下一个技能
+        if (e.phase2 && AREA_SKILLS.includes(skill) && Math.random() < 0.5) { e.state = 'move'; e.stateT = 0; }
         e.skillIdx++;
         if (skill === 'slam') {
           b.hooks.shake(4);
@@ -55,7 +63,7 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
     case 'rest':
       e.x += dx * spd * 0.4 * dt;
       e.y += dy * spd * 0.4 * dt;
-      if (e.stateT <= 0) { e.state = 'move'; e.stateT = e.enraged ? rand(1.2, 1.8) : rand(2.2, 3.4); }
+      if (e.stateT <= 0) { e.state = 'move'; e.stateT = e.enraged ? rand(1.2, 1.8) : e.phase2 ? rand(1.4, 2.2) : rand(2.2, 3.4); }
       break;
   }
   // 首领低于一半血量后加快节奏
