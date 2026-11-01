@@ -66,7 +66,21 @@ export interface RunResult {
   /** 无尽模式 */
   endless?: boolean;
   best?: number;
+  /** 三星评价：本局拿到的星（位）、第一次集齐三星的元宝奖励 */
+  stars?: number;
+  starBonus?: number;
 }
+
+/** 三星评价：通关 / 不复活 / 最终敌将 60 秒内击败 */
+export const STAR_BOSS_SEC = 60;
+export const STAR_LABELS = ['通关', '不复活', `${STAR_BOSS_SEC}秒内击败最终敌将`];
+export function runStars(win: boolean, revives: number, finalBossSec: number): number {
+  if (!win) return 0;
+  return 1 | (revives === 0 ? 2 : 0) | (finalBossSec >= 0 && finalBossSec <= STAR_BOSS_SEC ? 4 : 0);
+}
+export const starCount = (bits: number) => (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1);
+/** 某难度某章拿到过的星 */
+export const chapterStars = (d: number, chId: number) => save.stars[ck(d, chId)] || 0;
 
 /** 新手试炼的结算：固定奖励 + 必得兵器（装备引导用），不记通关、不记最佳 */
 export function settleTutorial(win: boolean, coins: number, kills: number): RunResult {
@@ -81,7 +95,7 @@ export function settleTutorial(win: boolean, coins: number, kills: number): RunR
   return { win, firstClear: false, gold, iron: 0, yuanbao, items, newBest: false };
 }
 
-export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number): RunResult {
+export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0): RunResult {
   const d = diff.id;
   const progress = Math.min(1, t / ch.duration);
   const gold = Math.round((ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1)) * diff.reward + coins * 2);
@@ -116,6 +130,14 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
     grantShards(shardReward.hero, shardReward.n);
   }
   const key = ck(d, ch.id);
+  // 三星：第一次集齐三颗星送元宝
+  const oldStars = save.stars[key] || 0;
+  const allStars = oldStars | stars;
+  let starBonus = 0;
+  if (allStars !== oldStars) {
+    save.stars[key] = allStars;
+    if (starCount(allStars) === 3 && starCount(oldStars) < 3) { starBonus = (50 + 20 * ch.id) * (1 + d); yuanbao += starBonus; }
+  }
   const newBest = t > (save.bests[key] || 0);
   if (newBest) save.bests[key] = Math.min(ch.duration, Math.floor(t));
   if (d === 0 && t > (save.chapterBest[ch.id] || 0)) save.chapterBest[ch.id] = Math.min(ch.duration, Math.floor(t));
@@ -127,7 +149,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   if (bossKills) progressTask('boss', bossKills);
   getPlatform().submitScore('score', bestScore());
   markDirty();
-  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus };
 }
 
 /** 无尽模式结算：按坚持时间发奖励，每 5 分钟额外送碎片 */
@@ -136,13 +158,14 @@ export function settleEndless(t: number, coins: number, kills: number, bossKills
   const tier = Math.min(10, 1 + Math.floor(m / 3));
   const gold = Math.round(160 * m * (1 + save.maxCleared * 0.3) + coins * 2);
   const iron = Math.round(3 * m * (1 + save.maxCleared * 0.2));
-  const milestones = Math.floor(m / 5);
-  const yuanbao = milestones * 15;
+  // 1.0.4：每 3 分钟一档（原来每 5 分钟 15 元宝、3 碎片），按分钟算总量不变
+  const milestones = Math.floor(m / 3);
+  const yuanbao = milestones * 9;
   const items: EquipItem[] = [];
   for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(tier, 0)));
   let shardReward: { hero: string; n: number } | undefined;
   if (milestones > 0) {
-    shardReward = { hero: randomShardHero(true), n: milestones * 3 };
+    shardReward = { hero: randomShardHero(true), n: milestones * 2 };
     grantShards(shardReward.hero, shardReward.n);
   }
   const newBest = t > save.endlessBest;

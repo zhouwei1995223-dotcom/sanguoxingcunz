@@ -3,6 +3,7 @@ import { createWebPlatform } from './web';
 import { createMiniGamePlatform } from './minigame';
 import { NO_ADS } from '../data/platformConfig';
 import { pauseForAd } from '../audio/sound';
+import { save } from '../meta/save';
 
 declare const wx: any;
 declare const tt: any;
@@ -26,7 +27,10 @@ export function getPlatform(): Platform {
     if (!NO_ADS) pauseForAd(true);
     return raw(placement).then((ok) => {
       if (!NO_ADS) pauseForAd(false);
-      p.report('ad_reward', { placement, ok: ok ? 1 : 0 });
+      // idx：今天这个点位的第几次（看完才算）
+      const c = (save.daily.adCount = save.daily.adCount || {});
+      if (ok) c[placement] = (c[placement] || 0) + 1;
+      p.report('ad_reward', { placement, ok: ok ? 1 : 0, idx: c[placement] || 0 });
       return ok;
     });
   };

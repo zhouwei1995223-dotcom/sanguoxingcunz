@@ -56,7 +56,9 @@ function updateEndless(b: Battle, dt: number) {
     runEvent(b, ev);
   };
   const strong = t > 420;
-  fire('elite', 60, { t, type: 'elite', enemy: strong ? 'elite_guard' : 'wei_heavy', count: 1 + Math.floor(m / 4) });
+  // 15 分钟后：精英多两个，敌将两个一起来
+  const late = t > 900 && b.chapter.duration >= 1e8;
+  fire('elite', 60, { t, type: 'elite', enemy: strong ? 'elite_guard' : 'wei_heavy', count: 1 + Math.floor(m / 4) + (late ? 2 : 0) });
   fire('ring', 100, { t, type: 'ring', enemy: strong ? 'wu_shield' : 'wei_spear', count: Math.min(80, 30 + Math.floor(m * 3)), text: '四面伏兵！' });
   fire('stampede', 130, { t, type: 'stampede', enemy: strong ? 'tiger_cavalry' : 'wei_cavalry', count: Math.min(30, 12 + Math.floor(m)), text: '骑兵冲阵！' });
   fire('swarm', 75, { t, type: 'swarm', enemy: 'bandit', count: Math.min(60, 20 + Math.floor(m * 2)), text: '流寇来袭！' });
@@ -69,6 +71,13 @@ function updateEndless(b: Battle, dt: number) {
     const [x, y] = b.spawnPoint();
     // 首领血量随时间成长
     b.spawnBoss(id, x, y, false, 0.4 + m * 0.12);
+    if (late) {
+      const id2 = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
+      et.bossIdx++;
+      const [x2, y2] = b.spawnPoint();
+      b.spawnBoss(id2, x2, y2, false, 0.4 + m * 0.12);
+      b.hooks.banner('两员敌将同时杀到！', '#e43b44');
+    }
   }
 }
 

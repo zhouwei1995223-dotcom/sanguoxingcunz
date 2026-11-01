@@ -9,7 +9,7 @@ import type { Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, WeaponId } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
-import { settleRun, settleEndless, settleWeeklyRun, settleTutorial, RunResult } from '../meta/run';
+import { settleRun, settleEndless, settleWeeklyRun, settleTutorial, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
 import { settleWeekly } from '../meta/goals';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
@@ -649,7 +649,7 @@ export class ResultDialog implements Dialog {
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless
         ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
-        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
+        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec));
     }
     if (scene.videoPath) scene.videoPath.then((p) => { this.video = p; });
     if (save.guide === 0) save.guide = 1;
@@ -661,7 +661,8 @@ export class ResultDialog implements Dialog {
     const b = this.scene.battle;
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0);
+    const showStars = this.res.stars !== undefined && this.win && !this.scene.weekly;
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 110 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
@@ -672,6 +673,22 @@ export class ResultDialog implements Dialog {
     ui.text(this.scene.label, ui.W / 2, y, 26, this.scene.diff.id ? this.scene.diff.color : C.textDim);
     if (this.res.newSkills) ui.text('解锁新技能：' + this.res.newSkills.join('、'), ui.W / 2, y + 34 * u, 20, '#9be37a');
     y += 60 * u;
+    if (showStars) {
+      // 三星评价：通关 / 不复活 / 60 秒内击败最终敌将
+      const st = this.res.stars || 0;
+      const sw = (w - 80 * u) / 3;
+      STAR_LABELS.forEach((label, i) => {
+        const on = !!(st & (1 << i));
+        const cx = f.x + 40 * u + sw * i + sw / 2;
+        ui.icon('star', cx, y + 10 * u, 52 * u, on ? 1 : 0.2);
+        ui.text(label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
+      });
+      y += 80 * u;
+      const tip = this.res.starBonus ? `集齐三星！额外元宝×${this.res.starBonus}` : starCount(st) < 3 ? '集齐三星可额外领取元宝' : '';
+      const hard = this.res.firstClear && this.scene.diff.id === 0 && this.scene.chapter.id === 1 && diffOpen(1) ? '困难难度已解锁，去挑战吧！' : '';
+      if (tip || hard) ui.text(hard || tip, ui.W / 2, y, 20, this.res.starBonus ? C.gold : '#9be37a');
+      y += 30 * u;
+    }
     const rows: [string, string][] = [['坚守时间', fmtTime(b.t)], ['击败敌军', fmtNum(b.kills)], ['武将等级', 'Lv.' + b.level], ['斩获敌将', String(b.bossKills)]];
     rows.forEach((r, i) => {
       const sx = f.x + 60 * u + (i % 2) * (w / 2 - 30 * u);

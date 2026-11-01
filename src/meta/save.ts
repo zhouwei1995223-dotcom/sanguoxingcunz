@@ -32,6 +32,8 @@ export interface DailyState {
   sidebar: boolean;
   /** 今天点过游戏圈（红点只在每天第一次显示） */
   club?: boolean;
+  /** 今天每个广告点位看了几次（上报用） */
+  adCount?: Record<string, number>;
   patrolQuick: number;
   levelupAds: number;
   adShards: number;
@@ -58,6 +60,8 @@ export interface SaveData {
   /** 各难度通关记录，键为 "难度-章节" */
   clears: Record<string, boolean>;
   bests: Record<string, number>;
+  /** 1.0.4 三星评价：按「难度-章节」存拿到过的星（位：1 通关、2 不复活、4 限时击败最终敌将） */
+  stars: Record<string, number>;
   selectedChapter: number;
   selectedDiff: number;
   endlessBest: number;
@@ -138,6 +142,7 @@ function freshSave(): SaveData {
     selectedChapter: 1,
     clears: {},
     bests: {},
+    stars: {},
     selectedDiff: 0,
     endlessBest: 0,
     endlessRuns: 0,
@@ -197,6 +202,8 @@ export function loadSave() {
       if (!save.heroes[save.hero] || !save.heroes[save.hero].owned) save.hero = 'zhaoyun';
       // 已通关第2章的老玩家直接获得关羽
       if (save.maxCleared >= 2 && !save.heroes.guanyu.owned) { save.heroes.guanyu.owned = true; save.heroes.guanyu.star = 1; }
+      // 1.0.4：三星评价上线前通关过的关卡先记 1 颗星（通关）
+      for (const k in save.clears) if (save.clears[k] && !save.stars[k]) save.stars[k] = 1;
       // 1.0.3：已通关第4 / 6章的老玩家直接获得黄忠 / 姜维
       if (save.maxCleared >= 4 && !save.heroes.huangzhong.owned) { save.heroes.huangzhong.owned = true; save.heroes.huangzhong.star = 1; }
       if (save.maxCleared >= 6 && !save.heroes.jiangwei.owned) { save.heroes.jiangwei.owned = true; save.heroes.jiangwei.star = 1; }

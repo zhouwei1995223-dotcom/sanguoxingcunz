@@ -15,7 +15,7 @@ import {
   CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower } from '../meta/run';
+import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, starCount, chapterStars } from '../meta/run';
 import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
@@ -270,7 +270,8 @@ export class HomeScene implements Scene {
     ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
     const best = getBest(d, ch.id);
     const cleared = isCleared(d, ch.id);
-    const info = cleared ? `${diff.name}已通关 ✓` : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
+    const stars = starCount(chapterStars(d, ch.id));
+    const info = cleared ? `${diff.name}已通关 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : best ? `最佳坚守 ${fmtTime(Math.min(best, ch.duration))}` : '尚未挑战';
     const power = combatPower();
     const need = recommendedPower(ch, diff);
     // 进度与推荐战力放在同一行

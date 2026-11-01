@@ -179,6 +179,10 @@ export class Battle {
   qiyu: QiyuId | null = null;
   /** 典韦大招期间 */
   frenzy = false;
+  /** 本局复活次数（三星评价用） */
+  reviveCount = 0;
+  /** 最终敌将从登场到被击败用了多少秒（-1 表示没打下来） */
+  finalBossSec = -1;
   /** 1.0.4：看广告复活第 2 / 3 次给的本局加成 */
   reviveDmg = 0;
   reviveSpd = 0;
@@ -758,7 +762,9 @@ export class Battle {
     const minute = this.ct / 60;
     // 无尽模式：二次曲线成长，后期压力越来越大
     const late = Math.max(0, minute - 4);
-    const grow = ch.endless ? 1 + ch.growth * minute + 0.05 * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
+    // 1.0.4：无尽模式后段涨得更快（二次项 0.05→0.22），一局压到 12~18 分钟；每周挑战（有时长）不变
+    const endlessQ = ch.endless && ch.duration >= 1e8 ? 0.22 : 0.05;
+    const grow = ch.endless ? 1 + ch.growth * minute + endlessQ * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
     const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial ? 1 : tension(this.ct, ch.id));
     e.uid = this.uidSeq++;
@@ -768,7 +774,7 @@ export class Battle {
     e.r = d.radius;
     e.maxHp = e.hp = Math.round(d.hp * hpScale * (opts.elite ? 14 : 1));
     e.speed = d.speed * rand(0.92, 1.08) * (opts.elite ? 0.9 : 1);
-    e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + 0.012 * minute * minute : 1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
+    e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + (endlessQ > 0.05 ? 0.06 : 0.012) * minute * minute : 1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
     // 敌人变多后单个经验相应减少，升级节奏不变（大军压境的弱兵经验减半）
     // 动态难度加血时经验同比减少，强势构筑不会越滚越快
@@ -1045,6 +1051,7 @@ export class Battle {
       for (let i = 0; i < 12; i++) this.dropPickup('coin', e.x + rand(-20, 20), e.y + rand(-20, 20), 5);
       this.dropGem(e.x + 10, e.y, e.exp);
       if (e === this.finalBoss) {
+        this.finalBossSec = this.t - e.born;
         this.finalBoss = null;
         // 清场
         for (const o of this.enemies) if (!o.dead && o !== e) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.3 }); }
@@ -2017,6 +2024,7 @@ export class Battle {
   revive(adRevive = 0) {
     const p = this.player;
     this.dead = false;
+    this.reviveCount++;
     if (adRevive === 2) { this.reviveDmg += 0.2; this.reviveSpd += 0.1; }
     if (adRevive === 3) this.reviveDmg += 0.3;
     if (adRevive >= 2) {

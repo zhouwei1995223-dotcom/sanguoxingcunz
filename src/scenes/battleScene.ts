@@ -344,6 +344,7 @@ export class BattleScene implements Scene {
     getPlatform().report('battle_end', {
       mode: this.modeName, chapter: this.chapter.id, diff: this.diff.id, hero: save.hero,
       win: win ? 1 : 0, sec: Math.floor(b.t), kills: b.kills, level: b.level,
+      boss_sec: Math.round(b.statBossSec), revives: b.reviveCount,
     });
     this.videoPath = getPlatform().recorderStop();
     markDirty();
