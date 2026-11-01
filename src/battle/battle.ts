@@ -76,14 +76,16 @@ const BOSS_HP = 1.6, BOSS_DMG = 1.45;
 const BOSS_SHIELD = 0.15, BOSS_SHIELD_TIME = 12;
 /**
  * 1.0.4：敌将不能被秒杀。
- * - 血量跟玩家战力部分挂钩：战力超出推荐值时 ×(战力比^0.6)，超出 1 倍约 ×1.5（第 1 章不加）
- * - 保底战斗时长：血量掉得比「按时间匀速」快时，受到的伤害只剩 1/4（中途 / 最终敌将，第 1 章短一些）
+ * - 血量跟玩家战力部分挂钩：战力超出推荐值时 ×(战力比^0.6)，超出 1 倍约 ×1.5（第 1 章 ^0.4）
+ * - 保底战斗时长：血量掉得比「按时间匀速」快时，受到的伤害只剩 1/4（中途 30 秒 / 最终 50 秒，第 1 章 15 / 25 秒）
  */
 const BOSS_POWER_EXP = 0.6;
+/** 直取敌将：游戏时间 2:30 以后才出现，每局只能用一次 */
+const RUSH_FROM = 150;
 /** 1.0.4：章节敌人攻击力整体提高（第 1 章不加，新手友好）；血量和数量不动，割草手感不变 */
 const CHAPTER_DMG = 1.5;
 const chapterDmgMul = (ch: ChapterDef) => (ch.tutorial || ch.endless || ch.id === 1 ? 1 : CHAPTER_DMG);
-const BOSS_MIN_TIME = { mid: 20, final: 35, ch1Mid: 10, ch1Final: 18 };
+const BOSS_MIN_TIME = { mid: 30, final: 50, ch1Mid: 15, ch1Final: 25 };
 
 /** 点 (x,y) 是否在预警范围内（margin 用来算上角色的身体半径）。和 render.ts 画出来的形状一致 */
 export function inWarning(w: Warning, x: number, y: number, margin = 0): boolean {
@@ -678,6 +680,8 @@ export class Battle {
   /** 每秒获得的经验（平滑，未乘经验加成），用于直取敌将的经验补偿 */
   expRate = 0;
   private expRaw = 0;
+  /** 本局累计拿到的经验（未乘加成）：直取敌将按「平均经验速度」补偿，开局就跳也有经验 */
+  private expTotal = 0;
 
   /** 下一个首领事件（没有就返回 null） */
   private nextBossEvent() {
@@ -685,10 +689,11 @@ export class Battle {
     for (let i = this.eventIdx; i < evs.length; i++) if (evs[i].type === 'boss' || evs[i].type === 'midboss') return evs[i];
     return null;
   }
-  /** 可以「直取敌将」：普通章节、场上没有敌将、后面还有敌将（1.0.4 起常驻，点了要看一次广告） */
+  /** 可以「直取敌将」：普通章节、2:30 以后、每局一次、场上没有敌将、后面还有敌将（点了要看一次广告） */
   canRush(): boolean {
     const ch = this.chapter;
     if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.dead || this.won) return false;
+    if (this.t < RUSH_FROM || this.rushes > 0) return false;
     const ev = this.nextBossEvent();
     return !!ev && ev.t - this.t > 3;
   }
@@ -710,8 +715,9 @@ export class Battle {
     if (to <= this.t) return false;
     while (this.eventIdx < this.chapter.events.length && this.chapter.events[this.eventIdx].t < to && this.chapter.events[this.eventIdx] !== ev) this.eventIdx++;
     skipHordesBefore(to);
-    // 跳过的时间按最近的经验速度补一半：适合已经成型、不想再刷小兵的玩家
-    const bonus = this.expRate * (to - this.t) * 0.5;
+    // 跳过的时间按经验速度补一半：取最近速度和本局平均速度里大的那个（最近速度是平滑过的，刚开局时还没跟上）
+    const rate = Math.max(this.expRate, this.expTotal / Math.max(30, this.t));
+    const bonus = rate * (to - this.t) * 0.5;
     this.t = to;
     if (bonus > 0) this.gainExp(bonus);
     this.dominantT = 0;
@@ -805,7 +811,8 @@ export class Battle {
     const ch = this.chapter;
     const strong = ch.tutorial ? 1 : BOSS_HP;
     const normal = !ch.tutorial && !ch.endless;
-    const over = normal && ch.id > 1 ? Math.pow(Math.max(1, this.powerRatio), BOSS_POWER_EXP) : 1;
+    // 第 1 章也按战力加血，但幅度小一些（新手友好）
+    const over = normal ? Math.pow(Math.max(1, this.powerRatio), ch.id > 1 ? BOSS_POWER_EXP : 0.4) : 1;
     e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong * over);
     e.born = this.t;
     if (normal) e.minTime = ch.id === 1 ? (isFinal ? BOSS_MIN_TIME.ch1Final : BOSS_MIN_TIME.ch1Mid) : isFinal ? BOSS_MIN_TIME.final : BOSS_MIN_TIME.mid;
@@ -1400,6 +1407,7 @@ export class Battle {
 
   gainExp(v: number) {
     this.expRaw += v;
+    this.expTotal += v;
     this.exp += v * this.expMul;
     while (this.exp >= this.expNeed) {
       this.exp -= this.expNeed;

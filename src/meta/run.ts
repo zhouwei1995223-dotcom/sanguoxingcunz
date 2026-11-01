@@ -72,7 +72,7 @@ export interface RunResult {
 }
 
 /** 三星评价：通关 / 不复活 / 最终敌将 60 秒内击败 */
-export const STAR_BOSS_SEC = 60;
+export const STAR_BOSS_SEC = 80;
 export const STAR_LABELS = ['通关', '不复活', `${STAR_BOSS_SEC}秒内击败最终敌将`];
 export function runStars(win: boolean, revives: number, finalBossSec: number): number {
   if (!win) return 0;
