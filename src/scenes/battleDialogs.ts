@@ -502,12 +502,16 @@ export class ReviveDialog implements Dialog {
   constructor(private scene: BattleScene) {}
   t?: number;
   private busy = false;
-  draw(ui: UI) {
+  /** 倒计时：看广告期间暂停，没看完回来再给几秒，免得一回来就判定放弃 */
+  private remain = 10;
+  private gaveUp = false;
+  draw(ui: UI, dt = 0) {
     const u = ui.u;
     const b = this.scene.battle;
     const w = ui.W - 100 * u, h = 640 * u;
     const f = dialogFrame(ui, w, h, '力竭', this.t);
-    const left = Math.max(0, 10 - (this.t || 0));
+    if (!this.busy) this.remain -= dt;
+    const left = Math.max(0, this.remain);
     ui.text(`${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
     ui.icon('revive', ui.W / 2, f.y + 230 * u, 140 * u);
     ui.text(String(Math.ceil(left)), ui.W / 2, f.y + 230 * u, 48, '#fff');
@@ -542,6 +546,8 @@ export class ReviveDialog implements Dialog {
         this.busy = true;
         getPlatform().showRewardedAd('revive').then((ok) => {
           this.busy = false;
+          if (this.gaveUp) return;
+          if (!ok) this.remain = Math.max(this.remain, 5);
           if (ok) {
             b.adRevives++;
             progressTask('ad', 1);
@@ -552,7 +558,8 @@ export class ReviveDialog implements Dialog {
       }
       y += 116 * u;
     }
-    if (ui.button('rv_giveup', bx, y, bw, 86 * u, '放弃', C.btnGray) || (left <= 0 && !this.busy)) {
+    if ((ui.button('rv_giveup', bx, y, bw, 86 * u, '放弃', C.btnGray) && !this.busy) || (left <= 0 && !this.busy)) {
+      this.gaveUp = true;
       this.scene.finish(false);
       return false;
     }

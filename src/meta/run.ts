@@ -138,9 +138,11 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
     save.stars[key] = allStars;
     if (starCount(allStars) === 3 && starCount(oldStars) < 3) { starBonus = (50 + 20 * ch.id) * (1 + d); yuanbao += starBonus; }
   }
-  const newBest = t > (save.bests[key] || 0);
-  if (newBest) save.bests[key] = Math.min(ch.duration, Math.floor(t));
-  if (d === 0 && t > (save.chapterBest[ch.id] || 0)) save.chapterBest[ch.id] = Math.min(ch.duration, Math.floor(t));
+  // 记录封顶在章节时长：打赢后敌将战还在走时间，不封顶比较的话每次打赢都会显示「新纪录」
+  const capped = Math.min(ch.duration, Math.floor(t));
+  const newBest = capped > (save.bests[key] || 0);
+  if (newBest) save.bests[key] = capped;
+  if (d === 0 && capped > (save.chapterBest[ch.id] || 0)) save.chapterBest[ch.id] = capped;
   save.gold += gold;
   save.iron += iron;
   save.yuanbao += yuanbao;

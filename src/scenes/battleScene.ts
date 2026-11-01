@@ -400,7 +400,7 @@ export class BattleScene implements Scene {
       // 常驻按钮不再闪动，免得一直晃眼
       const rw = 240 * u, rh = 64 * u, rx = ui.W / 2 - rw / 2, ry = top + 136 * u;
       if (ui.button('rush', rx, ry, rw, rh, '直取敌将 ▶', C.btnRed, { size: 26 })) game.openDialog(new RushConfirmDialog(this));
-      if (b.t > 40) this.tip('rush', '阵容成型了？点「直取敌将」跳过小兵，直接挑战敌将');
+      this.tip('rush', '中途敌将已败！点「直取敌将」跳过小兵，直接挑战最终敌将（每局一次）');
     }
 
     // 已获得的锦囊

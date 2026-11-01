@@ -81,7 +81,6 @@ const BOSS_SHIELD = 0.15, BOSS_SHIELD_TIME = 12;
  */
 const BOSS_POWER_EXP = 0.6;
 /** 直取敌将：游戏时间 2:30 以后才出现，每局只能用一次 */
-const RUSH_FROM = 150;
 /** 1.0.4：章节敌人攻击力整体提高（第 1 章不加，新手友好）；血量和数量不动，割草手感不变 */
 const CHAPTER_DMG = 1.5;
 const chapterDmgMul = (ch: ChapterDef) => (ch.tutorial || ch.endless || ch.id === 1 ? 1 : CHAPTER_DMG);
@@ -689,11 +688,11 @@ export class Battle {
     for (let i = this.eventIdx; i < evs.length; i++) if (evs[i].type === 'boss' || evs[i].type === 'midboss') return evs[i];
     return null;
   }
-  /** 可以「直取敌将」：普通章节、2:30 以后、每局一次、场上没有敌将、后面还有敌将（点了要看一次广告） */
+  /** 可以「直取敌将」：普通章节、击败中途敌将以后、每局一次、场上没有敌将、后面还有敌将（点了要看一次广告） */
   canRush(): boolean {
     const ch = this.chapter;
     if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.dead || this.won) return false;
-    if (this.t < RUSH_FROM || this.rushes > 0) return false;
+    if (!this.midBossDown || this.rushes > 0) return false;
     const ev = this.nextBossEvent();
     return !!ev && ev.t - this.t > 3;
   }
@@ -728,6 +727,8 @@ export class Battle {
     return true;
   }
   rushes = 0;
+  /** 本局已击败中途敌将（之后才出现直取敌将） */
+  midBossDown = false;
   /** 身边敌人 / 目标数量（平滑） */
   screenFill = 0.1;
 
@@ -961,15 +962,22 @@ export class Battle {
     let crit = false;
     if (!opts.noCrit && Math.random() < this.crit) { dmg *= this.critDmg; crit = true; }
     dmg = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
-    // 敌将保底战斗时长：血量比「按时间匀速掉」还低时，伤害只剩 1/4
-    if (e.minTime > 0 && (e.hp - dmg) / e.maxHp < 1 - (this.t - e.born) / e.minTime) dmg = Math.max(1, Math.round(dmg * 0.25));
+    // 护盾先挡伤害，打破时敌将硬直（护盾不受保底时长影响，否则战力高的玩家反而难破盾）
+    let toHp = dmg, broke = false;
     if (e.shield > 0) {
-      // 护盾先挡伤害，打破时敌将硬直
       const a = Math.min(e.shield, dmg);
       e.shield -= a;
-      e.hp -= dmg - a;
-      if (e.shield <= 0) this.breakShield(e);
-    } else e.hp -= dmg;
+      toHp -= a;
+      broke = e.shield <= 0;
+    }
+    // 敌将保底战斗时长：血量比「按时间匀速掉」还低时，打到血条上的伤害只剩 1/4
+    if (toHp > 0 && e.minTime > 0 && (e.hp - toHp) / e.maxHp < 1 - (this.t - e.born) / e.minTime) {
+      const cut = Math.max(1, Math.round(toHp * 0.25));
+      dmg -= toHp - cut;
+      toHp = cut;
+    }
+    e.hp -= toHp;
+    if (broke) this.breakShield(e);
     // 敌将战没有小怪攒怒气：打敌将本身也涨怒气（打掉一整条血约 80 点）
     if (e.boss && !this.ult && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + (dmg / e.maxHp) * 80 * this.rageMul);
     e.hits++;
@@ -1069,7 +1077,7 @@ export class Battle {
         for (const o of this.enemies) if (!o.dead && o !== e) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.3 }); }
         this.won = true;
       }
-      if (e === this.midBoss) this.midBoss = null;
+      if (e === this.midBoss) { this.midBoss = null; this.midBossDown = true; }
       return;
     }
     if (e.elite) {

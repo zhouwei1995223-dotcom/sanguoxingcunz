@@ -23,9 +23,15 @@ export function getPlatform(): Platform {
   // 所有激励视频统一上报（点位、是否看完）
   const p = instance;
   const raw = p.showRewardedAd.bind(p);
+  // 同一时间只放一个广告：广告加载的一两秒里连点两下，两次回调会共用一次「看完」，奖励发两份
+  let adBusy = 0;
   p.showRewardedAd = (placement: string) => {
+    const now = Date.now();
+    if (adBusy && now - adBusy < 90000) return Promise.resolve(false);
+    adBusy = now;
     if (!NO_ADS) pauseForAd(true);
     return raw(placement).then((ok) => {
+      adBusy = 0;
       if (!NO_ADS) pauseForAd(false);
       // idx：今天这个点位的第几次（看完才算）
       const c = (save.daily.adCount = save.daily.adCount || {});

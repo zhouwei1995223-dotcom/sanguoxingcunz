@@ -11,7 +11,7 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
   const boss = e.boss!;
   const p = b.player;
   e.stateT -= dt;
-  // 护盾：血量降到 60% 时举盾，计时结束还没打破就狂暴
+  // 护盾：血量降到 70% 时举盾，计时结束还没打破就狂暴
   if (boss.shield && !e.shieldDone && e.hp < e.maxHp * 0.7) b.raiseShield(e);
   // 二阶段：血量 30% 以下出招更快，范围技能放完有一半几率紧接着再放一个
   if (!e.phase2 && e.minTime > 0 && e.hp < e.maxHp * 0.3) {
