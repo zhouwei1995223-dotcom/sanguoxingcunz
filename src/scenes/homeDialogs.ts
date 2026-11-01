@@ -421,6 +421,11 @@ export class SettingsDialog implements Dialog {
     if (getPlatform().supportsAddShortcut() && ui.button('st_shortcut', f.x + 100 * u + bw, y, bw, 80 * u, '添加到桌面', C.btnGreen, { size: 22 })) {
       getPlatform().addShortcut().then((ok) => ui.toast(ok ? '添加成功' : '添加失败'));
     }
+    // 联系客服 / 意见反馈：进入微信客服会话，带上版本、进度、出战武将，方便定位问题（不含个人信息）
+    if (getPlatform().supportsCustomerService() && ui.button('st_service', f.x + 100 * u + bw, y, bw, 80 * u, '联系客服 / 反馈', C.btnGreen, { size: 22 })) {
+      getPlatform().report('service', { from: 'settings' });
+      getPlatform().openCustomerService(`v${GAME_INFO.version} 通关${save.maxCleared}章 武将${save.hero}`).then((ok) => { if (!ok) ui.toast('客服暂时打不开，请稍后再试'); });
+    }
     y += 100 * u;
     // 兑换码 / 提醒
     if (ui.button('st_redeem', f.x + 40 * u, y, bw, 80 * u, '兑换码', C.btnGold, { size: 24 })) {

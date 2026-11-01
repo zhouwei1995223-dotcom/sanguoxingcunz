@@ -233,6 +233,14 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     supportsSidebar() { return kind === 'tt' && sidebarSupported; },
     isFromSidebar() { return fromSidebar; },
     navigateToSidebar() { try { api.navigateToScene({ scene: 'sidebar', fail: () => {} }); } catch (e) {} },
+    supportsCustomerService() { return kind === 'wx' && typeof api.openCustomerServiceConversation === 'function'; },
+    openCustomerService(sessionFrom) {
+      return new Promise<boolean>((resolve) => {
+        try {
+          api.openCustomerServiceConversation({ sessionFrom: sessionFrom.slice(0, 300), success: () => resolve(true), fail: () => resolve(false) });
+        } catch (e) { resolve(false); }
+      });
+    },
     supportsRecommend() { return kind === 'wx' && typeof api.createPageManager === 'function'; },
     showRecommend() {
       return new Promise<boolean | null>((resolve) => {

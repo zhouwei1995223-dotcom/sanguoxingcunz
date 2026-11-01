@@ -65,6 +65,7 @@
   - 胜率（战力 1.0、带奇遇、每格 6 局，十名武将合计 /60）：第 3/6/9 章 53/47/53。模拟机器人走位太好，对敌人攻击力不敏感，压不到 60~65%；真人挨打多，实际会比模拟难。上线后看 `battle_end` 各章 win 比例再调。
   - 小游戏运营素材视频：10-28 那三条审核未通过（弹窗、两侧边框、界面干扰；封面没 logo、有界面和边框），11-01 重做三套（`docs/promo/运营素材/`，见里面的上传说明）：网页版 `?nohud=1` 横屏铺满不画界面，`tools/video/record4.mjs` + `compose4.py`。渲染缩放改成按短边算（竖屏不变）。
   - 评价与推荐 + 游戏更新提醒（2026-11-01，读的官方文档 `open-ability/game-evaluate`、`subscribe-update-notification-message`；从云端用 `curl --compressed` 能读 developers.weixin.qq.com，WebFetch 工具不行）：平台接口 `showRecommend()`（`wx.createPageManager` + 官方常量 `RECOMMEND_OPENLINK`，不发奖励）、`requestUpdateNotice()` / `updateNoticeState()`（`wx.requestSubscribeSystemMessage(['SYS_MSG_TYPE_WHATS_NEW'])`，必须在点击里调用；`wx.getSetting` 查状态）。主界面右侧「推荐」「更新提醒」（订阅后隐藏），结算页打赢后「觉得好玩？推荐给好友」。新事件 `recommend`（from、ok）、`update_notice`（ok）。每次提审要在「更新内容」里选词库标签，发布后平台自动推送。`tools/shots/opsbtns.mjs` 截图验证（浏览器里 `window.__clubTest = true` 显示这些按钮）。
+  - 客服入口（2026-11-01）：设置页「联系客服 / 反馈」→ 平台接口 `openCustomerService(sessionFrom)`（`wx.openCustomerServiceConversation`，sessionFrom 带版本 / 通关章数 / 武将）；上报 `service`；隐私政策（`texts.ts`，`IS_WX`）加了客服消息的说明。不需要服务器：后台绑定客服人员，用「客服小助手」小程序或网页端客服工具回复，不要开消息推送。
   - 腾讯广告投流：用户在测试（日预算要限、等 1.0.3 发布后再投）；跳转参数暂不用，以后要区分广告来源再加读取 `query` 并上报。
 - 仓库外的东西（新会话需要时重新准备）：打包的 zip（在 .gitignore 里，`npm run build` 后按上面的命令重新打）；推广图 / 视频标题用的思源宋体 Noto Serif CJK Black（`tools/promo/*.py`、`tools/video/compose*.py` 的第一个参数，需要自己下载）；小红书官方打包审计脚本 minitool-zip-builder 1.7.0（`audit_artifact.py`，要从小红书创服平台重新下载）。
 - 备案被驳回过一次（击杀图标是骷髅）：已换成交叉双刀，去掉地图骨头、「尸横遍野」等。新内容同样不要出现骷髅、血腥、烟酒等元素。

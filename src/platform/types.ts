@@ -62,6 +62,9 @@ export interface Platform {
   /** 微信游戏圈（页面管理器打开游戏圈链接） */
   supportsGameClub(): boolean;
   openGameClub(): Promise<boolean>;
+  /** 客服会话（微信 wx.openCustomerServiceConversation），sessionFrom 透传给客服，最长 1000 字节 */
+  supportsCustomerService(): boolean;
+  openCustomerService(sessionFrom: string): Promise<boolean>;
   /** 微信小游戏推荐组件（评价与推荐）：返回玩家关闭时是否推荐了（拿不到时为 null） */
   supportsRecommend(): boolean;
   showRecommend(): Promise<boolean | null>;

@@ -5,6 +5,8 @@ declare const process: { env: Record<string, string | undefined> };
 export const IS_XHS = process.env.TARGET === 'xhs';
 /** TapTap H5 小游戏版本（离线 H5，构建时注入） */
 export const IS_TAP = process.env.TARGET === 'tap';
+/** 微信小游戏版本 */
+export const IS_WX = process.env.TARGET === 'wx';
 /** 离线 H5 版本（小红书 / TapTap）：不接平台 SDK，没有分享和好友排行，音效运行时合成 */
 export const IS_H5 = IS_XHS || IS_TAP;
 /** 无广告版本：原来看视频的地方改为免费领取、元宝兑换或直接去掉 */

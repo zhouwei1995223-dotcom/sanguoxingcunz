@@ -1,4 +1,4 @@
-import { GAME_INFO, NO_ADS, IS_XHS, IS_TAP, IS_H5, CLOUD_CONFIG, SUBSCRIBE_CONFIG } from './platformConfig';
+import { GAME_INFO, NO_ADS, IS_XHS, IS_TAP, IS_H5, IS_WX, CLOUD_CONFIG, SUBSCRIBE_CONFIG } from './platformConfig';
 
 // 按实际开通的功能生成条款：没开的功能不写进去
 const PLATFORM_NAME = IS_XHS ? '小红书' : IS_TAP ? 'TapTap' : '微信 / 抖音';
@@ -57,6 +57,7 @@ ${numbered([
   ...(IS_H5 ? [] : [`当您使用排行榜功能时，平台（${PLATFORM_NAME}）会根据其规则处理您的昵称、头像及游戏分数，用于向您的好友展示排行。`]),
   ...(NO_ADS ? [] : ['广告服务由平台提供，平台可能会根据其隐私政策收集设备信息以投放广告。']),
   ...(SUBSCRIBE_ON ? ['当您开启「体力满提醒」时，平台会在您同意后向您发送一次性订阅消息，我们仅记录提醒时间。'] : []),
+  ...(IS_WX ? ['当您使用「联系客服 / 反馈」时，您发送的消息由微信平台转交给我们，同时会附带游戏版本、通关进度和出战武将，仅用于答复和处理您的问题。'] : []),
   ...(IS_H5 ? ['本游戏不联网，不收集您的昵称、头像、设备标识等任何个人信息。'] : []),
 ])}
 
