@@ -14,7 +14,7 @@ import { settleWeekly } from '../meta/goals';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
 import { fmtTime, easeOutBack, fmtNum } from '../core/math';
-import { HomeScene } from './homeScene';
+import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
@@ -662,7 +662,7 @@ export class ResultDialog implements Dialog {
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
     const showStars = this.res.stars !== undefined && this.win && !this.scene.weekly;
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0);
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
@@ -754,6 +754,11 @@ export class ResultDialog implements Dialog {
       game.setScene(new HomeScene());
       return false;
     }
+    // 打赢了是推荐的好时机（官方建议在高光时刻拉起推荐组件；不发奖励）
+    if (this.canRecommend && ui.button('res_recommend', ui.W / 2 - 170 * u, y + 116 * u, 340 * u, 64 * u, '觉得好玩？推荐给好友', C.btnGreen, { size: 22, icon: 'thumb' })) openRecommend('result');
+  }
+  private get canRecommend() {
+    return this.win && !this.res.endless && getPlatform().supportsRecommend();
   }
 }
 

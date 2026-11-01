@@ -156,6 +156,11 @@ export function createWebPlatform(): Platform {
     // 浏览器里没有游戏圈；自动化测试可以设 window.__clubTest 看按钮效果
     supportsGameClub() { return !!(window as any).__clubTest; },
     openGameClub() { showToast('打开游戏圈'); return Promise.resolve(true); },
+    supportsRecommend() { return !!(window as any).__clubTest; },
+    showRecommend() { showToast('推荐组件'); return Promise.resolve(true); },
+    supportsUpdateNotice() { return !!(window as any).__clubTest; },
+    updateNoticeState() { return Promise.resolve('none' as const); },
+    requestUpdateNotice() { showToast('订阅更新提醒'); return Promise.resolve(true); },
     supportsAddShortcut() { return false; },
     addShortcut() { return Promise.resolve(false); },
     submitScore() {},

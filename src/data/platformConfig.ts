@@ -47,6 +47,9 @@ export const GAME_CLUB = {
   wx: '-SSEykJvFV3pORt5kTNpSz83xWajDQkBoG_UmsnhirmhHZewQzlaipulfbDTg-EQyziG-F5LbtqmhOMvSTplLMaA24cK7DDh_xkVSAqrDFs71UmKl2813KLF8RM7ByXmS8QPUXrXlLh1zf_MkiaD7gFx0qwdC9NtkIgiy8yJ8Rqj5Q-l5DUpwhW31bcCZ981fzmMkUABWNpBiHOAKP0bXdTYV6ylWwexUK4jN7iqWXnGX6KHDSiRmB2JcWUxu0kSGAXe5udq3qwQRKIkgAi0VfmfCU-blud4ThFn-IwOa5mntpom0Hqe-F7cdS4jhTAGgBOm-1xF-Jwlmpg_F72JYw',
 };
 
+/** 小游戏推荐组件的 openlink（官方常量，文档「评价与推荐」里原样复制） */
+export const RECOMMEND_OPENLINK = 'TWFRCqV5WeM2AkMXhKwJ03MhfPOieJfAsvXKUbWvQFQtLyyA5etMPabBehga950uzfZcH3Vi3QeEh41xRGEVFw';
+
 /** 云开发配置（云存档、订阅提醒）。开通后填写环境 ID。 */
 export const CLOUD_CONFIG = {
   wx: { env: '' }, // 微信云开发环境 ID，例如 'cloud1-xxxxx'

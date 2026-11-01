@@ -1,5 +1,5 @@
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG, GAME_CLUB, NO_ADS } from '../data/platformConfig';
+import { AD_CONFIG, SHARE_CONFIG, CLOUD_CONFIG, SUBSCRIBE_CONFIG, GAME_CLUB, NO_ADS, RECOMMEND_OPENLINK } from '../data/platformConfig';
 
 // 微信 / 抖音小游戏通用实现。两家 API 绝大部分同名，差异点单独判断。
 
@@ -85,6 +85,8 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     return rewardedAds[unitId];
   };
   const adCfg = kind === 'wx' ? AD_CONFIG.wx : AD_CONFIG.tt;
+  /** 推荐组件的 PageManager：提前加载，点按钮时直接展示 */
+  let recommendPM: any = null;
   // 启动时就创建激励视频实例，让平台提前加载，第一次点「看视频」不用等
   if (!NO_ADS) getRewarded(adCfg.rewarded);
   let interstitial: any = null;
@@ -231,6 +233,52 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     supportsSidebar() { return kind === 'tt' && sidebarSupported; },
     isFromSidebar() { return fromSidebar; },
     navigateToSidebar() { try { api.navigateToScene({ scene: 'sidebar', fail: () => {} }); } catch (e) {} },
+    supportsRecommend() { return kind === 'wx' && typeof api.createPageManager === 'function'; },
+    showRecommend() {
+      return new Promise<boolean | null>((resolve) => {
+        try {
+          if (!recommendPM) {
+            recommendPM = api.createPageManager();
+            recommendPM.load({ openlink: RECOMMEND_OPENLINK });
+          }
+          const pm = recommendPM;
+          let done = false;
+          const finish = (v: boolean | null) => { if (!done) { done = true; resolve(v); } };
+          // 基础库 3.8.6 起 destroy 回调带 isRecommended；低版本拿不到，按 null 处理
+          try {
+            pm.on('destroy', (res: any) => { finish(res && typeof res.isRecommended === 'boolean' ? res.isRecommended : null); recommendPM = null; });
+            pm.on('error', () => { finish(null); recommendPM = null; });
+          } catch (e) {}
+          Promise.resolve(pm.show({ openlink: RECOMMEND_OPENLINK })).catch(() => { finish(null); recommendPM = null; });
+        } catch (e) { resolve(null); }
+      });
+    },
+    supportsUpdateNotice() { return kind === 'wx' && typeof api.requestSubscribeSystemMessage === 'function'; },
+    updateNoticeState() {
+      return new Promise((resolve) => {
+        try {
+          api.getSetting({
+            withSubscriptions: true,
+            success: (res: any) => {
+              const v = res && res.subscriptionsSetting && res.subscriptionsSetting.itemSettings && res.subscriptionsSetting.itemSettings.SYS_MSG_TYPE_WHATS_NEW;
+              resolve(v === 'accept' ? 'accept' : v === 'reject' ? 'reject' : 'none');
+            },
+            fail: () => resolve('none'),
+          });
+        } catch (e) { resolve('none'); }
+      });
+    },
+    requestUpdateNotice() {
+      return new Promise((resolve) => {
+        try {
+          api.requestSubscribeSystemMessage({
+            msgTypeList: ['SYS_MSG_TYPE_WHATS_NEW'],
+            success: (res: any) => resolve(res && res.SYS_MSG_TYPE_WHATS_NEW === 'accept'),
+            fail: () => resolve(false),
+          });
+        } catch (e) { resolve(false); }
+      });
+    },
     supportsGameClub() { return kind === 'wx' && !!GAME_CLUB.wx && typeof api.createPageManager === 'function'; },
     openGameClub() {
       return new Promise<boolean>((resolve) => {

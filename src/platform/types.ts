@@ -62,6 +62,14 @@ export interface Platform {
   /** 微信游戏圈（页面管理器打开游戏圈链接） */
   supportsGameClub(): boolean;
   openGameClub(): Promise<boolean>;
+  /** 微信小游戏推荐组件（评价与推荐）：返回玩家关闭时是否推荐了（拿不到时为 null） */
+  supportsRecommend(): boolean;
+  showRecommend(): Promise<boolean | null>;
+  /** 游戏更新提醒（系统订阅消息 SYS_MSG_TYPE_WHATS_NEW，订阅一次永久有效，版本发布后平台自动推送） */
+  supportsUpdateNotice(): boolean;
+  updateNoticeState(): Promise<'accept' | 'reject' | 'none'>;
+  /** 必须在点击里调用 */
+  requestUpdateNotice(): Promise<boolean>;
   addShortcut(): Promise<boolean>;
 
   /** 排行榜 */

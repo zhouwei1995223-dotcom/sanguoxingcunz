@@ -51,6 +51,7 @@ export class HomeScene implements Scene {
     const p = getPlatform();
     this.bg = new HomeBackground(p.width, p.height);
     playBgm('bgm_home');
+    checkUpdateNotice();
     rolloverDaily();
     tickStamina();
     this.lastPower = combatPower();
@@ -215,6 +216,14 @@ export class HomeScene implements Scene {
         save.daily.club = true; markDirty();
         getPlatform().report('game_club', { from: 'home' });
         getPlatform().openGameClub().then((ok) => { if (!ok) ui.toast('游戏圈暂时打不开，请稍后再试'); });
+      } }] : []),
+      ...(getPlatform().supportsRecommend() ? [{ id: 'recommend', icon: 'thumb', label: '推荐', dot: false, on: () => openRecommend('home') }] : []),
+      ...(getPlatform().supportsUpdateNotice() && updateNotice !== 'accept' ? [{ id: 'notice', icon: 'bell', label: '更新提醒', dot: !save.tips.notice, on: () => {
+        save.tips.notice = true; markDirty();
+        getPlatform().requestUpdateNotice().then((ok) => {
+          getPlatform().report('update_notice', { ok: ok ? 1 : 0 });
+          if (ok) { updateNotice = 'accept'; ui.toast('订阅成功！新版本上线时会通知你'); }
+        });
       } }] : []),
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
       { id: 'settings', icon: 'gear', label: '设置', dot: false, on: () => game.openDialog(new SettingsDialog()) },
@@ -697,3 +706,19 @@ function fmtStat(stat: string, v: number): string {
 }
 
 export { fmtStat };
+
+/** 游戏更新提醒的订阅状态（进主城时查一次，已订阅就不再显示按钮） */
+let updateNotice: 'accept' | 'reject' | 'none' | 'unknown' = 'unknown';
+let noticeChecked = false;
+export function checkUpdateNotice() {
+  if (noticeChecked || !getPlatform().supportsUpdateNotice()) return;
+  noticeChecked = true;
+  getPlatform().updateNoticeState().then((s) => { updateNotice = s; });
+}
+
+/** 打开微信推荐组件（评价与推荐）；官方不提倡用奖励换推荐，这里不发任何奖励 */
+export function openRecommend(from: string) {
+  getPlatform().showRecommend().then((ok) => {
+    getPlatform().report('recommend', { from, ok: ok === null ? -1 : ok ? 1 : 0 });
+  });
+}

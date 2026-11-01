@@ -669,6 +669,30 @@ const ICONS: Record<string, () => PixelImage> = {
     '......bbbBb',
     '.........b.',
   ]),
+  // 推荐（点赞手势）
+  thumb: () => art([
+    '...yy....',
+    '...yYy...',
+    '..yYy....',
+    'yyyYyyyy.',
+    'yYYYYYYy.',
+    'yYYYYYyy.',
+    'yYYYYYYy.',
+    'yYYYYYy..',
+    'yyyyyy...',
+  ]),
+  // 更新提醒（铃铛）
+  bell: () => art([
+    '....y....',
+    '...yYy...',
+    '..yYYYy..',
+    '..yYYYy..',
+    '.yYYYYYy.',
+    '.yYYYYYy.',
+    'yYYYYYYYy',
+    'yyyyyyyyy',
+    '...yUy...',
+  ]),
   share: () => art([
     '.....gg.',
     '...gggg.',
