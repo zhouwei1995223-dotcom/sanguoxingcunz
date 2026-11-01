@@ -71,7 +71,7 @@ const CONTACT_DMG = 1.25;
 /** 小兵弓箭 / 飞石伤害倍率：子弹密集，单发伤害略低，不选回血技能也能过关 */
 const SHOT_DMG = 0.8;
 /** 敌将血量 / 伤害倍率（新手试炼除外） */
-const BOSS_HP = 1.4, BOSS_DMG = 1.1;
+const BOSS_HP = 1.6, BOSS_DMG = 1.45;
 /** 敌将护盾：最大血量的 15%，限时 12 秒 */
 const BOSS_SHIELD = 0.15, BOSS_SHIELD_TIME = 12;
 /**
@@ -80,6 +80,9 @@ const BOSS_SHIELD = 0.15, BOSS_SHIELD_TIME = 12;
  * - 保底战斗时长：血量掉得比「按时间匀速」快时，受到的伤害只剩 1/4（中途 / 最终敌将，第 1 章短一些）
  */
 const BOSS_POWER_EXP = 0.6;
+/** 1.0.4：章节敌人攻击力整体提高（第 1 章不加，新手友好）；血量和数量不动，割草手感不变 */
+const CHAPTER_DMG = 1.5;
+const chapterDmgMul = (ch: ChapterDef) => (ch.tutorial || ch.endless || ch.id === 1 ? 1 : CHAPTER_DMG);
 const BOSS_MIN_TIME = { mid: 20, final: 35, ch1Mid: 10, ch1Final: 18 };
 
 /** 点 (x,y) 是否在预警范围内（margin 用来算上角色的身体半径）。和 render.ts 画出来的形状一致 */
@@ -333,7 +336,9 @@ export class Battle {
     // 新手试炼只有一分多钟：经验和怒气加快，升级、大招都能体验到
     const tut = this.chapter.tutorial ? 3 : 1;
     const tutRage = this.chapter.tutorial ? 6 : 1;
-    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut * (hid === 'jiangwei' ? 1.15 : 1);
+    // 1.0.4：章节一局压到 6 分钟，经验 ×1.3 补回来，阵容能在敌将前成型
+    const shortRun = !this.chapter.endless && !this.chapter.tutorial ? 1.3 : 1;
+    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut * shortRun * (hid === 'jiangwei' ? 1.15 : 1);
     if (this.mods?.playerDmg) this.dmgMul *= this.mods.playerDmg;
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
     this.crit = b.crit / 100 + this.critBonus + 0.04 * P('wine');
@@ -774,7 +779,7 @@ export class Battle {
     e.r = d.radius;
     e.maxHp = e.hp = Math.round(d.hp * hpScale * (opts.elite ? 14 : 1));
     e.speed = d.speed * rand(0.92, 1.08) * (opts.elite ? 0.9 : 1);
-    e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + (endlessQ > 0.05 ? 0.06 : 0.012) * minute * minute : 1 + 0.04 * minute) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
+    e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + (endlessQ > 0.05 ? 0.06 : 0.012) * minute * minute : (1 + 0.04 * minute) * chapterDmgMul(ch)) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
     // 敌人变多后单个经验相应减少，升级节奏不变（大军压境的弱兵经验减半）
     // 动态难度加血时经验同比减少，强势构筑不会越滚越快

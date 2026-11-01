@@ -662,7 +662,7 @@ export class ResultDialog implements Dialog {
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
     const showStars = this.res.stars !== undefined && this.win && !this.scene.weekly;
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 110 * u : 0);
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
@@ -683,11 +683,11 @@ export class ResultDialog implements Dialog {
         ui.icon('star', cx, y + 10 * u, 52 * u, on ? 1 : 0.2);
         ui.text(label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
       });
-      y += 80 * u;
+      y += 92 * u;
       const tip = this.res.starBonus ? `集齐三星！额外元宝×${this.res.starBonus}` : starCount(st) < 3 ? '集齐三星可额外领取元宝' : '';
       const hard = this.res.firstClear && this.scene.diff.id === 0 && this.scene.chapter.id === 1 && diffOpen(1) ? '困难难度已解锁，去挑战吧！' : '';
       if (tip || hard) ui.text(hard || tip, ui.W / 2, y, 20, this.res.starBonus ? C.gold : '#9be37a');
-      y += 30 * u;
+      y += 36 * u;
     }
     const rows: [string, string][] = [['坚守时间', fmtTime(b.t)], ['击败敌军', fmtNum(b.kills)], ['武将等级', 'Lv.' + b.level], ['斩获敌将', String(b.bossKills)]];
     rows.forEach((r, i) => {
