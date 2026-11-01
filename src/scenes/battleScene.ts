@@ -253,6 +253,7 @@ export class BattleScene implements Scene {
     this.renderer.render(b, blocked ? 0 : dt, game.ctx);
     this.drawWorldTexts();
     this.drawVignette();
+    if (DEBUG.noHud) return;
     this.drawHud(dt);
     if (!blocked) this.drawJoystick();
   }

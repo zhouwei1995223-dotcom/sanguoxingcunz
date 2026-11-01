@@ -1,3 +1,4 @@
+import { DEBUG } from '../debug';
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
 import { IS_H5 } from '../data/platformConfig';
 
@@ -38,7 +39,8 @@ export function createWebPlatform(): Platform {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let cssW = window.innerWidth;
   let cssH = window.innerHeight;
-  if (cssW / cssH > 0.62) cssW = Math.round(cssH * 0.5);
+  // 录宣传视频（?nohud=1）时不限制比例，横屏也铺满
+  if (cssW / cssH > 0.62 && !DEBUG.noHud) cssW = Math.round(cssH * 0.5);
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
   canvas.style.display = 'block';

@@ -24,4 +24,6 @@ export const DEBUG = {
   allHeroes: param('heroes') === '1',
   /** 预览新造型：?art=v2（只用于浏览器验收，正式包不受影响） */
   artV2: param('art') === 'v2',
+  /** 录宣传视频：?nohud=1 不画战斗界面（血条、按钮、摇杆等），只留游戏世界 */
+  noHud: param('nohud') === '1',
 };

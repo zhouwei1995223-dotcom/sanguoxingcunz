@@ -48,7 +48,8 @@ export class WorldRenderer {
   }
 
   constructor(screenW: number, screenH: number, themeName: string) {
-    this.scale = Math.max(2, Math.round(screenW / 280));
+    // 按短边定缩放：竖屏和原来一样，横屏（录宣传视频）能看到更宽的战场
+    this.scale = Math.max(2, Math.round(Math.min(screenW, screenH) / 280));
     this.w = Math.ceil(screenW / this.scale);
     this.h = Math.ceil(screenH / this.scale);
     this.themeName = themeName;
