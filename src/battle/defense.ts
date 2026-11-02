@@ -386,7 +386,7 @@ export function enemyContact(b: Battle, e: Enemy, tgt: { ally: Ally | null; city
         e.atkCd = e.def?.id === 'siege_ram' ? 2.2 : 1.1;
         // 普通步兵拆城墙很慢，冲车 / 云梯 / 敌将才是真正的威胁
         const siege = e.def && (e.def.ai === 'siege' || e.def.id === 'siege_cata');
-        hurtCity(b, e.dmg * (e.boss ? (b.chapter.defense ? DEFENSE_BOSS_WALL[b.chapter.id - 1] ?? 1 : 1) : siege ? 1 : 0.25), e.boss ? 'boss' : e.def!.id);
+        hurtCity(b, e.dmg * (e.boss || siege ? (b.chapter.defense ? DEFENSE_BOSS_WALL[b.chapter.id - 1] ?? 1 : 1) : 0.25), e.boss ? 'boss' : e.def!.id);
       }
     }
     return true;
