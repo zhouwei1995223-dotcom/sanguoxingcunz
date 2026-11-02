@@ -28,5 +28,6 @@ if (p.name === 'web') {
   (window as any).__game = game;
   import('./meta/save').then((m) => { (window as any).__saveMod = m; });
   import('./gfx/atlas').then((m) => { (window as any).__atlas = m; });
+  import('./meta/ops').then((m) => { (window as any).__opsMod = m; });
 }
 if (p.name === 'web') import('./meta/cloud').then((m) => { (window as any).__cloudMod = m; });

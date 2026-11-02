@@ -5,17 +5,46 @@ export default async function ({ page, wait, shot }) {
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; });
   await wait(300);
   await shot('def_home');
-  // ?strong=1：模拟养成很深的老玩家（赵云 60 级五星巅峰 20、吕布关羽可召唤）
-  await page.evaluate(() => {
-    const g = window.__game; const sv = window.__saveMod.save;
-    if (location.search.includes('strong=1')) {
+  // 测试存档（战力卡在这一关的推荐战力上）：
+  //   prof=bare  只有武将等级 / 星级（没装备、没军略）
+  //   prof=built 装备 + 军略按进度点好，剩下的用武将等级补齐
+  //   strong=1   老写法：赵云 60 级五星巅峰 20
+  const info = await page.evaluate(() => {
+    const g = window.__game; const sv = window.__saveMod.save; const ops = window.__opsMod;
+    const q = location.search;
+    const m = q.match(/lv=(\d+)/); const lv = m ? +m[1] : 1;
+    const pm = q.match(/prof=(\w+)/); const prof = pm ? pm[1] : '';
+    const CH = [400, 1500, 2800, 4800, 8000, 12000, 18000, 27000, 40000, 58000];
+    const target = Math.round(CH[lv - 1] * 1.1 / 100) * 100;
+    if (q.includes('strong=1')) {
       Object.assign(sv.heroes.zhaoyun, { lv: 60, star: 5, peak: 20 });
       for (const id of ['lvbu', 'guanyu']) Object.assign(sv.heroes[id], { owned: true, lv: 50, star: 5 });
+    } else if (prof) {
+      const star = Math.min(5, 1 + Math.floor(lv / 2));
+      if (prof === 'built') {
+        const ql = Math.min(4, Math.floor((lv + 1) / 2));
+        const tids = { weapon: 'yajiao', helm: 'yinshi', armor: 'longlin', boots: 'tayun', mount: 'yeshizi', jade: 'yupei' };
+        sv.items = []; sv.equipped = {};
+        let uid = 9000;
+        for (const [slot, tid] of Object.entries(tids)) { const it = { uid: uid++, tid, q: ql, lv: 1 }; sv.items.push(it); sv.equipped[slot] = it.uid; }
+        const tl = Math.round(lv * 1.3);
+        sv.talents = { t_atk: Math.min(20, tl), t_hp: Math.min(20, tl), t_potion: Math.min(10, lv), t_def: Math.min(15, lv), t_speed: Math.min(10, lv), t_pickup: Math.min(10, lv), t_exp: Math.min(15, lv), t_gold: Math.min(15, lv), t_crit: Math.min(10, Math.floor(lv * 0.8)), t_cd: Math.min(10, Math.floor(lv * 0.8)), t_regen: Math.min(10, Math.floor(lv * 0.6)), t_reroll: Math.min(3, Math.floor(lv / 3)), t_revive: lv >= 6 ? 1 : 0 };
+      }
+      // 武将等级二分到刚好够推荐战力
+      let lo = 1, hi = 120;
+      // 养成到位的存档：装备等级 = 武将等级的一半（一起涨）
+      const setLv = (L) => { Object.assign(sv.heroes.zhaoyun, { lv: L, star }); for (const it of sv.items || []) if (it.uid >= 9000) it.lv = Math.max(1, Math.round(L / 2)); };
+      while (lo < hi) { const mid = (lo + hi) >> 1; setLv(mid); if (ops.combatPower(ops.computeStats('zhaoyun')) >= target) hi = mid; else lo = mid + 1; }
+      setLv(lo);
+      for (const id of ['lvbu', 'guanyu']) Object.assign(sv.heroes[id], { owned: lv >= 2, lv: Math.max(1, Math.round(lo * 0.8)), star: Math.max(1, star - 1) });
     }
-    const m = location.search.match(/lv=(\d+)/);
+    sv.hero = 'zhaoyun';
     sv.stamina = 99;
-    g.scene.startBattle(-3, m ? +m[1] : 1);
+    const power = ops.combatPower(ops.computeStats('zhaoyun'));
+    g.scene.startBattle(-3, lv);
+    return { lv, prof, target, power, heroLv: sv.heroes.zhaoyun.lv, star: sv.heroes.zhaoyun.star, itemLv: (sv.items || []).find((x) => x.uid >= 9000)?.lv };
   });
+  console.log('PROFILE ' + JSON.stringify(info));
   await wait(800);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; });
   await wait(1500);

@@ -109,7 +109,8 @@ export function unitStats(b: Battle, kind: UnitKind) {
   const mul = 1 + 0.25 * boosts;
   const drum = orderLv(d, 'c_drum');
   let hp = b.base.hp * u.hpK * mul * (1 + 0.02 * (b.level - 1)) * ALLY_HP_K;
-  let atk = b.base.atk * u.atkK * mul * (1 + 0.03 * (b.level - 1));
+  // 军略「武艺」、装备上的伤害加成也作用到士兵（原来只加武将本人，点了的玩家守城吃亏）
+  let atk = b.base.atk * u.atkK * mul * (1 + 0.03 * (b.level - 1)) * (1 + (b.base.dmg || 0) / 100);
   if (kind === 'shield' && d.links.has('l_iron')) hp *= 2;
   if (kind === 'spear' && d.links.has('l_phalanx')) atk *= 1.5;
   const count = u.count + (lv >= 3 ? 1 : 0) + (lv >= 5 ? 1 : 0) + (kind === 'spear' && d.links.has('l_phalanx') ? 2 : 0);
@@ -316,7 +317,7 @@ export const buildChoices = (d: DefenseState) => BUILD_KINDS.filter((k) => build
 
 function updateBuilds(b: Battle, dt: number) {
   const d = b.def!;
-  const atk = b.base.atk;
+  const atk = b.base.atk * (1 + (b.base.dmg || 0) / 100);
   for (const bd of d.builds) {
     bd.cdT -= dt;
     if (bd.cdT > 0) continue;
