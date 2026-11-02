@@ -175,6 +175,9 @@ export function skinOn(hero: string): boolean {
 
 /** 武将当前造型的精灵名前缀（穿戴皮肤时换成皮肤） */
 export function heroSpriteName(hero: string): string {
+  const st = save.heroes[hero];
+  // 五星觉醒造型优先
+  if (st && st.owned && st.star >= 5 && st.awaken) return `hero_${hero}_awk`;
   return skinOn(hero) ? `hero_${hero}_skin` : `hero_${hero}`;
 }
 

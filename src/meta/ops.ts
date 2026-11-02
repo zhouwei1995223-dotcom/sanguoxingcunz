@@ -6,7 +6,7 @@ import {
   TALENTS, talentCost, Reward, STAMINA, PATROL, CHESTS, ChestDef, DAILY_TASKS, TaskKind, ACTIVITY_REWARDS, SIGNIN, Slot, SLOTS, QUALITY_NAMES,
 } from '../data/meta';
 import { dayKey, weighted, pick } from '../core/math';
-import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS } from '../data/heroes';
+import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
 import { setBonuses, skinOn } from './goals';
 import { SKIN_DMG_BONUS } from '../data/goals';
 import { NO_ADS } from '../data/platformConfig';
@@ -48,7 +48,7 @@ export function heroBase(id: string): { atk: number; hp: number } {
   const h = HERO_BY_ID[id];
   const st = save.heroes[id];
   const lv = st ? st.lv : 1;
-  const mul = 1 + STAR_BONUS * Math.max(0, (st ? st.star : 1) - 1);
+  const mul = (1 + STAR_BONUS * Math.max(0, (st ? st.star : 1) - 1)) * (1 + PEAK_BONUS * ((st && st.peak) || 0)) * (awakenOn(id) ? 1 + AWAKEN_HP : 1);
   return { atk: Math.round((h.baseAtk + h.atkPerLv * (lv - 1)) * mul), hp: Math.round((h.baseHp + h.hpPerLv * (lv - 1)) * mul) };
 }
 
@@ -65,6 +65,10 @@ export function computeStats(heroId = save.hero): HeroStats {
   for (const st of setBonuses(tids).stats) addStats(s, st);
   // 皮肤加成
   if (skinOn(heroId)) addStats(s, { dmg: SKIN_DMG_BONUS });
+  // 五星觉醒造型、巅峰等级（每 10 级对敌将伤害 +5%）
+  if (awakenOn(heroId)) addStats(s, { dmg: AWAKEN_DMG });
+  const pk = save.heroes[heroId]?.peak || 0;
+  if (pk >= 10) addStats(s, { bossDmg: 5 * Math.floor(pk / 10) });
   let revive = 0, reroll = 0, potion = 0;
   for (const t of TALENTS) {
     const lv = save.talents[t.id] || 0;
@@ -261,11 +265,33 @@ export function starUpHero(id: string): string | null {
   return null;
 }
 
+/** 五星觉醒造型：五星解锁，玩家可以切换 */
+export function awakenOn(id: string): boolean {
+  const st = save.heroes[id];
+  return !!(st && st.owned && st.star >= MAX_STAR && st.awaken);
+}
+
+/** 巅峰等级：五星后用多余碎片升级 */
+export function peakUpHero(id: string): string | null {
+  const st = save.heroes[id];
+  if (!st.owned) return '尚未获得该武将';
+  if (st.star < MAX_STAR) return '五星后开启巅峰等级';
+  const lv = st.peak || 0;
+  if (lv >= PEAK_MAX) return '巅峰等级已满';
+  const cost = peakCost(lv);
+  if (st.shards < cost) return `碎片不足（${st.shards}/${cost}）`;
+  st.shards -= cost;
+  st.peak = lv + 1;
+  progressTask('upgrade', 1);
+  markDirty();
+  return null;
+}
+
 export function heroRedDot(id: string): boolean {
   const st = save.heroes[id];
   const def = HERO_BY_ID[id];
   if (!st.owned) return def.unlockShards > 0 && st.shards >= def.unlockShards;
-  return (st.star < MAX_STAR && st.shards >= STAR_COST[st.star - 1]) || (st.lv < HERO.maxLevel && save.gold >= heroLevelCost(st.lv));
+  return (st.star < MAX_STAR && st.shards >= STAR_COST[st.star - 1]) || (st.star >= MAX_STAR && (st.peak || 0) < PEAK_MAX && st.shards >= peakCost(st.peak || 0)) || (st.lv < HERO.maxLevel && save.gold >= heroLevelCost(st.lv));
 }
 
 export function anyHeroRedDot(): boolean {

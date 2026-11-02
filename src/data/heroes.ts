@@ -113,3 +113,12 @@ export const STAR_COST = [20, 40, 80, 120];
 export const MAX_STAR = 5;
 /** 每颗星（1 星以上）提升的基础攻击与生命比例 */
 export const STAR_BONUS = 0.12;
+/**
+ * 巅峰等级：五星以后多出来的碎片继续投入，和武将等级互不影响。
+ * 每级攻击、生命 +1%；每 10 级对敌将伤害 +5%。第 n 级（从 1 开始）需要 9 + n 个碎片，50 级共 1725 个。
+ */
+export const PEAK_MAX = 50;
+export const PEAK_BONUS = 0.01;
+export const peakCost = (lv: number) => 10 + lv;
+/** 五星觉醒造型：只改形象，外加一点属性 */
+export const AWAKEN_DMG = 5, AWAKEN_HP = 0.05;

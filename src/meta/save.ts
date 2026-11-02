@@ -17,6 +17,10 @@ export interface HeroState {
   lv: number;
   star: number;
   shards: number;
+  /** 巅峰等级（五星后用碎片升级） */
+  peak?: number;
+  /** 五星觉醒造型是否启用 */
+  awaken?: boolean;
 }
 
 export interface DailyState {

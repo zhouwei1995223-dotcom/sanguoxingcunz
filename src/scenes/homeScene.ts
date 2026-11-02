@@ -3,10 +3,10 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
 import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily } from '../meta/save';
-import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR } from '../data/heroes';
+import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
 import { WEAPONS, PASSIVES, heroLinks } from '../data/skills';
 import {
-  heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, randomShardHero, grantShards,
+  heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, peakUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
   canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE, chestOddsText,
 } from '../meta/ops';
@@ -465,7 +465,7 @@ export class HomeScene implements Scene {
     const py = top + Math.ceil(HEROES.length / cols) * rowH + 8 * u;
     const ph = this.contentBottom(ui) - py - 10 * u;
     ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
-    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1290 + 108 * heroLinks(this.viewHero || save.hero).length) * u);
+    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1470 + 108 * heroLinks(this.viewHero || save.hero).length) * u);
     let y = py + 20 * u + off;
     // 立绘区
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -483,7 +483,8 @@ export class HomeScene implements Scene {
     ui.text(`攻击 ${hb.atk}`, lx + 230 * u, y, 24, '#ffb070', 'left');
     ui.text(`生命 ${hb.hp}`, lx + 400 * u, y, 24, '#9be37a', 'left');
     y += 40 * u;
-    ui.text(`移速 ${h.moveSpeed}   星级加成 +${Math.round((st.owned ? st.star - 1 : 0) * 12)}%`, lx, y, 20, C.textDim, 'left');
+    const pk = st.peak || 0;
+    ui.text(`移速 ${h.moveSpeed}   星级加成 +${Math.round((st.owned ? st.star - 1 : 0) * 12)}%${pk ? `   巅峰 Lv.${pk}（攻击生命 +${Math.round(pk * PEAK_BONUS * 100)}%${pk >= 10 ? `，对敌将 +${5 * Math.floor(pk / 10)}%` : ''}）` : ''}`, lx, y, 20, pk ? '#dc9be9' : C.textDim, 'left');
     y += 50 * u;
     const row = (icon: string, title: string, desc: string) => {
       ui.qualityFrame(lx, y, 84 * u, '#5a6988');
@@ -512,10 +513,21 @@ export class HomeScene implements Scene {
         if (err) ui.toast(err); else playSfx('levelup');
       }
       const maxStar = st.star >= MAX_STAR;
-      const sc = maxStar ? 0 : STAR_COST[st.star - 1];
-      if (ui.button('hero_star', lx + bw + 20 * u, y, bw, bh, maxStar ? '满星' : '升星', st.shards >= sc && !maxStar ? C.btnPurple : C.btnGray, { size: 28, disabled: maxStar, sub: maxStar ? undefined : `碎片 ${st.shards}/${sc}` })) {
-        const err = starUpHero(h.id);
-        if (err) ui.toast(err); else { playSfx('evolve'); ui.toast(`${h.name}升至${st.star}星！`); flushSave(true); }
+      if (maxStar) {
+        // 五星以后：多出来的碎片升巅峰等级
+        const pkMax = pk >= PEAK_MAX;
+        const pc = peakCost(pk);
+        if (ui.button('hero_peak', lx + bw + 20 * u, y, bw, bh, pkMax ? '巅峰已满' : `巅峰${pk + 1}级`, st.shards >= pc && !pkMax ? C.btnPurple : C.btnGray, { size: 26, disabled: pkMax, sub: pkMax ? undefined : `碎片 ${st.shards}/${pc}` })) {
+          const err = peakUpHero(h.id);
+          if (err) ui.toast(err); else { playSfx('evolve'); ui.toast(`${h.name}巅峰等级 Lv.${st.peak}！`); flushSave(true); }
+        }
+      } else {
+        const sc = STAR_COST[st.star - 1];
+        if (ui.button('hero_star', lx + bw + 20 * u, y, bw, bh, '升星', st.shards >= sc ? C.btnPurple : C.btnGray, { size: 28, sub: `碎片 ${st.shards}/${sc}` })) {
+          const err = starUpHero(h.id);
+          if (err) ui.toast(err);
+          else { playSfx('evolve'); ui.toast(st.star >= MAX_STAR ? `${h.name}升至五星！解锁觉醒造型和巅峰等级` : `${h.name}升至${st.star}星！`); flushSave(true); }
+        }
       }
       const on = save.hero === h.id;
       if (ui.button('hero_use', lx + bw * 2 + 40 * u, y, bw, bh, on ? '出战中' : '出战', on ? C.btnGray : C.btnRed, { size: 28, disabled: on })) {
@@ -539,6 +551,21 @@ export class HomeScene implements Scene {
       }
     }
     if (st.owned && st.shards > 0) ui.text(`持有碎片 ${st.shards}`, ui.W / 2, y + bh + 30 * u, 20, C.textDim);
+    // 五星觉醒造型
+    {
+      const ay = y + bh + 60 * u;
+      const can = st.owned && st.star >= MAX_STAR;
+      ui.pixRect(lx, ay, ui.W - lx * 2, 160 * u, '#231917');
+      ui.qualityFrame(lx + 14 * u, ay + 14 * u, 132 * u, can ? '#fee761' : '#3a3040');
+      ui.icon(`hero_${h.id}_awk_${Math.floor(ui.time * 6) % 4}`, lx + 80 * u, ay + 80 * u, 126 * u, can ? 1 : 0.35);
+      ui.text('五星觉醒 · 步战造型', lx + 166 * u, ay + 40 * u, 26, '#fee761', 'left');
+      ui.text(`效果：伤害 +${AWAKEN_DMG}%，生命 +${Math.round(AWAKEN_HP * 100)}%`, lx + 166 * u, ay + 80 * u, 20, '#d9c6a0', 'left');
+      if (!can) ui.text(st.owned ? `升至五星解锁（当前${st.star}星）` : '获得武将并升至五星解锁', lx + 166 * u, ay + 116 * u, 20, '#ff8a80', 'left');
+      else if (ui.button('awaken_toggle', ui.W - lx - 194 * u, ay + 40 * u, 180 * u, 80 * u, st.awaken ? '换回骑马' : '启用', st.awaken ? C.btnGray : C.btnGold, { size: 26 })) {
+        st.awaken = !st.awaken; markDirty(); playSfx(st.awaken ? 'evolve' : 'click');
+      }
+    }
+    y += 180 * u;
     // 皮肤
     {
       const sk = SKINS[h.id];
