@@ -21,8 +21,8 @@ export const CITY_R = 52;
 export const ARENA_R = 300, WALL_W = 40, GATE_HALF = 0.15;
 /** 士兵和召唤武将离主城最远多少（只迎击这个范围附近的敌人，出怪口交给建筑） */
 export const ALLY_LEASH = 175;
-/** 守城主打策略：武将本人的伤害只剩这么多，主要靠兵种和建筑（第三轮只剩一件专属武器，不再打折；原来 6 件武器 ×0.4） */
-export const DEF_HERO_DMG = 1;
+/** 守城主打策略：武将本人的伤害只剩这么多，主要靠兵种和建筑（第三轮只出专属武器 + 两件专属联动武器，最多 3 件，×0.7；原来 6 件武器 ×0.4） */
+export const DEF_HERO_DMG = 0.7;
 /** 召唤士兵的生命倍率（1.0.6 第二轮：玩家反馈士兵太耐打，×0.75，配合敌人攻击 +25%，士兵存活时间约为原来的六成） */
 export const ALLY_HP_K = 0.75;
 /** 守城的经验倍率：敌人多、宝石自动吸，升级太勤，×0.6 */
@@ -48,7 +48,7 @@ for (let s = 0; s < 4; s++) for (const off of [-0.32, 0.32]) { const a = Math.PI
  * 守城十关：每关的敌人强度（血量 / 攻击倍率、兵种、敌将、场景）取对应章节，
  * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
  */
-export const DEFENSE_HP_K = 0.67, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
+export const DEFENSE_HP_K = 0.72, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
 export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
   { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },
   { name: '江夏', subtitle: '刘琦固守', story: '当阳兵败，退守江夏。曹军顺流而下，务必守住这最后的落脚之地。' },
@@ -70,8 +70,8 @@ export function defenseChapter(n: number): ChapterDef {
   const L = DEFENSE_LEVELS[lv - 1];
   return {
     ...DEFENSE, id: lv, name: L.name, subtitle: L.subtitle, story: L.story, theme: ch.theme,
-    // 第 1 关是新手第一次守城，血量再 ×0.7、攻击 ×0.75
-    hpMul: ch.hpMul * DEFENSE_HP_K * (lv === 1 ? 0.7 : 1), dmgMul: ch.dmgMul * DEFENSE_DMG_K * (lv === 1 ? 0.75 : 1), growth: DEFENSE.growth,
+    // 第 1 关是新手第一次守城，血量再 ×0.65、攻击 ×0.75
+    hpMul: ch.hpMul * DEFENSE_HP_K * (lv === 1 ? 0.65 : 1), dmgMul: ch.dmgMul * DEFENSE_DMG_K * (lv === 1 ? 0.75 : 1), growth: DEFENSE.growth,
     waves: ch.waves, events: ch.events, midBoss: ch.midBoss, boss: ch.boss, goldBase: ch.goldBase,
     power: Math.round((ch.power * DEFENSE_POWER_K) / 100) * 100,
   };

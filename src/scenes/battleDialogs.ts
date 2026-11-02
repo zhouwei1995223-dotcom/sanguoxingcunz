@@ -48,8 +48,9 @@ export function cardExtra(b: Battle, c: Choice): CardExtra {
     const d = WEAPONS[c.id];
     const link = weaponLink(c.id, b.hero.id);
     ex.link = !!link;
-    const has = b.passiveLv(d.evoPassive) > 0;
-    ex.recipe = `进化：满级 + ${PASSIVES[d.evoPassive].name} → ${link ? '★' + link.name : d.evoName}`;
+    // 守城没有兵法：满级直接进化
+    const has = !!b.def || b.passiveLv(d.evoPassive) > 0;
+    ex.recipe = b.def ? `进化：满级 → ${link ? '★' + link.name : d.evoName}` : `进化：满级 + ${PASSIVES[d.evoPassive].name} → ${link ? '★' + link.name : d.evoName}`;
     ex.recipeOk = has;
   } else if (c.kind === 'order' && b.def) {
     const d = b.def;

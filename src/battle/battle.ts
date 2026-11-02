@@ -5,7 +5,7 @@ import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
-  WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
+  WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, heroLinks, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
@@ -394,7 +394,7 @@ export class Battle {
 
   /** 开局奇遇：随机 3 个 */
   rollQiyu(n = 3): QiyuId[] {
-    // 守城只用当前武将的专属武器，「神兵天降」（送一件别的兵器）不出现
+    // 守城只用当前武将的专属武器和专属联动武器，「神兵天降」（随机送一件兵器）不出现
     return shuffle(QIYUS.map((q) => q.id).filter((id) => !(this.chapter.defense && id === 'shenbing'))).slice(0, n);
   }
 
@@ -2040,9 +2040,15 @@ export class Battle {
   }
 
   /**
-   * 守城的升级三选一：兵种营 / 城防军令、建筑、召唤武将、修城，外加当前武将自己的专属武器（满级直接可以进化）。
+   * 守城的升级三选一：兵种营 / 城防军令、建筑、召唤武将、修城，外加当前武将的专属武器和专属联动武器（满级直接可以进化，联动武器进化成专属联动）。
    * 别的武器和兵法不出现——守城靠兵和建筑，不用再凑技能。
    */
+  /** 守城能用的武器：专属武器 + 专属联动的武器（已解锁的） */
+  defenseWeapons(): WeaponId[] {
+    const can = new Set(weaponsForHero(this.hero.id, this.cleared));
+    return [this.hero.weapon, ...heroLinks(this.hero.id).map((x) => x.weapon)].filter((id, i, a) => a.indexOf(id) === i && (id === this.hero.weapon || can.has(id)));
+  }
+
   private rollDefenseChoices(n: number): Choice[] {
     const d = this.def!;
     const pool: { c: Choice; w: number }[] = [];
@@ -2053,9 +2059,12 @@ export class Battle {
     const hs = Object.keys(d.heroes).filter((id) => heroCanSummon(this, id));
     for (const id of hs) pool.push({ c: { kind: 'hero', id }, w: Math.min(2.4, 4 / hs.length) });
     if (d.cityHp < d.cityMax * 0.85) pool.push({ c: { kind: 'repair' }, w: 2 + 10 * (1 - d.cityHp / d.cityMax) });
-    const w = this.weapon(this.hero.weapon);
-    if (w && !w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id: w.id, lv: w.lv + 1, isNew: false }, w: 2.6 });
-    if (w && !w.evo && w.lv >= MAX_WEAPON_LV) pool.push({ c: { kind: 'evo', id: w.id }, w: 6 });
+    for (const id of this.defenseWeapons()) {
+      const w = this.weapon(id);
+      if (!w) { if (this.weapons.length < WEAPON_SLOTS && ok('weapon', id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 1.6 }); }
+      else if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id, lv: w.lv + 1, isNew: false }, w: id === this.hero.weapon ? 2.6 : 2 });
+      else if (!w.evo) pool.push({ c: { kind: 'evo', id }, w: 6 });
+    }
     return this.pickChoices(pool, n);
   }
 
@@ -2076,7 +2085,7 @@ export class Battle {
   completesEvo(c: Choice): boolean {
     if (c.kind === 'weapon') {
       const w = this.weapon(c.id);
-      return !!w && !w.evo && c.lv >= MAX_WEAPON_LV && this.passiveLv(WEAPONS[c.id].evoPassive) > 0;
+      return !!w && !w.evo && c.lv >= MAX_WEAPON_LV && (!!this.def || this.passiveLv(WEAPONS[c.id].evoPassive) > 0);
     }
     if (c.kind === 'passive' && c.isNew) return this.weapons.some((w) => !w.evo && w.lv >= MAX_WEAPON_LV && WEAPONS[w.id].evoPassive === c.id);
     if (c.kind === 'order' && this.def) {
