@@ -2,6 +2,7 @@ import { game, Scene } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
+import { HomeCamp } from './homeCamp';
 import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily } from '../meta/save';
 import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
 import { WEAPONS, PASSIVES, heroLinks } from '../data/skills';
@@ -47,6 +48,7 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
 export class HomeScene implements Scene {
   tab: Tab = 'battle';
   private bg!: HomeBackground;
+  private camp!: HomeCamp;
   private flashPower = 0;
   private lastPower = 0;
   private autoPopped = false;
@@ -54,6 +56,7 @@ export class HomeScene implements Scene {
   enter() {
     const p = getPlatform();
     this.bg = new HomeBackground(p.width, p.height);
+    this.camp = new HomeCamp();
     playBgm('bgm_home');
     checkUpdateNotice();
     if (getPlatform().supportsRecommend()) getPlatform().preloadRecommend();
@@ -72,7 +75,11 @@ export class HomeScene implements Scene {
     if (save.guide !== this.lastGuide) { if (this.lastGuide >= 0) getPlatform().report('guide_step', { step: String(save.guide) }); this.lastGuide = save.guide; }
     tickStamina();
     rolloverDaily();
-    if (this.tab === 'battle') this.bg.draw(ui.ctx, dt, this.battleLayout(ui).cy - 74 * ui.u, this.contentTop(ui) + 250 * ui.u, 120 * ui.u); // 脚底留在「征战 / 守城」页签上方
+    if (this.tab === 'battle') {
+      // 营地：篝火放在「征战 / 守城」页签上方，留出闲逛武将的位置
+      const S = Math.max(3, Math.round(Math.min(ui.W, ui.H) / 280) + 1);
+      this.camp.draw(ui.ctx, dt, ui.W, ui.H, this.battleLayout(ui).cy - 66 * ui.u - 46 * S, S);
+    }
     else this.drawPlainBg(ui);
     const power = combatPower();
     if (power !== this.lastPower) { this.flashPower = 1.2; this.lastPower = power; }
@@ -204,8 +211,10 @@ export class HomeScene implements Scene {
     ui.text(GAME_INFO.shortName, ui.W / 2, ty, 88, '#fee761', 'center', '#7a1c24');
     ui.text('— 乱世幸存者 —', ui.W / 2, ty + 66 * u, 28, '#fff4d6');
     // 点人物进武将页
-    const hr = this.bg.heroBox;
-    if (ui.clicked('home_hero', hr[0], hr[1], hr[2], hr[3])) this.tab = 'hero';
+    const hr = this.camp.heroBox;
+    if (ui.clicked('home_hero', hr[0], hr[1], hr[2], hr[3])) { this.viewHero = save.hero; this.tab = 'hero'; }
+    // 点营地里闲逛的武将：看他的详情
+    for (const w of this.camp.heroRects) if (ui.clicked('camp_' + w.id, w.r[0], w.r[1], w.r[2], w.r[3])) { this.viewHero = w.id; this.tab = 'hero'; }
 
     // 侧边功能按钮
     const side: { id: string; icon: string; label: string; dot: boolean; on: () => void; show?: boolean; now?: boolean }[] = [

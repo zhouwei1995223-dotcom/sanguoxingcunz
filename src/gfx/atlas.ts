@@ -4,6 +4,7 @@ import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
 import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
 import { awakenFrames } from './art/awaken';
+import { tentImage, weaponRackImage, suppliesImage, stakeImage, torchPoleImage } from './art/camp';
 import { cityImage, ramFrames, catapultFrames, crossbowCartFrames, withLadder, arrowTowerImage, shuCatapultFrames } from './art/defense';
 import { soldierFrames, generalFrames } from './art/units';
 import { SOLDIER_STYLES, GENERAL_STYLES } from './art/roster';
@@ -154,6 +155,12 @@ export function buildAtlas() {
   for (const id of HERO_IDS) { addUnit('hero_' + id, DEBUG.artV2 && id === 'zhaoyun' ? zhaoyunFramesV2() : heroFramesFor(id)); addUnit('hero_' + id + '_skin', heroSkinFrames(id)); addUnit('hero_' + id + '_awk', awakenFrames(id)); }
   for (const k in SOLDIER_STYLES) addUnit('u_' + k, soldierFrames(SOLDIER_STYLES[k]));
   for (const k in GENERAL_STYLES) addUnit('u_' + k, generalFrames(GENERAL_STYLES[k]));
+  // 主界面营地
+  addSprite('camp_tent', tentImage(), 'bottom');
+  addSprite('camp_rack', weaponRackImage(), 'bottom');
+  addSprite('camp_supplies', suppliesImage(), 'bottom');
+  addSprite('camp_stake', stakeImage(), 'bottom');
+  addSprite('camp_torch', torchPoleImage(), 'bottom');
   // 守城模式
   addSprite('city', cityImage(), 'bottom');
   addUnit('u_siege_ram', ramFrames());
