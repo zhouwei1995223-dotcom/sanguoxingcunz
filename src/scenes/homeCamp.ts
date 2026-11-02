@@ -1,4 +1,4 @@
-import { sprite, scaled, hasSprite } from '../gfx/atlas';
+import { sprite, scaled } from '../gfx/atlas';
 import type { Sprite } from '../gfx/atlas';
 import { hash2 } from '../core/math';
 import { save } from '../meta/save';
@@ -6,7 +6,7 @@ import { heroSpriteName } from '../meta/goals';
 import { HEROES } from '../data/heroes';
 
 // 主界面「营地」：和战斗一样的俯视像素视角，放大一档。
-// 中间是帅帐和篝火，出战武将站在篝火旁待命，其他已解锁的武将在营地里闲逛；黄昏夜色 + 篝火暖光。
+// 中间是帅帐和篝火，出战武将站在篝火旁待命，其他已解锁的武将在营地里闲逛；白天、沙地。
 // 坐标：以篝火为原点的「营地像素」，画到屏幕上乘整数倍 S。
 
 interface Walker {
@@ -100,8 +100,8 @@ export class HomeCamp {
     g.save();
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.imageSmoothingEnabled = false;
-    // 地面：草地底色 + 按格子撒草丛小花
-    g.fillStyle = '#3e5a2c';
+    // 地面：沙地底色 + 按格子撒沙纹、碎石、枯草
+    g.fillStyle = '#d8b47c';
     g.fillRect(0, 0, W, H);
     const cell = 18;
     const x0 = Math.floor(-ox / S / cell) - 1, x1 = Math.ceil((W - ox) / S / cell) + 1;
@@ -110,19 +110,20 @@ export class HomeCamp {
       const h = hash2(gx, gy, 3);
       const wx = gx * cell + hash2(gx, gy, 5) * cell, wy = gy * cell + hash2(gx, gy, 7) * cell;
       if (Math.abs(wx) < 100 && wy > -60 && wy < 50) continue; // 营地空地里不长草
-      g.fillStyle = h > 0.5 ? '#4f7036' : '#2f4722';
+      g.fillStyle = h > 0.5 ? '#e6c792' : '#c39a62';
       g.fillRect(X(wx), Y(wy), 3 * S, S);
-      if (h < 0.18) { const nm = h < 0.06 ? 'env_changban_flowerR' : h < 0.12 ? 'env_changban_flowerY' : 'env_changban_grass'; if (hasSprite(nm)) blit(sprite(nm), wx, wy); }
+      if (h < 0.05) { g.fillStyle = '#8b9bb4'; g.fillRect(X(wx + 4), Y(wy + 2), 2 * S, S); g.fillStyle = '#c0cbdc'; g.fillRect(X(wx + 4), Y(wy + 2), S, S); }
+      else if (h < 0.1) { g.fillStyle = '#9a7a44'; g.fillRect(X(wx + 2), Y(wy - 2), S, 2 * S); g.fillRect(X(wx + 4), Y(wy - 3), S, 3 * S); g.fillRect(X(wx + 6), Y(wy - 2), S, 2 * S); }
     }
     // 营地空地：夯土地面（用缩放 + arc 画椭圆，兼容不支持 ellipse() 的小游戏画布）
     const ell = (cx: number, cy: number, rx: number, ry: number) => { g.save(); g.translate(cx, cy); g.scale(1, ry / rx); g.beginPath(); g.arc(0, 0, rx, 0, TAU); g.restore(); g.fill(); };
-    g.fillStyle = '#7a5a3c';
+    g.fillStyle = '#b8915e';
     ell(X(0), Y(-6), 104 * S, 50 * S);
-    g.fillStyle = '#8a6a48';
+    g.fillStyle = '#c9a26c';
     ell(X(0), Y(-6), 96 * S, 44 * S);
     for (let i = 0; i < 60; i++) {
       const a = hash2(i, 1, 9) * TAU, r = Math.sqrt(hash2(i, 2, 9));
-      g.fillStyle = i % 2 ? '#7a5a3c' : '#9a7a54';
+      g.fillStyle = i % 2 ? '#b8915e' : '#d8b47c';
       g.fillRect(X(Math.cos(a) * 92 * r), Y(-6 + Math.sin(a) * 40 * r), 2 * S, S);
     }
     // 要排序绘制的物体
@@ -192,20 +193,18 @@ export class HomeCamp {
     }
     list.sort((a, b) => a.y - b.y);
     for (const it of list) it.draw();
-    // 黄昏夜色：整体压暗偏蓝，篝火一圈暖光
-    g.fillStyle = 'rgba(16,14,48,0.38)';
-    g.fillRect(0, 0, W, H);
+    // 白天：篝火只留一圈淡淡的暖光
     g.globalCompositeOperation = 'lighter';
     const flick = 1 + 0.06 * Math.sin(t * 9) + 0.04 * Math.sin(t * 23);
     const glow = g.createRadialGradient(X(0), Y(-4), 4 * S, X(0), Y(-4), 90 * S * flick);
-    glow.addColorStop(0, 'rgba(247,118,34,0.55)');
-    glow.addColorStop(0.4, 'rgba(247,118,34,0.18)');
+    glow.addColorStop(0, 'rgba(247,118,34,0.3)');
+    glow.addColorStop(0.4, 'rgba(247,118,34,0.08)');
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = glow;
     g.fillRect(0, 0, W, H);
     for (const tx of [-56, 56]) {
       const tg = g.createRadialGradient(X(tx), Y(-2), S, X(tx), Y(-2), 28 * S * flick);
-      tg.addColorStop(0, 'rgba(254,174,52,0.4)'); tg.addColorStop(1, 'rgba(0,0,0,0)');
+      tg.addColorStop(0, 'rgba(254,174,52,0.2)'); tg.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = tg; g.fillRect(X(tx) - 30 * S, Y(-2) - 30 * S, 60 * S, 60 * S);
     }
     // 火星：从篝火往上飘
