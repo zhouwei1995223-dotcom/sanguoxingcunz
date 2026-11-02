@@ -15,14 +15,14 @@ import {
   CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { defenseOpen, chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, starCount, chapterStars } from '../meta/run';
+import { settleRun, settleDefense, RunResult, defenseOpen, chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, starCount, chapterStars } from '../meta/run';
 import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, TextDialog, staminaAdGain,
+  SidebarDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
@@ -31,6 +31,9 @@ import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
 import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
+
+/** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
+const SWEEP_K = 2;
 
 type Tab = 'shop' | 'equip' | 'battle' | 'talent' | 'hero';
 const TABS: { id: Tab; name: string; icon: string }[] = [
@@ -325,7 +328,12 @@ export class HomeScene implements Scene {
     // 出征按钮
     const bw = 400 * u, bh = L.bh;
     const by = L.by;
-    if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
+    // 战力碾压：战力达到推荐的 SWEEP_K 倍，可以不打直接拿胜利奖励（出征按钮让出一半位置）
+    const canSweep = unlocked && power >= need * SWEEP_K;
+    if (canSweep) {
+      if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
+      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleRun(ch, diff, true, ch.duration, 150, 1500, 2, 2, 3), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
+    } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     // 无尽模式入口
     const eo = endlessOpen();
@@ -373,7 +381,10 @@ export class HomeScene implements Scene {
     if (lv < n && ui.button('def_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedDefense = lv + 1; markDirty(); }
     // 出征 / 无尽 / 关卡总览
     const bw = 400 * u, bh = L.bh, by = L.by;
-    if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
+    if (open && power >= ch.power * SWEEP_K) {
+      if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
+      if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleDefense(lv, true, 300, 120, 1200, 2, 1, 12), `守城 · ${ch.name}`, 'defense', lv, 0);
+    } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     const ew = 150 * u;
     const eo = endlessOpen();
@@ -382,6 +393,18 @@ export class HomeScene implements Scene {
       else this.startBattle(0, 0);
     }
     if (ui.button('def_list', ui.W - ew - 20 * u, by, ew, bh, '关卡', C.btnBlue, { size: 32, sub: `${save.defense?.cleared || 0}/${n}` })) game.openDialog(new DefenseListDialog((l) => { save.selectedDefense = l; markDirty(); }));
+  }
+
+  /** 战力碾压：扣体力，直接按胜利结算 */
+  private sweep(settle: () => RunResult, title: string, mode: string, chapter: number, diff: number) {
+    if (!spendStamina()) { game.openDialog(new StaminaDialog()); return; }
+    const res = settle();
+    save.stats.runs++;
+    save.stats.wins++;
+    getPlatform().report('battle_end', { mode: 'sweep_' + mode, chapter, diff, hero: save.hero, win: 1, sec: 0, kills: 0, level: 0, boss_sec: 0, revives: 0 });
+    flushSave(true);
+    playSfx('victory');
+    game.openDialog(new SweepDialog(title, res));
   }
 
   private startBattle(id: number, diff = 0) {

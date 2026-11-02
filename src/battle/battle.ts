@@ -1360,7 +1360,7 @@ export class Battle {
       s.life -= dt;
       if (s.spin) s.rot += dt * 10;
       if (s.life <= 0) { this.shots.splice(i, 1); continue; }
-      if (this.def && shotHitsCity(s.x, s.y)) { hurtCity(this, s.dmg * (s.sprite === 'stone' ? 1 : 0.4), 'shot_' + s.sprite); this.shots.splice(i, 1); continue; }
+      if (this.def && shotHitsCity(s.x, s.y)) { hurtCity(this, s.dmg * (s.sprite === 'stone' ? 1 : 0.3), 'shot_' + s.sprite); this.shots.splice(i, 1); continue; }
       if ((s.x - p.x) ** 2 + (s.y - (p.y - 8)) ** 2 < (s.r + p.r * 0.8) ** 2) {
         this.hurtPlayer(s.dmg);
         this.shots.splice(i, 1);

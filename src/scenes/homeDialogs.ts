@@ -14,6 +14,7 @@ import {
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
 import { isCleared, getBest, chapterOpen, defenseOpen } from '../meta/run';
+import type { RunResult } from '../meta/run';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
@@ -633,6 +634,22 @@ export class ChapterListDialog implements Dialog {
     });
     ui.endScroll();
     if (picked) return false;
+  }
+}
+
+/** 战力碾压的结算：直接展示胜利奖励 */
+export class SweepDialog implements Dialog {
+  t?: number;
+  constructor(private title: string, private res: RunResult) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const w = ui.W - 80 * u, h = 640 * u + (this.res.items.length > 2 ? 160 * u : 0);
+    const f = dialogFrame(ui, w, h, '战力碾压', this.t);
+    ui.text(this.title, ui.W / 2, f.y + 96 * u, 28, '#fff4d6');
+    ui.text(this.res.firstClear ? '兵锋所指，一战而定！（首次通关）' : '兵锋所指，一战而定！', ui.W / 2, f.y + 140 * u, 24, C.gold);
+    const r = this.res;
+    rewardRow(ui, rewardEntries({ gold: r.gold, iron: r.iron, yuanbao: r.yuanbao, hero: r.heroReward, shards: r.shardReward }, r.items), ui.W / 2, f.y + 230 * u, 110 * u, this.t || 1);
+    if (ui.button('sweep_ok', ui.W / 2 - 150 * u, f.y + h - 140 * u, 300 * u, 90 * u, '收下', C.btnGold, { size: 30 })) return false;
   }
 }
 

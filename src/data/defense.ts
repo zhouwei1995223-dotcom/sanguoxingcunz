@@ -41,7 +41,7 @@ for (let s = 0; s < 4; s++) for (const off of [-0.33, 0.33]) { const a = s * (Ma
  * 守城十关：每关的敌人强度（血量 / 攻击倍率、兵种、敌将、场景）取对应章节，
  * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
  */
-export const DEFENSE_HP_K = 0.7, DEFENSE_DMG_K = 0.75, DEFENSE_POWER_K = 1.1;
+export const DEFENSE_HP_K = 0.62, DEFENSE_DMG_K = 0.68, DEFENSE_POWER_K = 1.1;
 export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
   { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },
   { name: '江夏', subtitle: '刘琦固守', story: '当阳兵败，退守江夏。曹军顺流而下，务必守住这最后的落脚之地。' },
