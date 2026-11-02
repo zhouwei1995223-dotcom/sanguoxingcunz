@@ -29,7 +29,7 @@ import { HEROES } from '../data/heroes';
 import { heroBase } from '../meta/ops';
 import { createDefense, HeroInfo, grainRate, unitUnlocked, summonUnit, repairCity } from '../battle/defense';
 import { UNITS, UNIT_ORDER, HERO_SUMMON_COST, REPAIR_COST } from '../data/defense';
-import { ORDERS, LINKS, DEFENSE, DEFENSE_BASE_POWER } from '../data/defense';
+import { ORDERS, LINKS, defenseChapter } from '../data/defense';
 
 export class BattleScene implements Scene {
   battle!: Battle;
@@ -67,7 +67,9 @@ export class BattleScene implements Scene {
   constructor(chapterId: number, diff = 0) {
     const themes = Object.keys(THEMES);
     if (chapterId === -3) {
-      this.chapter = { ...DEFENSE, theme: themes[(Math.random() * themes.length) | 0] };
+      // 守城：第二个参数是关卡（1~10），没有难度
+      this.chapter = defenseChapter(diff || 1);
+      diff = 0;
     } else if (chapterId === -2) {
       this.chapter = TUTORIAL;
     } else if (chapterId === 0) {
@@ -112,13 +114,6 @@ export class BattleScene implements Scene {
     this.battle.enemyDmgMul *= this.diff.dmg;
     // 无尽模式的敌人强度跟随玩家的章节进度
     if (this.chapter.endless) { this.battle.enemyHpMul *= endlessHpMul(); this.battle.enemyDmgMul *= endlessDmgMul(); }
-    // 守城：敌人强度跟玩家战力走（士兵、城池也跟武将属性走），新老玩家难度差不多
-    if (this.chapter.defense) {
-      // 战力低于基准的新玩家敌人也相应变弱（最低 0.6 倍），老玩家按战力线性变强
-      const r = Math.max(0.6, combatPower(stats) / DEFENSE_BASE_POWER);
-      this.battle.enemyHpMul *= r;
-      this.battle.enemyDmgMul *= Math.pow(r, 0.9);
-    }
     // 守城：城池、粮草、可召唤的武将（强度按各自的等级 / 星级 / 巅峰等级）
     if (this.chapter.defense) {
       const heroes: Record<string, HeroInfo> = {};
@@ -324,7 +319,7 @@ export class BattleScene implements Scene {
     if (this.weekly) return `每周挑战 · ${this.weekly.name}`;
     if (this.chapter.endless) return '无尽战场';
     if (this.chapter.tutorial) return '新手试炼';
-    if (this.chapter.defense) return '守城 · 保卫城池';
+    if (this.chapter.defense) return `守城 · 第${this.chapter.id}关 ${this.chapter.name}`;
     return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
   }
 

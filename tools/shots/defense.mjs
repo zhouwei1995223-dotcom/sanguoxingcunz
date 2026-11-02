@@ -12,7 +12,9 @@ export default async function ({ page, wait, shot }) {
       Object.assign(sv.heroes.zhaoyun, { lv: 60, star: 5, peak: 20 });
       for (const id of ['lvbu', 'guanyu']) Object.assign(sv.heroes[id], { owned: true, lv: 50, star: 5 });
     }
-    g.scene.startBattle(-3);
+    const m = location.search.match(/lv=(\d+)/);
+    sv.stamina = 99;
+    g.scene.startBattle(-3, m ? +m[1] : 1);
   });
   await wait(800);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; });
@@ -32,7 +34,7 @@ export default async function ({ page, wait, shot }) {
       }
       const kinds = ['xbow', 'cav', 'archer', 'shield', 'spear'];
       for (const k of kinds) { const c = { spear: 40, shield: 50, archer: 55, cav: 70, xbow: 90 }[k]; if (d.grain >= c + 20) { const m = window.__defMod; } }
-      return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), pow: Math.round(b.enemyHpMul * 100) / 100, won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
+      return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), lvl: b.chapter.id, hp: Math.round(b.chapter.hpMul * 100) / 100, won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
     });
     if (s.err) { log.push(s); break; }
     if (i % 20 === 0) log.push(s);

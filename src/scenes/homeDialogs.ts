@@ -13,7 +13,8 @@ import {
   PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES, adStep,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { isCleared, getBest, chapterOpen } from '../meta/run';
+import { isCleared, getBest, chapterOpen, defenseOpen } from '../meta/run';
+import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
@@ -630,6 +631,35 @@ export class ChapterListDialog implements Dialog {
         if (open && ui.clicked(`cl_${ch.id}_${df.id}`, bx, y + 16 * u, bw, rowH - 32 * u)) { this.onPick(ch.id, df.id); picked = true; }
       });
     });
+    ui.endScroll();
+    if (picked) return false;
+  }
+}
+
+/** 守城关卡总览：十关依次解锁，点一关选中 */
+export class DefenseListDialog implements Dialog {
+  t?: number;
+  constructor(private onPick: (level: number) => void) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const w = ui.W - 40 * u, h = ui.H - 240 * u - ui.safeTop;
+    const f = dialogFrame(ui, w, h, '守城关卡', this.t, 'dl_close');
+    if (f.close) return false;
+    const top = f.y + 70 * u;
+    const rowH = 110 * u;
+    const off = ui.beginScroll('defense_list', f.x + 20 * u, top, w - 40 * u, h - 100 * u, DEFENSE_LEVEL_COUNT * (rowH + 10 * u) + 10 * u);
+    let picked = false;
+    const cleared = save.defense?.cleared || 0;
+    for (let lv = 1; lv <= DEFENSE_LEVEL_COUNT; lv++) {
+      const ch = defenseChapter(lv);
+      const y = top + (lv - 1) * (rowH + 10 * u) + off;
+      const open = defenseOpen(lv), done = cleared >= lv;
+      ui.pixRect(f.x + 30 * u, y, w - 60 * u, rowH, open ? '#3a4a30' : '#2a2422');
+      ui.text(`${lv}. ${ch.name}`, f.x + 54 * u, y + 34 * u, 28, open ? '#fff4d6' : '#777', 'left');
+      ui.text(`${ch.subtitle} · 推荐战力 ${fmtNum(ch.power)}`, f.x + 54 * u, y + 76 * u, 20, C.textDim, 'left');
+      ui.text(done ? '已守住 ✓' : open ? '可挑战' : '未解锁', f.x + w - 60 * u, y + rowH / 2, 22, done ? '#9be37a' : open ? '#fee761' : '#666', 'right');
+      if (open && ui.clicked('dl_' + lv, f.x + 30 * u, y, w - 60 * u, rowH)) { this.onPick(lv); picked = true; }
+    }
     ui.endScroll();
     if (picked) return false;
   }

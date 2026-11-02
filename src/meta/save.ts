@@ -68,10 +68,13 @@ export interface SaveData {
   stars: Record<string, number>;
   selectedChapter: number;
   selectedDiff: number;
+  /** 主界面选中的模式与守城关卡 */
+  homeMode?: 'chapter' | 'defense';
+  selectedDefense?: number;
   endlessBest: number;
   endlessRuns: number;
   /** 守城模式：最多守到第几波、胜场、当天第一次胜利的日期 */
-  defense?: { best: number; wins: number; day: string };
+  defense?: { best: number; wins: number; day: string; cleared?: number };
   patrolTs: number;
   signinCount: number;
   signinDay: string;

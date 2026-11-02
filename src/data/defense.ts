@@ -1,4 +1,4 @@
-import type { ChapterDef } from './chapters';
+import { CHAPTERS, ChapterDef } from './chapters';
 
 // 守城模式：城池在地图正中，敌军从四面来攻。一局 5 分钟，4:00 敌军主将压阵，撑到 5:00 或击败主将即胜利。
 // 资源「粮草」随时间和击杀增加，在右侧按钮召唤兵种 / 武将（做法 B）；升级三选一里会出现「军令」卡（兵种、城防）和军令联动。
@@ -12,8 +12,38 @@ export const DEFENSE_SPAWN_R = 330;
 export const DEFENSE_LEASH = 300;
 /** 城池碰撞半径（城墙外沿） */
 export const CITY_R = 52;
-/** 敌人强度的基准战力：玩家战力每高出这个数一倍，敌人血量约 ×1.9、伤害约 ×1.6 */
-export const DEFENSE_BASE_POWER = 1000;
+/**
+ * 守城十关：每关的敌人强度（血量 / 攻击倍率、兵种、敌将、场景）取对应章节，
+ * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
+ */
+export const DEFENSE_HP_K = 0.7, DEFENSE_DMG_K = 0.75, DEFENSE_POWER_K = 1.1;
+export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
+  { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },
+  { name: '江夏', subtitle: '刘琦固守', story: '当阳兵败，退守江夏。曹军顺流而下，务必守住这最后的落脚之地。' },
+  { name: '公安', subtitle: '荆州根本', story: '刘备屯兵公安，孙曹两家都虎视眈眈。城不可失！' },
+  { name: '葭萌关', subtitle: '霍峻死守', story: '霍峻以数百兵马坚守葭萌一年，今日轮到你来守这道关隘。' },
+  { name: '阳平关', subtitle: '汉中门户', story: '夏侯渊大军压境，阳平关一失，汉中门户洞开。' },
+  { name: '剑阁', subtitle: '一夫当关', story: '剑阁峥嵘而崔嵬，一夫当关，万夫莫开。钟会十万大军来攻！' },
+  { name: '白帝城', subtitle: '永安托孤', story: '夷陵之后，吴军追至白帝。守住永安，护住大汉最后的元气。' },
+  { name: '街亭', subtitle: '当道扎营', story: '张郃大军直扑街亭。这一次，当道扎营，绝不再失街亭！' },
+  { name: '祁山', subtitle: '卤城之战', story: '司马懿亲率精锐反扑祁山大营，坚守营寨，伺机破敌。' },
+  { name: '成都', subtitle: '天府之国', story: '敌军兵临成都城下，这是蜀汉的最后一战。' },
+];
+export const DEFENSE_LEVEL_COUNT = DEFENSE_LEVELS.length;
+
+/** 第 n 关（1~10）的章节配置 */
+export function defenseChapter(n: number): ChapterDef {
+  const lv = Math.max(1, Math.min(DEFENSE_LEVEL_COUNT, n));
+  const ch = CHAPTERS[lv - 1];
+  const L = DEFENSE_LEVELS[lv - 1];
+  return {
+    ...DEFENSE, id: lv, name: L.name, subtitle: L.subtitle, story: L.story, theme: ch.theme,
+    // 第 1 关是新手第一次守城，再放宽两成
+    hpMul: ch.hpMul * DEFENSE_HP_K * (lv === 1 ? 0.8 : 1), dmgMul: ch.dmgMul * DEFENSE_DMG_K * (lv === 1 ? 0.8 : 1), growth: DEFENSE.growth,
+    waves: ch.waves, events: ch.events, midBoss: ch.midBoss, boss: ch.boss, goldBase: ch.goldBase,
+    power: Math.round((ch.power * DEFENSE_POWER_K) / 100) * 100,
+  };
+}
 
 export const DEFENSE: ChapterDef = {
   id: 50, name: '守城', subtitle: '保卫城池', theme: 'changban', defense: true,
@@ -54,7 +84,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
 };
 export const UNIT_ORDER: UnitKind[] = ['spear', 'shield', 'archer', 'cav', 'xbow'];
 /** 同时在场的士兵上限（武将另算） */
-export const MAX_ALLIES = 20;
+export const MAX_ALLIES = 35;
 
 /** 召唤武将：消耗粮草，在场 30 秒，冷却 40 秒，最多同时 2 位 */
 export const HERO_SUMMON_COST = 120, HERO_SUMMON_TIME = 30, HERO_SUMMON_CD = 40, HERO_SUMMON_MAX = 2;

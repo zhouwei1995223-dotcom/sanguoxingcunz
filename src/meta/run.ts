@@ -1,5 +1,5 @@
 import { skillsUnlockedAt } from '../data/skills';
-import { ChapterDef, DifficultyDef } from '../data/chapters';
+import { ChapterDef, DifficultyDef, CHAPTERS } from '../data/chapters';
 import { weighted } from '../core/math';
 import { save, markDirty } from './save';
 import { newItem, randomItemTemplate, progressTask, grantHero, grantShards, randomShardHero } from './ops';
@@ -156,23 +156,34 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus };
 }
 
-/** 守城模式结算：按坚守时间发金币玄铁，胜利送元宝和碎片（每天第一次胜利翻倍） */
-export function settleDefense(win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number): RunResult {
-  const m = Math.min(5, t / 60);
-  const dfs = (save.defense = save.defense || { best: 0, wins: 0, day: '' });
+/** 守城关卡是否开放：第 1 关直接开放，之后要守住前一关 */
+export function defenseOpen(level: number): boolean {
+  return level <= 1 || (save.defense?.cleared || 0) >= level - 1;
+}
+
+/**
+ * 守城模式结算：金币玄铁按关卡和坚守时间；胜利送元宝和碎片，每天第一次胜利碎片翻倍；
+ * 第一次守住某一关额外送 80×关卡 元宝和碎片。
+ */
+export function settleDefense(level: number, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number): RunResult {
+  const ch = CHAPTERS[Math.max(0, Math.min(CHAPTERS.length - 1, level - 1))];
+  const dfs = (save.defense = save.defense || { best: 0, wins: 0, day: '', cleared: 0 });
+  const progress = Math.min(1, t / 300);
   const today = new Date().toISOString().slice(0, 10);
   const dailyFirst = win && dfs.day !== today;
-  const gold = Math.round((150 * m * (1 + save.maxCleared * 0.3) + coins * 2) * (win ? 1.5 : 1));
-  const iron = Math.round(3 * m * (1 + save.maxCleared * 0.2)) + (win ? 6 : 0);
-  const yuanbao = win ? (dailyFirst ? 60 : 30) : 0;
+  const firstClear = win && level > (dfs.cleared || 0);
+  const gold = Math.round(ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1) + coins * 2);
+  const iron = Math.round(level * 2 + progress * 5 * level + (win ? 3 * level : 0));
+  let yuanbao = win ? 20 + 4 * level : 0;
+  if (firstClear) yuanbao += 80 * level;
   const items: EquipItem[] = [];
-  for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(Math.max(1, save.maxCleared), 0)));
+  for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(level, 0)));
   let shardReward: { hero: string; n: number } | undefined;
-  const sn = win ? (dailyFirst ? 6 : 3) : waves >= 6 ? 1 : 0;
+  const sn = win ? (2 + Math.ceil(level / 2)) * (dailyFirst ? 2 : 1) + (firstClear ? 5 : 0) : waves >= 6 ? 1 : 0;
   if (sn) { shardReward = { hero: randomShardHero(true), n: sn }; grantShards(shardReward.hero, sn); }
   const newBest = waves > dfs.best;
   if (newBest) dfs.best = waves;
-  if (win) { dfs.wins++; dfs.day = today; }
+  if (win) { dfs.wins++; dfs.day = today; if (firstClear) dfs.cleared = level; }
   save.gold += gold;
   save.iron += iron;
   save.yuanbao += yuanbao;
@@ -180,7 +191,7 @@ export function settleDefense(win: boolean, t: number, coins: number, kills: num
   progressTask('kill', kills);
   if (bossKills) progressTask('boss', bossKills);
   markDirty();
-  return { win, firstClear: false, gold, iron, yuanbao, items, newBest, shardReward, defense: { waves, dailyFirst } };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, shardReward, defense: { waves, dailyFirst } };
 }
 
 /** 无尽模式结算：按坚持时间发奖励，每 5 分钟额外送碎片 */

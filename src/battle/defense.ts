@@ -71,7 +71,8 @@ export const TOWERS: [number, number][] = [[-48, -36], [48, -36], [-48, 16], [48
 const DIRS = ['东', '南', '西', '北'];
 
 export function createDefense(b: Battle, heroes: Record<string, HeroInfo>): DefenseState {
-  const cityBase = Math.round(1200 * Math.max(0.7, b.enemyDmgMul));
+  // 城池血量跟这一关的敌人攻击力走
+  const cityBase = Math.round(1200 * Math.max(0.7, b.chapter.dmgMul * b.enemyDmgMul));
   // 武将从城门口出发
   b.player.x = 0; b.player.y = CITY_R + 24;
   return {
@@ -564,11 +565,23 @@ function spawnAround(b: Battle, id: string, side: number, spread = 0.7, opts: { 
   return b.spawnEnemy(id, Math.cos(a) * R, Math.sin(a) * R, opts);
 }
 
-function pool(t: number): [string, number][] {
-  let p = DEFENSE_POOLS[0].pool;
-  for (const x of DEFENSE_POOLS) if (t >= x.from) p = x.pool;
-  return p;
+/** 敌人池：沿用这一关对应章节的兵种（按时间换到后面的波次），50 秒后混入云梯兵 */
+function pool(b: Battle, t: number): [string, number][] {
+  const ws = b.chapter.waves;
+  if (!ws.length) {
+    let p = DEFENSE_POOLS[0].pool;
+    for (const x of DEFENSE_POOLS) if (t >= x.from) p = x.pool;
+    return p;
+  }
+  const ct = t * 1.2;
+  const seg = ws.find((s) => ct >= s.from && ct < s.to) || ws[ws.length - 1];
+  if (t < 50) return seg.pool;
+  const sum = seg.pool.reduce((s, x) => s + x[1], 0);
+  return [...seg.pool, ['siege_ladder', sum * 0.12]];
 }
+
+/** 这一关的精英兵种（取章节里「精英」事件的兵种） */
+const eliteOf = (b: Battle) => (b.chapter.events.find((e) => e.type === 'elite')?.enemy as string) || 'wei_heavy';
 
 /** 刷怪：持续的零散敌人 + 每 20 秒一波主攻（从一两个方向压上来） */
 export function updateDefenseSpawner(b: Battle, dt: number) {
@@ -585,7 +598,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     let alive = 0;
     for (const e of b.enemies) if (!e.dead && !e.boss) alive++;
     const need = Math.min(4, Math.ceil(target - alive));
-    const pl = pool(t);
+    const pl = pool(b, t);
     for (let i = 0; i < need; i++) spawnAround(b, weighted(pl, (x) => x[1])[0], (Math.random() * 4) | 0, 0.78);
   }
   // 主攻波次
@@ -598,13 +611,13 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     const sides = w >= 8 && r < 0.35 ? 3 : w >= 3 && r < 0.65 ? 2 : 1;
     const s0 = (Math.random() * 4) | 0;
     const ss = sides === 3 ? [s0, (s0 + 1) % 4, (s0 + 2) % 4] : sides === 2 ? [s0, (s0 + 2) % 4] : [s0];
-    const pl = pool(t);
+    const pl = pool(b, t);
     const n = Math.round((14 + 4 * w) * b.densityMul);
     for (let i = 0; i < n; i++) spawnAround(b, weighted(pl, (x) => x[1])[0], ss[i % ss.length], 0.4);
     if (w >= 3) for (let i = 0; i < 1 + Math.floor((w - 3) / 2); i++) spawnAround(b, 'siege_ram', ss[i % ss.length], 0.3);
     if (w >= 2) for (let i = 0; i < 2 + Math.floor(w / 2); i++) spawnAround(b, 'siege_ladder', ss[i % ss.length], 0.4);
     if (w >= 5) for (let i = 0; i < 1 + Math.floor((w - 5) / 3); i++) spawnAround(b, 'siege_cata', ss[i % ss.length], 0.3);
-    if (w === 4 || w === 7 || w === 10 || w === 12) for (let i = 0; i < Math.min(3, 1 + Math.floor(w / 5)); i++) spawnAround(b, w >= 7 ? 'wei_heavy' : 'wei_shield', ss[i % ss.length], 0.3, { elite: true });
+    if (w === 4 || w === 7 || w === 10 || w === 12) for (let i = 0; i < Math.min(3, 1 + Math.floor(w / 5)); i++) spawnAround(b, eliteOf(b), ss[i % ss.length], 0.3, { elite: true });
     b.hooks.banner(`第 ${w} 波 · 敌军从${ss.map((s) => DIRS[s]).join('、')}面攻城！`, '#e43b44');
     b.hooks.sfx('boss');
   }

@@ -15,14 +15,14 @@ import {
   CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, starCount, chapterStars } from '../meta/run';
+import { defenseOpen, chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, starCount, chapterStars } from '../meta/run';
 import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, ChapterStoryDialog, ChapterListDialog, TextDialog, staminaAdGain,
+  SidebarDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
@@ -30,6 +30,7 @@ import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, c
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
 import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 
 type Tab = 'shop' | 'equip' | 'battle' | 'talent' | 'hero';
 const TABS: { id: Tab; name: string; icon: string }[] = [
@@ -209,7 +210,6 @@ export class HomeScene implements Scene {
       ...(newbieActive() ? [{ id: 'newbie', icon: 'chest_gold', label: '七日', dot: newbieRedDot(), on: () => game.openDialog(new NewbieDialog()) }] : []),
       { id: 'tasks', icon: 'scroll', label: '任务', dot: tasksRedDot(), on: () => game.openDialog(new TasksDialog()) },
       { id: 'patrol', icon: 'tent', label: '巡营', dot: patrolPending().minutes >= 60, on: () => game.openDialog(new PatrolDialog()) },
-      { id: 'defense', icon: 'p_flag', label: '守城', dot: !(save.defense && save.defense.day === new Date().toISOString().slice(0, 10)), on: () => this.startBattle(-3) },
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
@@ -256,6 +256,23 @@ export class HomeScene implements Scene {
     });
     drawSide(side, 18 * u, false);
     drawSide(sideR, ui.W - bs - 18 * u, true);
+
+    // 模式切换：征战 / 守城（章节卡上方两个页签）
+    const mode = save.homeMode || 'chapter';
+    {
+      const mw = 200 * u, mh = 58 * u, my = L.cy - mh - 8 * u;
+      const today = new Date().toISOString().slice(0, 10);
+      (['chapter', 'defense'] as const).forEach((m, i) => {
+        const mx = ui.W / 2 - mw - 6 * u + i * (mw + 12 * u);
+        const on = mode === m;
+        ui.pixRect(mx, my, mw, mh, on ? (m === 'chapter' ? '#a22633' : '#2f7a3a') : 'rgba(20,12,10,0.78)');
+        ui.pixRect(mx, my + mh - 4 * u, mw, 4 * u, on ? '#fee761' : '#5a4038');
+        ui.text(m === 'chapter' ? '征 战' : '守 城', mx + mw / 2, my + mh / 2 - 2 * u, 28, on ? '#fff4d6' : '#a89a86', 'center', on ? '#3a0d12' : null);
+        if (m === 'defense' && !on && save.defense?.day !== today) ui.redDot(mx + mw - 8 * u, my + 6 * u);
+        if (ui.clicked('mode_' + m, mx, my, mw, mh)) { save.homeMode = m; markDirty(); }
+      });
+    }
+    if (mode === 'defense') { this.drawDefenseCard(ui, L); return; }
 
     // 章节卡（含难度切换）
     const ch = CHAPTERS[Math.min(CHAPTERS.length, save.selectedChapter) - 1];
@@ -322,6 +339,50 @@ export class HomeScene implements Scene {
     if (ui.button('chapters', ui.W - ew - 20 * u, by, ew, bh, '章节', C.btnBlue, { size: 32, sub: `${save.maxCleared}/${CHAPTERS.length}` })) game.openDialog(new ChapterListDialog((c, dd) => { save.selectedChapter = c; save.selectedDiff = dd; markDirty(); }));
   }
   private startRect: [number, number, number, number] = [0, 0, 0, 0];
+
+  /** 守城关卡卡片：和章节卡同样的位置与布局，十关依次解锁 */
+  private drawDefenseCard(ui: UI, L: { chH: number; bh: number; by: number; cy: number }) {
+    const u = ui.u;
+    const n = DEFENSE_LEVEL_COUNT;
+    const lv = Math.max(1, Math.min(n, save.selectedDefense || 1));
+    const ch = defenseChapter(lv);
+    const open = defenseOpen(lv);
+    const cleared = (save.defense?.cleared || 0) >= lv;
+    const cw = ui.W - 80 * u, chH = L.chH;
+    const cx = 40 * u, cy = L.cy;
+    ui.panel(cx, cy, cw, chH, 'wood');
+    ui.pixRect(cx + 30 * u, cy + 20 * u, cw - 60 * u, 46 * u, '#2f7a3a');
+    ui.text(`守城 · 第${lv}关`, ui.W / 2, cy + 43 * u, 24, '#fff4d6', 'center', null);
+    const oy = cy + 66 * u;
+    ui.text('坚守五分钟 · 四面御敌', ui.W / 2, oy + 22 * u, 22, C.textDim);
+    ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, open ? '#fff4d6' : '#8b8b8b');
+    ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
+    const power = combatPower();
+    ui.text(cleared ? '已守住 ✓' : '尚未守住', ui.W / 2 - 14 * u, oy + 142 * u, 20, cleared ? '#9be37a' : '#d9c6a0', 'right');
+    ui.text(`推荐战力 ${fmtNum(ch.power)}`, ui.W / 2 + 14 * u, oy + 142 * u, 20, power >= ch.power ? '#9be37a' : '#ff8a80', 'left');
+    ui.pixRect(ui.W / 2 - 1 * u, oy + 132 * u, 2 * u, 20 * u, '#6b4a3a');
+    if (!open) {
+      ui.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ui.ctx.fillRect(cx + 12 * u, oy + 2 * u, cw - 24 * u, chH - 78 * u);
+      ui.icon('lock', ui.W / 2, oy + 52 * u, 70 * u);
+      ui.text(`守住第${lv - 1}关解锁`, ui.W / 2, oy + 112 * u, 26, '#fff');
+    }
+    if (ui.clicked('def_story', cx + 100 * u, oy, cw - 200 * u, chH - 70 * u)) game.openDialog(new TextDialog(`守城 · ${ch.name}`, ch.story));
+    const aw = 70 * u;
+    if (lv > 1 && ui.button('def_prev', cx - 10 * u, oy + 66 * u - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedDefense = lv - 1; markDirty(); }
+    if (lv < n && ui.button('def_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedDefense = lv + 1; markDirty(); }
+    // 出征 / 无尽 / 关卡总览
+    const bw = 400 * u, bh = L.bh, by = L.by;
+    if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
+    this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
+    const ew = 150 * u;
+    const eo = endlessOpen();
+    if (ui.button('endless', 20 * u, by, ew, bh, '无尽', eo ? C.btnPurple : C.btnGray, { size: 32, sub: eo ? (save.endlessBest ? fmtTime(save.endlessBest) : '挑战') : `通关第${ENDLESS_UNLOCK}章` })) {
+      if (!eo) ui.toast(`通关第${ENDLESS_UNLOCK}章解锁无尽模式`);
+      else this.startBattle(0, 0);
+    }
+    if (ui.button('def_list', ui.W - ew - 20 * u, by, ew, bh, '关卡', C.btnBlue, { size: 32, sub: `${save.defense?.cleared || 0}/${n}` })) game.openDialog(new DefenseListDialog((l) => { save.selectedDefense = l; markDirty(); }));
+  }
 
   private startBattle(id: number, diff = 0) {
     if (!spendStamina()) {
