@@ -2,7 +2,7 @@ import { rand, TAU, weighted } from '../core/math';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
   DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
-  REPAIR_PCT, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_KINDS, BUILD_SLOTS, BUILD_MAX_LV, BUILD_PER_KIND, BUILD_CARD_MAX, UNIT_ORDER,
+  REPAIR_PCT, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_KINDS, BUILD_SLOTS, BUILD_MAX_LV, BUILD_PER_KIND, BUILD_CARD_MAX, UNIT_ORDER, defenseCityMul,
 } from '../data/defense';
 import type { Battle } from './battle';
 import type { Enemy } from './entities';
@@ -79,7 +79,7 @@ const DIRS = ['东', '南', '西', '北'];
 
 export function createDefense(b: Battle, heroes: Record<string, HeroInfo>): DefenseState {
   // 城池血量跟这一关的敌人攻击力走（最少 1200，前两关新手守城不至于被敌将几下拆掉）
-  const cityBase = Math.round(1200 * Math.max(1, b.chapter.dmgMul * b.enemyDmgMul));
+  const cityBase = Math.round(1200 * Math.max(1, (b.chapter.defense && b.chapter.id <= 10 ? defenseCityMul(b.chapter.id) : b.chapter.dmgMul) * b.enemyDmgMul));
   // 武将从城门口出发
   b.player.x = 0; b.player.y = CITY_R + 24;
   return {

@@ -65,6 +65,12 @@ export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[]
 ];
 export const DEFENSE_LEVEL_COUNT = DEFENSE_LEVELS.length;
 
+/** 城池血量倍率：按这一关原本的敌人攻击倍率（不含前两关的放宽系数，否则放宽攻击时城池也跟着变脆） */
+export function defenseCityMul(n: number): number {
+  const lv = Math.max(1, Math.min(DEFENSE_LEVEL_COUNT, n));
+  return CHAPTERS[lv - 1].dmgMul * DEFENSE_DMG_K;
+}
+
 /** 第 n 关（1~10）的章节配置 */
 export function defenseChapter(n: number): ChapterDef {
   const lv = Math.max(1, Math.min(DEFENSE_LEVEL_COUNT, n));
