@@ -86,6 +86,15 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
   };
   const adCfg = kind === 'wx' ? AD_CONFIG.wx : AD_CONFIG.tt;
   /** 推荐组件的 PageManager：提前加载，点按钮时直接展示 */
+  /** 基础库版本是否不低于 v（getAppBaseInfo 拿不到时退回 getSystemInfoSync） */
+  const sdkAtLeast = (v: string) => {
+    let cur = '';
+    try { cur = (api.getAppBaseInfo ? api.getAppBaseInfo().SDKVersion : '') || (api.getSystemInfoSync ? api.getSystemInfoSync().SDKVersion : '') || ''; } catch (e) {}
+    if (!cur) return false;
+    const a = cur.split('.').map(Number), b = v.split('.').map(Number);
+    for (let i = 0; i < 3; i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; }
+    return true;
+  };
   let recommendPM: any = null;
   let recommendLoad: Promise<any> | null = null;
   let recommendReady = false;
@@ -291,7 +300,8 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
         attempt(true);
       });
     },
-    supportsUpdateNotice() { return kind === 'wx' && typeof api.requestSubscribeSystemMessage === 'function'; },
+    // 官方文档：游戏更新提醒的 msgTypeList 从基础库 2.32.1 开始支持，低版本调用会报错，要先判断基础库版本
+    supportsUpdateNotice() { return kind === 'wx' && typeof api.requestSubscribeSystemMessage === 'function' && sdkAtLeast('2.32.1'); },
     updateNoticeState() {
       return new Promise((resolve) => {
         try {
