@@ -1,7 +1,9 @@
 import { CHAPTERS, ChapterDef } from './chapters';
 
 // 守城模式：城池在地图正中，敌军从四面来攻。一局 5 分钟，4:00 敌军主将压阵，撑到 5:00 或击败主将即胜利。
-// 资源「粮草」随时间和击杀增加，在右侧按钮召唤兵种 / 武将（做法 B）；升级三选一里会出现「军令」卡（兵种、城防）和军令联动。
+// 1.0.6 第三轮（用户：又要选技能又要造兵还要去门口造建筑，手忙脚乱）：去掉右侧召唤 / 建造按钮。
+// 粮草随时间和击杀增加，攒够就自动出兵（按已解锁的兵种轮流）；兵种营、建筑、召唤武将、修城、城防军令全部放进升级三选一，
+// 武将技能只出当前武将自己的专属武器（可直接进化），其他武器和兵法不再出现。
 
 export const DEFENSE_DURATION = 300;
 /** 中途敌将 / 主将登场时间 */
@@ -19,33 +21,34 @@ export const CITY_R = 52;
 export const ARENA_R = 300, WALL_W = 40, GATE_HALF = 0.15;
 /** 士兵和召唤武将离主城最远多少（只迎击这个范围附近的敌人，出怪口交给建筑） */
 export const ALLY_LEASH = 175;
-/** 守城主打策略：武将本人的伤害只剩这么多，主要靠兵种和建筑 */
-export const DEF_HERO_DMG = 0.4;
+/** 守城主打策略：武将本人的伤害只剩这么多，主要靠兵种和建筑（第三轮只剩一件专属武器，不再打折；原来 6 件武器 ×0.4） */
+export const DEF_HERO_DMG = 1;
 /** 召唤士兵的生命倍率（1.0.6 第二轮：玩家反馈士兵太耐打，×0.75，配合敌人攻击 +25%，士兵存活时间约为原来的六成） */
 export const ALLY_HP_K = 0.75;
 /** 守城的经验倍率：敌人多、宝石自动吸，升级太勤，×0.6 */
 export const DEF_EXP = 0.6;
 
-/** 建筑：在出怪口附近的建造点（每个门左右各一个）用粮草建造，可升到 3 级 */
+/** 建筑：升级时选「建筑」卡，直接建在城池边上（8 个位置，优先离武将近的一侧）；每种最多 2 座、每座最高 3 级 */
 export type BuildKind = 'tower' | 'cata' | 'spike';
-export interface BuildDef { kind: BuildKind; name: string; icon: string; cost: number; desc: string }
+export interface BuildDef { kind: BuildKind; name: string; icon: string; desc: string }
 export const BUILDS: Record<BuildKind, BuildDef> = {
-  tower: { kind: 'tower', name: '箭塔', icon: 'w_crossbow', cost: 90, desc: '射程远，连续射击单个敌人' },
-  cata: { kind: 'cata', name: '投石台', icon: 'w_catapult', cost: 140, desc: '投出巨石，范围伤害' },
-  spike: { kind: 'spike', name: '拒马阵', icon: 'w_caltrop', cost: 70, desc: '减速并刺伤经过的敌人' },
+  tower: { kind: 'tower', name: '箭塔', icon: 'w_crossbow', desc: '射程远，连续射击单个敌人' },
+  cata: { kind: 'cata', name: '投石台', icon: 'w_catapult', desc: '投出巨石，范围伤害' },
+  spike: { kind: 'spike', name: '鹿角阵', icon: 'w_caltrop', desc: '减速并刺伤靠近城墙的敌人' },
 };
 export const BUILD_KINDS: BuildKind[] = ['tower', 'cata', 'spike'];
-export const BUILD_MAX_LV = 3;
-/** 升到第 n 级的花费倍率（建造是 1 级） */
-export const buildCost = (kind: BuildKind, toLv: number) => Math.round(BUILDS[kind].cost * [1, 1, 1.5, 2.2][toLv]);
-/** 建造点：每个出怪口内侧左右各一个 */
+export const BUILD_MAX_LV = 3, BUILD_PER_KIND = 2;
+/** 建筑卡的满级：每种 2 座 × 3 级 */
+export const BUILD_CARD_MAX = BUILD_MAX_LV * BUILD_PER_KIND;
+/** 城边的 8 个建筑位：四个斜角方向各两个，不挡出城的路 */
 export const BUILD_SLOTS: [number, number][] = [];
-for (let s = 0; s < 4; s++) for (const off of [-0.33, 0.33]) { const a = s * (Math.PI / 2) + off; BUILD_SLOTS.push([Math.cos(a) * 232, Math.sin(a) * 232]); }
+for (let s = 0; s < 4; s++) for (const off of [-0.32, 0.32]) { const a = Math.PI / 4 + s * (Math.PI / 2) + off; BUILD_SLOTS.push([Math.round(Math.cos(a) * 92), Math.round(Math.sin(a) * 84 - 8)]); }
+
 /**
  * 守城十关：每关的敌人强度（血量 / 攻击倍率、兵种、敌将、场景）取对应章节，
  * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
  */
-export const DEFENSE_HP_K = 0.62, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
+export const DEFENSE_HP_K = 0.67, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
 export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
   { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },
   { name: '江夏', subtitle: '刘琦固守', story: '当阳兵败，退守江夏。曹军顺流而下，务必守住这最后的落脚之地。' },
@@ -67,8 +70,8 @@ export function defenseChapter(n: number): ChapterDef {
   const L = DEFENSE_LEVELS[lv - 1];
   return {
     ...DEFENSE, id: lv, name: L.name, subtitle: L.subtitle, story: L.story, theme: ch.theme,
-    // 第 1 关是新手第一次守城，再放宽两成
-    hpMul: ch.hpMul * DEFENSE_HP_K * (lv === 1 ? 0.8 : 1), dmgMul: ch.dmgMul * DEFENSE_DMG_K * (lv === 1 ? 0.8 : 1), growth: DEFENSE.growth,
+    // 第 1 关是新手第一次守城，血量再 ×0.7、攻击 ×0.75
+    hpMul: ch.hpMul * DEFENSE_HP_K * (lv === 1 ? 0.7 : 1), dmgMul: ch.dmgMul * DEFENSE_DMG_K * (lv === 1 ? 0.75 : 1), growth: DEFENSE.growth,
     waves: ch.waves, events: ch.events, midBoss: ch.midBoss, boss: ch.boss, goldBase: ch.goldBase,
     power: Math.round((ch.power * DEFENSE_POWER_K) / 100) * 100,
   };
@@ -88,9 +91,9 @@ export interface UnitDef {
   name: string;
   sprite: string;
   icon: string;
-  /** 召唤消耗的粮草 */
+  /** 自动出兵消耗的粮草 */
   cost: number;
-  /** 每次召唤几个 */
+  /** 每队几个 */
   count: number;
   /** 相对武将攻击 / 生命的倍率 */
   atkK: number;
@@ -115,10 +118,10 @@ export const UNIT_ORDER: UnitKind[] = ['spear', 'shield', 'archer', 'cav', 'xbow
 /** 同时在场的士兵上限（武将另算） */
 export const MAX_ALLIES = 35;
 
-/** 召唤武将：消耗粮草，在场 30 秒，冷却 40 秒，最多同时 2 位 */
-export const HERO_SUMMON_COST = 120, HERO_SUMMON_TIME = 30, HERO_SUMMON_CD = 40, HERO_SUMMON_MAX = 2;
-/** 修城：消耗粮草修复 20% 城池生命，冷却 15 秒 */
-export const REPAIR_COST = 60, REPAIR_PCT = 0.2, REPAIR_CD = 15;
+/** 召唤武将（升级卡）：在场 35 秒，同一位武将 40 秒内不会再出现，最多同时 2 位 */
+export const HERO_SUMMON_TIME = 35, HERO_SUMMON_CD = 40, HERO_SUMMON_MAX = 2;
+/** 修城（升级卡，城池掉到 85% 以下才出现）：修复 30% 城池生命 */
+export const REPAIR_PCT = 0.3;
 
 export type OrderId = 'o_spear' | 'o_shield' | 'o_archer' | 'o_cav' | 'o_xbow' | 'c_wall' | 'c_tower' | 'c_spike' | 'c_beacon' | 'c_drum' | 'c_log';
 
@@ -133,14 +136,14 @@ export interface OrderDef {
   levels: string[];
 }
 
-const unitLevels = (name: string, first: string) => [first, `${name}生命、攻击 +25%`, `${name}生命、攻击 +25%，每次多召唤 1 个`, `${name}生命、攻击 +25%`, `${name}生命、攻击 +25%，每次再多召唤 1 个`];
+const unitLevels = (name: string, first: string) => [first, `${name}生命、攻击 +25%，立即出一队`, `${name}生命、攻击 +25%，每队多 1 个`, `${name}生命、攻击 +25%，立即出一队`, `${name}生命、攻击 +25%，每队再多 1 个`];
 
 export const ORDERS: Record<OrderId, OrderDef> = {
-  o_spear: { id: 'o_spear', name: '枪兵营', icon: 'w_spear', max: 5, unit: 'spear', levels: unitLevels('枪兵', '枪兵生命、攻击 +25%') },
-  o_shield: { id: 'o_shield', name: '盾兵营', icon: 'p_armor', max: 5, unit: 'shield', levels: unitLevels('盾兵', '解锁盾兵：血厚的前排，拖住敌人') },
-  o_archer: { id: 'o_archer', name: '弓兵营', icon: 'w_crossbow', max: 5, unit: 'archer', levels: unitLevels('弓兵', '解锁弓兵：远程放箭的后排') },
-  o_cav: { id: 'o_cav', name: '骑兵营', icon: 'w_horse', max: 5, unit: 'cav', levels: unitLevels('骑兵', '解锁骑兵：快速追杀四处的敌人') },
-  o_xbow: { id: 'o_xbow', name: '弩车营', icon: 'w_catapult', max: 5, unit: 'xbow', levels: unitLevels('弩车', '解锁弩车：射程最远，弩箭穿透') },
+  o_spear: { id: 'o_spear', name: '枪兵营', icon: 'w_spear', max: 5, unit: 'spear', levels: unitLevels('枪兵', '枪兵生命、攻击 +25%，立即出一队') },
+  o_shield: { id: 'o_shield', name: '盾兵营', icon: 'p_armor', max: 5, unit: 'shield', levels: unitLevels('盾兵', '解锁盾兵并立即出一队：血厚的前排，拖住敌人，之后自动出兵') },
+  o_archer: { id: 'o_archer', name: '弓兵营', icon: 'w_crossbow', max: 5, unit: 'archer', levels: unitLevels('弓兵', '解锁弓兵并立即出一队：远程放箭的后排，之后自动出兵') },
+  o_cav: { id: 'o_cav', name: '骑兵营', icon: 'w_horse', max: 5, unit: 'cav', levels: unitLevels('骑兵', '解锁骑兵并立即出一队：快速追杀四处的敌人，之后自动出兵') },
+  o_xbow: { id: 'o_xbow', name: '弩车营', icon: 'w_catapult', max: 5, unit: 'xbow', levels: unitLevels('弩车', '解锁弩车并立即出一队：射程最远，弩箭穿透，之后自动出兵') },
   c_wall: { id: 'c_wall', name: '城墙加固', icon: 'p_armor', max: 5, levels: Array(5).fill('城池生命上限 +20%，并立即修复 30%') },
   c_tower: { id: 'c_tower', name: '角楼弓手', icon: 'w_crossbow', max: 5, levels: ['一座角楼派驻弓手，自动射击', '再加一座角楼', '再加一座角楼', '四座角楼全部派驻弓手', '角楼弓手伤害 +60%'] },
   c_spike: { id: 'c_spike', name: '拒马', icon: 'w_caltrop', max: 5, levels: ['城下布满拒马：贴近城墙的敌人持续受伤', '拒马伤害 +50%', '拒马伤害 +50%，并减速敌人', '拒马伤害 +50%', '拒马伤害 +50%'] },

@@ -1,13 +1,13 @@
 import { rand, TAU, weighted } from '../core/math';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
-  DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_COST, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
-  REPAIR_COST, REPAIR_PCT, REPAIR_CD, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_SLOTS, BUILD_MAX_LV, buildCost,
+  DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
+  REPAIR_PCT, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_KINDS, BUILD_SLOTS, BUILD_MAX_LV, BUILD_PER_KIND, BUILD_CARD_MAX, UNIT_ORDER,
 } from '../data/defense';
 import type { Battle } from './battle';
 import type { Enemy } from './entities';
 
-// 守城模式的局内逻辑：城池、我方士兵 / 武将的自动战斗、角楼 / 拒马 / 滚木、刷怪波次、召唤与修城。
+// 守城模式的局内逻辑：城池、我方士兵 / 武将的自动战斗、角楼 / 拒马 / 滚木、刷怪波次、自动出兵、升级卡（建筑 / 武将 / 修城）。
 
 export interface Ally {
   kind: UnitKind | 'hero';
@@ -52,7 +52,8 @@ export interface DefenseState {
   links: Set<LinkId>;
   heroes: Record<string, HeroInfo>;
   heroCd: Record<string, number>;
-  repairCd: number;
+  /** 自动出兵：轮到第几个已解锁的兵种 */
+  nextUnit: number;
   towerT: number[];
   spikeT: number;
   logT: number;
@@ -77,13 +78,13 @@ export const TOWERS: [number, number][] = [[-48, -36], [48, -36], [-48, 16], [48
 const DIRS = ['东', '南', '西', '北'];
 
 export function createDefense(b: Battle, heroes: Record<string, HeroInfo>): DefenseState {
-  // 城池血量跟这一关的敌人攻击力走
-  const cityBase = Math.round(1200 * Math.max(0.7, b.chapter.dmgMul * b.enemyDmgMul));
+  // 城池血量跟这一关的敌人攻击力走（最少 1200，前两关新手守城不至于被敌将几下拆掉）
+  const cityBase = Math.round(1200 * Math.max(1, b.chapter.dmgMul * b.enemyDmgMul));
   // 武将从城门口出发
   b.player.x = 0; b.player.y = CITY_R + 24;
   return {
     cityHp: cityBase, cityMax: cityBase, cityBase, cityFlash: 0, grain: 120,
-    allies: [], arrows: [], logs: [], orders: {}, links: new Set(), heroes, heroCd: {}, repairCd: 0,
+    allies: [], arrows: [], logs: [], orders: {}, links: new Set(), heroes, heroCd: {}, nextUnit: 0,
     towerT: [0.5, 0.7, 0.9, 1.1], spikeT: 0.5, logT: 7, waveIdx: 0, nextWave: 12, trickleT: 1, midDone: false, bossDone: false,
     downT: 0, lost: false, allyKills: 0, breakT: 10, dmgBy: {}, builds: [],
   };
@@ -116,25 +117,28 @@ export function unitStats(b: Battle, kind: UnitKind) {
 }
 
 export function grainRate(d: DefenseState): number {
-  return 4.5 * (1 + 0.3 * orderLv(d, 'c_beacon'));
+  return 4.3 * (1 + 0.3 * orderLv(d, 'c_beacon'));
 }
 
-const soldiers = (d: DefenseState) => d.allies.reduce((n, a) => n + (!a.dead && a.kind !== 'hero' ? 1 : 0), 0);
+export const soldiers = (d: DefenseState) => d.allies.reduce((n, a) => n + (!a.dead && a.kind !== 'hero' ? 1 : 0), 0);
 const heroesOut = (d: DefenseState) => d.allies.filter((a) => !a.dead && a.kind === 'hero');
 
-/** 召唤兵种：返回错误提示或 null */
-export function summonUnit(b: Battle, kind: UnitKind): string | null {
+/** 已解锁的兵种（自动出兵按这个顺序轮流） */
+export const unlockedUnits = (d: DefenseState) => UNIT_ORDER.filter((k) => unitUnlocked(d, k));
+/** 自动出兵下一队是什么 */
+export function nextAutoUnit(d: DefenseState): UnitKind {
+  const ks = unlockedUnits(d);
+  return ks[d.nextUnit % ks.length];
+}
+
+/** 出一队兵（不花粮草）：驻守在武将所在一侧（离武将最近的出怪口方向）的城外。返回实际出了几个 */
+export function spawnSquad(b: Battle, kind: UnitKind): number {
   const d = b.def!;
   const u = UNITS[kind];
-  if (!unitUnlocked(d, kind)) return `升级时选择「${ORDERS[u.unlock!].name}」解锁${u.name}`;
-  if (d.grain < u.cost) return `粮草不足（需要 ${u.cost}）`;
   const st = unitStats(b, kind);
   const room = MAX_ALLIES - soldiers(d);
-  if (room <= 0) return `兵力已满（最多 ${MAX_ALLIES} 人）`;
-  d.grain -= u.cost;
+  if (room <= 0) return 0;
   const n = Math.min(room, st.count);
-  // 从离武将最近的一面城墙出城
-  // 驻守在武将所在方向（最近的出怪口那一侧）的城外
   const a0 = nearestGate(b.player.x, b.player.y) * (TAU / 4);
   for (let i = 0; i < n; i++) {
     const a = a0 + rand(-0.6, 0.6);
@@ -147,28 +151,31 @@ export function summonUnit(b: Battle, kind: UnitKind): string | null {
     });
   }
   b.fx.push({ kind: 'ring', x: Math.cos(a0) * (CITY_R + 10), y: Math.sin(a0) * (CITY_R + 10), t: 0, dur: 0.4, r: 26, color: '#9be37a' });
-  b.hooks.sfx('horse');
-  return null;
+  return n;
 }
 
-export function heroCanSummon(b: Battle, id: string): string | null {
+/** 粮草攒够就自动出下一队（兵力满了先存着） */
+function autoProduce(b: Battle) {
   const d = b.def!;
-  if (id === b.hero.id) return '出战武将已在场上';
-  if ((d.heroCd[id] || 0) > 0) return `冷却中（${Math.ceil(d.heroCd[id])} 秒）`;
-  if (heroesOut(d).some((a) => a.heroId === id)) return '已在场上';
-  if (heroesOut(d).length >= HERO_SUMMON_MAX) return `最多同时召唤 ${HERO_SUMMON_MAX} 位武将`;
-  if (d.grain < HERO_SUMMON_COST) return `粮草不足（需要 ${HERO_SUMMON_COST}）`;
-  return null;
+  const kind = nextAutoUnit(d);
+  if (d.grain < UNITS[kind].cost || soldiers(d) >= MAX_ALLIES) return;
+  if (spawnSquad(b, kind) > 0) { d.grain -= UNITS[kind].cost; d.nextUnit++; }
+}
+
+/** 能不能出「召唤武将」卡 */
+export function heroCanSummon(b: Battle, id: string): boolean {
+  const d = b.def!;
+  if (id === b.hero.id || (d.heroCd[id] || 0) > 0) return false;
+  const out = heroesOut(d);
+  return !out.some((a) => a.heroId === id) && out.length < HERO_SUMMON_MAX;
 }
 
 /** 召唤已解锁的武将：强度按武将自己的等级、星级、巅峰等级 */
-export function summonHero(b: Battle, id: string): string | null {
-  const err = heroCanSummon(b, id);
-  if (err) return err;
+export function summonHero(b: Battle, id: string) {
   const d = b.def!;
   const h = d.heroes[id];
-  d.grain -= HERO_SUMMON_COST;
-  d.heroCd[id] = HERO_SUMMON_CD;
+  if (!h) return;
+  d.heroCd[id] = HERO_SUMMON_TIME + HERO_SUMMON_CD;
   const a = Math.atan2(b.player.y, b.player.x) + rand(-0.5, 0.5);
   const hp = Math.round(h.hp * 5);
   d.allies.push({
@@ -179,20 +186,13 @@ export function summonHero(b: Battle, id: string): string | null {
   b.hooks.banner(`${h.name}前来助阵！`, '#fee761');
   b.hooks.sfx('boss');
   b.fx.push({ kind: 'ring', x: Math.cos(a) * (CITY_R + 16), y: Math.sin(a) * (CITY_R + 16), t: 0, dur: 0.6, r: 50, color: '#fee761' });
-  return null;
 }
 
-export function repairCity(b: Battle): string | null {
+export function repairCity(b: Battle) {
   const d = b.def!;
-  if (d.repairCd > 0) return `修城冷却中（${Math.ceil(d.repairCd)} 秒）`;
-  if (d.cityHp >= d.cityMax) return '城池完好，不需要修';
-  if (d.grain < REPAIR_COST) return `粮草不足（需要 ${REPAIR_COST}）`;
-  d.grain -= REPAIR_COST;
-  d.repairCd = REPAIR_CD;
   d.cityHp = Math.min(d.cityMax, d.cityHp + d.cityMax * REPAIR_PCT);
   b.fx.push({ kind: 'ring', x: 0, y: -8, t: 0, dur: 0.6, r: 70, color: '#9be37a' });
   b.hooks.sfx('evolve');
-  return null;
 }
 
 /** 选了军令卡 */
@@ -204,11 +204,12 @@ export function applyOrder(b: Battle, id: OrderId, lv: number) {
     d.cityMax = Math.round(d.cityBase * (1 + 0.2 * lv));
     d.cityHp = Math.min(d.cityMax, d.cityHp + (d.cityMax - old) + d.cityMax * 0.3);
   }
-  // 已在场的同兵种立刻享受成长
+  // 已在场的同兵种立刻享受成长；解锁和第 2、4 级立即出一队（不花粮草）
   const kind = ORDERS[id].unit;
   if (kind) {
     const st = unitStats(b, kind);
     for (const a of d.allies) if (!a.dead && a.kind === kind) { const k = st.hp / a.maxHp; a.maxHp = st.hp; a.hp = Math.round(a.hp * k); a.atk = st.atk; a.speed = st.speed; }
+    if (lv === 1 || lv === 2 || lv === 4) spawnSquad(b, kind);
   }
 }
 
@@ -268,33 +269,50 @@ export function terrainPush(o: { x: number; y: number }, r: number) {
   o.x *= to / (dist || 1); o.y *= to / (dist || 1);
 }
 
-// —— 建筑 ——
-/** 离武将最近的建造点 */
-export function nearestSlot(b: Battle): number {
-  const p = b.player;
-  let best = 0, bd = 1e9;
-  BUILD_SLOTS.forEach(([x, y], i) => { const dd = (x - p.x) ** 2 + (y - p.y) ** 2; if (dd < bd) { bd = dd; best = i; } });
-  return best;
-}
+// —— 建筑（升级卡）——
 export const buildingAt = (d: DefenseState, slot: number) => d.builds.find((x) => x.slot === slot) || null;
-/** 在最近的建造点建造 / 升级，返回错误提示或 null */
-export function buildAt(b: Battle, kind: BuildKind): string | null {
+/** 建筑卡等级 = 这种建筑所有座数的等级之和（0~6） */
+export const buildLevel = (d: DefenseState, kind: BuildKind) => d.builds.reduce((n, x) => n + (x.kind === kind ? x.lv : 0), 0);
+/**
+ * 选一次建筑卡做什么：第 1 次建第 1 座 → 升到 2 级 → 建第 2 座 → 第 2 座升 2 级 → 第 1 座升 3 级 → 第 2 座升 3 级。
+ * 返回 null 表示满级或没有空位。
+ */
+export function buildStep(d: DefenseState, kind: BuildKind): { build: true } | { up: Building } | null {
+  const mine = d.builds.filter((x) => x.kind === kind);
+  if (buildLevel(d, kind) >= BUILD_CARD_MAX) return null;
+  const free = d.builds.length < BUILD_SLOTS.length;
+  if (!mine.length) return free ? { build: true } : null;
+  if (mine.length < BUILD_PER_KIND && mine.every((x) => x.lv >= 2) && free) return { build: true };
+  const low = mine.filter((x) => x.lv < BUILD_MAX_LV).sort((a, c) => a.lv - c.lv)[0];
+  return low ? { up: low } : null;
+}
+export function buildStepText(d: DefenseState, kind: BuildKind): string {
+  const st = buildStep(d, kind);
+  const n = BUILDS[kind].name;
+  if (!st) return `${n}已满级`;
+  if ('build' in st) return `在城边建造第 ${d.builds.filter((x) => x.kind === kind).length + 1} 座${n}：${BUILDS[kind].desc}`;
+  return `一座${n}升到 ${st.up.lv + 1} 级：伤害 +60%`;
+}
+/** 选了建筑卡：新建（城边离武将最近的空位）或升级 */
+export function applyBuild(b: Battle, kind: BuildKind) {
   const d = b.def!;
-  const slot = nearestSlot(b);
-  const cur = buildingAt(d, slot);
-  if (cur && cur.kind !== kind) return `这里已经有${BUILDS[cur.kind].name}了`;
-  const lv = cur ? cur.lv + 1 : 1;
-  if (lv > BUILD_MAX_LV) return `${BUILDS[kind].name}已经满级`;
-  const cost = buildCost(kind, lv);
-  if (d.grain < cost) return `粮草不足（需要 ${cost}）`;
-  d.grain -= cost;
-  if (cur) cur.lv = lv; else d.builds.push({ slot, kind, lv: 1, cdT: 0.5 });
+  const st = buildStep(d, kind);
+  if (!st) return;
+  let slot: number;
+  if ('build' in st) {
+    const p = b.player;
+    let best = -1, bd = 1e9;
+    BUILD_SLOTS.forEach(([x, y], i) => { if (buildingAt(d, i)) return; const dd = (x - p.x) ** 2 + (y - p.y) ** 2; if (dd < bd) { bd = dd; best = i; } });
+    if (best < 0) return;
+    slot = best;
+    d.builds.push({ slot, kind, lv: 1, cdT: 0.5 });
+  } else { st.up.lv++; slot = st.up.slot; }
   const [x, y] = BUILD_SLOTS[slot];
   b.fx.push({ kind: 'shock', x, y: y - 6, t: 0, dur: 0.45, r: 46, w: 8, color: '#fee761', real: true });
   b.hooks.sfx('evolve');
-  b.hooks.banner(lv > 1 ? `${BUILDS[kind].name}升到 ${lv} 级` : `建成${BUILDS[kind].name}`, '#fee761');
-  return null;
 }
+/** 还能选的建筑卡 */
+export const buildChoices = (d: DefenseState) => BUILD_KINDS.filter((k) => buildStep(d, k)).map((k) => ({ id: k, lv: buildLevel(d, k) + 1 }));
 
 function updateBuilds(b: Battle, dt: number) {
   const d = b.def!;
@@ -750,7 +768,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
 export function updateDefense(b: Battle, dt: number) {
   const d = b.def!;
   d.grain += grainRate(d) * dt;
-  d.repairCd = Math.max(0, d.repairCd - dt);
+  autoProduce(b);
   d.cityFlash = Math.max(0, d.cityFlash - dt);
   for (const k in d.heroCd) d.heroCd[k] = Math.max(0, d.heroCd[k] - dt);
   updateAllies(b, dt);

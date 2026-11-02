@@ -6,7 +6,7 @@ function gateGap(a: number): number {
   for (let s = 0; s < 4; s++) { let d = a - s * (Math.PI / 2); while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; m = Math.min(m, Math.abs(d)); }
   return m;
 }
-import { TOWERS, nearestSlot, buildingAt } from './defense';
+import { TOWERS, buildingAt } from './defense';
 import { getPlatform } from '../platform';
 import { sprite, scaled, Sprite } from '../gfx/atlas';
 import { THEMES, GroundTheme } from '../gfx/art/env';
@@ -1065,24 +1065,10 @@ export class WorldRenderer {
         } });
       }
     }
-    // 建造点 / 建筑
-    const near = nearestSlot(b);
+    // 城边的建筑（升级时选建筑卡建造，空位不画）
     BUILD_SLOTS.forEach(([x, y], i) => {
       const bd = buildingAt(d, i);
-      if (!bd) {
-        // 空建造点：虚线圈，离武将最近的那个高亮
-        g.globalAlpha = i === near ? 0.9 : 0.45;
-        g.strokeStyle = i === near ? '#fee761' : '#ead4aa';
-        g.lineWidth = 1;
-        g.setLineDash ? g.setLineDash([3, 3]) : null;
-        this.ellipse(x, y, 13, 9, true);
-        g.setLineDash ? g.setLineDash([]) : null;
-        g.fillStyle = i === near ? '#fee761' : '#ead4aa';
-        g.fillRect(Math.round(x - this.camX) - 3, Math.round(y - this.camY) - 1, 7, 2);
-        g.fillRect(Math.round(x - this.camX) - 1, Math.round(y - this.camY) - 3, 2, 7);
-        g.globalAlpha = 1;
-        return;
-      }
+      if (!bd) return;
       if (bd.kind === 'spike') {
         g.globalAlpha = 0.25; g.fillStyle = '#5a6988'; this.ellipse(x, y, 36, 26); g.globalAlpha = 1;
         for (let k = 0; k < 10 + bd.lv * 4; k++) {

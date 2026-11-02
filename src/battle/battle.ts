@@ -19,8 +19,9 @@ import { skipHordesBefore, updateSpawner } from './spawner';
 import { updateBoss } from './boss';
 import {
   DefenseState, updateDefense, reviveCity, enemyTarget, enemyContact, heroDown, shotHitsCity, hurtCity, orderChoices, readyLinks, applyOrder, applyLink, orderLv,
+  buildChoices, applyBuild, heroCanSummon, summonHero, repairCity,
 } from './defense';
-import { ORDERS, LINKS, OrderId, LinkId, DEF_HERO_DMG, DEF_EXP, ARENA_R } from '../data/defense';
+import { ORDERS, LINKS, OrderId, LinkId, DEF_HERO_DMG, DEF_EXP, ARENA_R, BuildKind } from '../data/defense';
 
 export type Choice =
   | { kind: 'weapon'; id: WeaponId; lv: number; isNew: boolean }
@@ -30,7 +31,11 @@ export type Choice =
   | { kind: 'gold' }
   /** 守城模式：军令卡（兵种 / 城防）与军令联动 */
   | { kind: 'order'; id: OrderId; lv: number; isNew: boolean }
-  | { kind: 'link'; id: LinkId };
+  | { kind: 'link'; id: LinkId }
+  /** 守城模式：建筑（建在城边 / 升级）、召唤武将、修城 */
+  | { kind: 'build'; id: BuildKind; lv: number; isNew: boolean }
+  | { kind: 'hero'; id: string }
+  | { kind: 'repair' };
 
 export interface UltRing {
   r: number;
@@ -389,7 +394,8 @@ export class Battle {
 
   /** 开局奇遇：随机 3 个 */
   rollQiyu(n = 3): QiyuId[] {
-    return shuffle(QIYUS.map((q) => q.id)).slice(0, n);
+    // 守城只用当前武将的专属武器，「神兵天降」（送一件别的兵器）不出现
+    return shuffle(QIYUS.map((q) => q.id).filter((id) => !(this.chapter.defense && id === 'shenbing'))).slice(0, n);
   }
 
   applyQiyu(id: QiyuId) {
@@ -2000,6 +2006,7 @@ export class Battle {
 
   // —— 升级选项 ——
   rollChoices(n = 3): Choice[] {
+    if (this.def) return this.rollDefenseChoices(n);
     const pool: { c: Choice; w: number }[] = [];
     const ok = (kind: string, id: string) => !this.banned.has(kind + ':' + id);
     // 已有武器对应的进化兵法：出现几率更高，方便凑出进化
@@ -2017,11 +2024,10 @@ export class Battle {
       const k = Math.min(1, 8 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: (wanted.has(id) ? 3 : 1.4) * k });
     }
-    // 守城：军令卡和军令联动
-    if (this.def) {
-      for (const o of orderChoices(this.def)) if (ok('order', o.id)) pool.push({ c: { kind: 'order', id: o.id, lv: o.lv, isNew: o.lv === 1 }, w: o.w });
-      for (const id of readyLinks(this.def)) pool.push({ c: { kind: 'link', id }, w: 8 });
-    }
+    return this.pickChoices(pool, n);
+  }
+
+  private pickChoices(pool: { c: Choice; w: number }[], n: number): Choice[] {
     const out: Choice[] = [];
     const items = shuffle(pool.slice());
     while (out.length < n && items.length) {
@@ -2031,6 +2037,26 @@ export class Battle {
     }
     if (out.length === 0) { out.push({ kind: 'heal' }, { kind: 'gold' }); }
     return out;
+  }
+
+  /**
+   * 守城的升级三选一：兵种营 / 城防军令、建筑、召唤武将、修城，外加当前武将自己的专属武器（满级直接可以进化）。
+   * 别的武器和兵法不出现——守城靠兵和建筑，不用再凑技能。
+   */
+  private rollDefenseChoices(n: number): Choice[] {
+    const d = this.def!;
+    const pool: { c: Choice; w: number }[] = [];
+    const ok = (kind: string, id: string) => !this.banned.has(kind + ':' + id);
+    for (const o of orderChoices(d)) if (ok('order', o.id)) pool.push({ c: { kind: 'order', id: o.id, lv: o.lv, isNew: o.lv === 1 }, w: o.w });
+    for (const id of readyLinks(d)) pool.push({ c: { kind: 'link', id }, w: 8 });
+    for (const bc of buildChoices(d)) if (ok('build', bc.id)) pool.push({ c: { kind: 'build', id: bc.id, lv: bc.lv, isNew: bc.lv === 1 }, w: bc.lv === 1 ? 3 : 2.4 });
+    const hs = Object.keys(d.heroes).filter((id) => heroCanSummon(this, id));
+    for (const id of hs) pool.push({ c: { kind: 'hero', id }, w: Math.min(2.4, 4 / hs.length) });
+    if (d.cityHp < d.cityMax * 0.85) pool.push({ c: { kind: 'repair' }, w: 2 + 10 * (1 - d.cityHp / d.cityMax) });
+    const w = this.weapon(this.hero.weapon);
+    if (w && !w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id: w.id, lv: w.lv + 1, isNew: false }, w: 2.6 });
+    if (w && !w.evo && w.lv >= MAX_WEAPON_LV) pool.push({ c: { kind: 'evo', id: w.id }, w: 6 });
+    return this.pickChoices(pool, n);
   }
 
   /** 封禁一个新技能选项：本局不再出现，并换一个新的 */
@@ -2080,7 +2106,10 @@ export class Battle {
       } else if (c.kind === 'passive') {
         const helps = this.evoTargets(c.id).length > 0;
         s += c.isNew ? 25 + (helps ? 35 : 0) : 30 + (helps ? 12 : 0);
-      } else if (c.kind === 'link') s += 120;
+      } else if (c.kind === 'link' || c.kind === 'evo') s += 120;
+      else if (c.kind === 'repair' && this.def) s += this.def.cityHp < this.def.cityMax * 0.5 ? 95 : 30;
+      else if (c.kind === 'build') s += c.isNew ? 54 : 46;
+      else if (c.kind === 'hero') s += 47;
       else if (c.kind === 'order' && this.def) {
         // 城快守不住时优先加固城防；兵种卡先解锁、再升级
         const hurt = this.def.cityHp < this.def.cityMax * 0.5;
@@ -2129,13 +2158,23 @@ export class Battle {
       case 'link':
         if (this.def) applyLink(this, c.id);
         break;
+      case 'build':
+        if (this.def) applyBuild(this, c.id);
+        break;
+      case 'hero':
+        if (this.def) summonHero(this, c.id);
+        break;
+      case 'repair':
+        if (this.def) repairCity(this);
+        break;
     }
     this.recalc();
   }
 
   /** 可进化的武器：5 级 + 拥有对应兵法 */
   evolvable(): WeaponId[] {
-    return this.weapons.filter((w) => !w.evo && w.lv >= MAX_WEAPON_LV && this.passiveLv(WEAPONS[w.id].evoPassive) > 0).map((w) => w.id);
+    // 守城没有兵法：专属武器满级就能进化
+    return this.weapons.filter((w) => !w.evo && w.lv >= MAX_WEAPON_LV && (this.def || this.passiveLv(WEAPONS[w.id].evoPassive) > 0)).map((w) => w.id);
   }
 
   /**
@@ -2144,6 +2183,8 @@ export class Battle {
    * 还是进化不了就给 5 个升级，并优先升最接近满级的武器（下一个宝箱更容易进化）。
    */
   rollChest(boss: boolean): Choice[] {
+    // 守城：宝箱直接给守城的升级项（不重复）
+    if (this.def) return this.rollDefenseChoices(boss ? 3 : Math.random() < 0.3 ? 2 : 1).filter((c) => c.kind !== 'heal' && c.kind !== 'gold');
     const out: Choice[] = [];
     let evo = this.evolvable();
     let count = boss ? 3 : Math.random() < 0.08 ? 5 : Math.random() < 0.3 ? 3 : 1;

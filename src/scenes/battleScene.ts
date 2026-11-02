@@ -19,7 +19,7 @@ import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog, HeroSummonDialog, BuildDialog } from './battleDialogs';
+import { LevelUpDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
@@ -27,8 +27,8 @@ import { funnel } from '../meta/telemetry';
 import { NO_ADS } from '../data/platformConfig';
 import { HEROES } from '../data/heroes';
 import { heroBase } from '../meta/ops';
-import { createDefense, HeroInfo, grainRate, unitUnlocked, summonUnit, repairCity } from '../battle/defense';
-import { UNITS, UNIT_ORDER, HERO_SUMMON_COST, REPAIR_COST } from '../data/defense';
+import { createDefense, HeroInfo, grainRate, nextAutoUnit, soldiers, buildStepText } from '../battle/defense';
+import { UNITS, MAX_ALLIES, BUILDS, BUILD_CARD_MAX, REPAIR_PCT, HERO_SUMMON_TIME } from '../data/defense';
 import { ORDERS, LINKS, defenseChapter } from '../data/defense';
 
 export class BattleScene implements Scene {
@@ -90,6 +90,7 @@ export class BattleScene implements Scene {
     if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
     infoHero = this.battle.hero.id;
+    infoBattle = this.battle;
     // 敌将血量跟玩家战力挂钩：战力 ÷ 推荐战力
     if (!this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense) this.battle.powerRatio = combatPower(stats) / Math.max(1, recommendedPower(this.chapter, this.diff));
     if (this.weekly) {
@@ -357,6 +358,8 @@ export class BattleScene implements Scene {
 
   private choiceLine(r: Choice): string {
     const info = choiceInfo(r);
+    if (r.kind === 'hero' || r.kind === 'repair') return info.name;
+    if (r.kind === 'build') return info.name + (info.isNew ? ' 建成' : ' 强化');
     return r.kind === 'evo' || r.kind === 'link' ? '进化！' + info.name
       : r.kind === 'gold' ? '军饷 +30' : r.kind === 'heal' ? '肉包子 回血'
       : info.name + (info.isNew ? ' 新获得' : ' Lv.' + info.lv);
@@ -560,43 +563,30 @@ export class BattleScene implements Scene {
     }
   }
 
-  /** 守城：粮草、召唤兵种 / 武将、修城按钮（放在大招按钮的另一侧，竖排） */
+  /** 守城：粮草和自动出兵进度（放在大招按钮的另一侧；不用点，兵种 / 建筑 / 武将 / 修城都在升级时选） */
   private drawDefensePanel() {
     const ui = game.ui;
     const u = ui.u;
     const b = this.battle;
     const d = b.def!;
-    const top = ui.safeTop + 8 * u;
-    void top;
     const right = !save.settings.ultRight;
-    const bw = 112 * u, bh = 84 * u, gap = 8 * u;
+    const bw = 150 * u, bh = 150 * u;
     const x = right ? ui.W - bw - 14 * u : 14 * u;
-    let y = ui.H * 0.44;
-    // 粮草（按钮列上方）
-    ui.pixRect(x, y - 62 * u, bw, 54 * u, 'rgba(10,6,8,0.65)');
-    ui.icon('p_ration', x + 24 * u, y - 35 * u, 32 * u);
-    ui.text(`${Math.floor(d.grain)}`, x + 72 * u, y - 44 * u, 24, '#fee761');
-    ui.text(`+${grainRate(d).toFixed(1)}/秒`, x + 72 * u, y - 20 * u, 15, C.textDim);
-    const btn = (id: string, icon: string, label: string, cost: number, ok: boolean, on: () => void, extra?: string) => {
-      const pressed = ui.isPressed(id);
-      const off = pressed ? 3 * u : 0;
-      ui.pixRect(x, y + off, bw, bh, ok ? 'rgba(20,40,20,0.82)' : 'rgba(30,24,24,0.7)');
-      ui.pixRect(x, y + off, bw, 3 * u, ok ? '#63c74d' : '#5a4038');
-      ui.icon(icon, x + 30 * u, y + bh / 2 - 8 * u + off, 44 * u, ok ? 1 : 0.45);
-      ui.text(label, x + 76 * u, y + 30 * u + off, 20, ok ? '#fff4d6' : '#9a8a7a');
-      ui.text(extra || String(cost), x + 76 * u, y + 62 * u + off, 20, ok ? '#9be37a' : '#a86a5a');
-      if (ui.clicked(id, x, y, bw, bh)) on();
-      y += bh + gap;
-    };
-    for (const k of UNIT_ORDER) {
-      if (!unitUnlocked(d, k)) continue;
-      const un = UNITS[k];
-      btn('def_' + k, un.icon, un.name, un.cost, d.grain >= un.cost, () => { const err = summonUnit(b, k); if (err) ui.toast(err); });
-    }
-    const heroIds = Object.keys(d.heroes).filter((id) => id !== b.hero.id);
-    btn('def_build', 'w_catapult', '建造', 70, d.grain >= 70, () => game.openDialog(new BuildDialog(this)), '70起');
-    if (heroIds.length) btn('def_hero', 'star', '武将', HERO_SUMMON_COST, d.grain >= HERO_SUMMON_COST, () => game.openDialog(new HeroSummonDialog(this)));
-    btn('def_repair', 'p_armor', '修城', REPAIR_COST, d.grain >= REPAIR_COST && d.repairCd <= 0 && d.cityHp < d.cityMax, () => { const err = repairCity(b); if (err) ui.toast(err); }, d.repairCd > 0 ? `${Math.ceil(d.repairCd)}秒` : undefined);
+    const y = ui.H * 0.5;
+    const kind = nextAutoUnit(d);
+    const un = UNITS[kind];
+    const full = soldiers(d) >= MAX_ALLIES;
+    ui.pixRect(x, y, bw, bh, 'rgba(10,6,8,0.62)');
+    ui.icon('p_ration', x + 24 * u, y + 24 * u, 30 * u);
+    ui.text(`${Math.floor(d.grain)}`, x + 46 * u, y + 18 * u, 22, '#fee761', 'left');
+    ui.text(`+${grainRate(d).toFixed(1)}/秒`, x + 46 * u, y + 40 * u, 14, C.textDim, 'left');
+    // 下一队：图标 + 进度条
+    ui.icon(un.icon, x + 30 * u, y + 84 * u, 40 * u, full ? 0.45 : 1);
+    ui.text(full ? '兵力已满' : `下一队${un.name}`, x + 56 * u, y + 74 * u, 16, full ? '#a89a86' : '#fff4d6', 'left');
+    const k = Math.min(1, d.grain / un.cost);
+    ui.pixRect(x + 56 * u, y + 90 * u, bw - 68 * u, 10 * u, '#231917');
+    ui.pixRect(x + 56 * u, y + 90 * u, (bw - 68 * u) * k, 10 * u, full ? '#6b5a4a' : '#9be37a');
+    ui.text(`兵力 ${soldiers(d)}/${MAX_ALLIES}`, x + bw / 2, y + 128 * u, 16, '#d9c6a0');
     // 城池不在屏幕里：屏幕边缘画一个指向城池的箭头（城墙挨打时变红闪烁）
     const [sx, sy] = this.renderer.worldToScreen(0, -8);
     const scx = sx, scy = sy;
@@ -619,8 +609,8 @@ export class BattleScene implements Scene {
       ui.ctx.fillRect(0, ui.H * 0.46, ui.W, 70 * u);
       ui.text(`${b.hero.name}回城重整中…… ${Math.ceil(d.downT)} 秒`, ui.W / 2, ui.H * 0.46 + 35 * u, 30, '#ff8a80');
     }
-    this.tip('defense', '守住城池！右侧花粮草召唤士兵、建造箭塔', true);
-    if (b.t > 20) this.tip('defense2', '升级时可选兵种、城防「军令」，凑齐还能联动');
+    this.tip('defense', '守住城池！粮草攒够会自动出兵，你只管带兵迎敌', true);
+    if (b.t > 20) this.tip('defense2', '升级时选兵种、建筑、武将助阵或修城，兵会跟着武将驻守');
   }
 
   /** 大招立绘切入的计时（-1 表示没有） */
@@ -971,6 +961,8 @@ export class BattleScene implements Scene {
 
 /** 当前出战武将（技能卡片显示专属联动的名字） */
 let infoHero = '';
+/** 当前战斗（守城的建筑 / 武将卡要看局内状态） */
+let infoBattle: Battle | null = null;
 
 export function choiceInfo(c: Choice): { icon: string; name: string; desc: string; lv: number; max: number; isNew: boolean; evo: boolean } {
   switch (c.kind) {
@@ -999,6 +991,17 @@ export function choiceInfo(c: Choice): { icon: string; name: string; desc: strin
       const d = LINKS[c.id];
       return { icon: d.icon, name: d.name, desc: d.desc, lv: 0, max: 0, isNew: false, evo: true };
     }
+    case 'build': {
+      const d = BUILDS[c.id];
+      const def = infoBattle?.def;
+      return { icon: d.icon, name: d.name, desc: def ? buildStepText(def, c.id) : d.desc, lv: c.lv, max: BUILD_CARD_MAX, isNew: c.isNew, evo: false };
+    }
+    case 'hero': {
+      const h = infoBattle?.def?.heroes[c.id];
+      return { icon: h ? `${h.sprite}_0` : 'star', name: `${h?.name || ''}助阵`, desc: `召唤${h?.name || '武将'}出城作战 ${HERO_SUMMON_TIME} 秒（强度按武将自己的等级、星级）`, lv: 0, max: 0, isNew: false, evo: false };
+    }
+    case 'repair':
+      return { icon: 'p_armor', name: '修城', desc: `立即修复 ${Math.round(REPAIR_PCT * 100)}% 城池生命`, lv: 0, max: 0, isNew: false, evo: false };
   }
 }
 
