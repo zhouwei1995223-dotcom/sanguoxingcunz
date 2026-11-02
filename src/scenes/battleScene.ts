@@ -19,7 +19,7 @@ import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog, HeroSummonDialog, BuildDialog } from './battleDialogs';
+import { LevelUpDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog, HeroSummonDialog, BuildDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
@@ -250,7 +250,7 @@ export class BattleScene implements Scene {
         game.openDialog(new StrategyDialog(this, st.tier, st.round));
       } else if (b.pendingChests.length) {
         const c = b.pendingChests.shift()!;
-        game.openDialog(new ChestDialog(this, b.rollChest(c.boss)));
+        this.openChest(b.rollChest(c.boss));
       } else if (b.pendingLevelUps > 0) {
         b.pendingLevelUps--;
         const choices = b.rollChoices();
@@ -258,6 +258,12 @@ export class BattleScene implements Scene {
           // 技能全满：自动领取，避免频繁打断
           b.applyChoice(b.player.hp < b.player.maxHp * 0.6 ? { kind: 'heal' } : { kind: 'gold' });
           this.autoGoldT = 1;
+        } else if (save.settings.autoPick && save.guide > 0) {
+          // 自动选择：直接领推荐项，在武将身边飘字
+          const c = choices[Math.max(0, b.recommend(choices))];
+          playSfx('levelup');
+          this.choose(c);
+          this.floatLines([{ text: '升级 · ' + this.choiceLine(c), color: c.kind === 'evo' || c.kind === 'link' ? '#fee761' : '#b6f5a0' }]);
         } else {
           playSfx('levelup');
           if (save.stats.runs === 0) funnel('b1_levelup');
@@ -329,6 +335,43 @@ export class BattleScene implements Scene {
   openRushForTest() { game.openDialog(new RushConfirmDialog(this)); }
   openEvoTableForTest() { game.openDialog(new EvoTableDialog(this.battle)); }
   pauseForTest() { game.openDialog(new PauseDialog(this)); }
+
+  /** 宝箱：不再弹窗，直接领取，获得的东西以文字在武将身边逐行飘出 */
+  openChest(rewards: Choice[]) {
+    const evo = rewards.some((r) => r.kind === 'evo' || r.kind === 'link');
+    playSfx(evo ? 'evolve' : 'chest');
+    for (const r of rewards) this.choose(r);
+    // 把同一件武器 / 兵法的多次升级合并成一行（显示最终等级）
+    const lines: { text: string; color: string }[] = [];
+    const seen = new Map<string, number>();
+    for (const r of rewards) {
+      const key = r.kind + ':' + ('id' in r ? r.id : '');
+      const text = this.choiceLine(r);
+      const color = r.kind === 'evo' || r.kind === 'link' ? '#fee761' : r.kind === 'weapon' ? '#fff4d6' : r.kind === 'passive' ? '#9fe8ff' : '#ffd08a';
+      const at = seen.get(key);
+      if (at !== undefined && r.kind !== 'gold' && r.kind !== 'heal') lines[at] = { text, color };
+      else { seen.set(key, lines.length); lines.push({ text, color }); }
+    }
+    this.floatLines([{ text: '开启宝箱', color: '#feae34' }, ...lines]);
+  }
+
+  private choiceLine(r: Choice): string {
+    const info = choiceInfo(r);
+    return r.kind === 'evo' || r.kind === 'link' ? '进化！' + info.name
+      : r.kind === 'gold' ? '军饷 +30' : r.kind === 'heal' ? '肉包子 回血'
+      : info.name + (info.isNew ? ' 新获得' : ' Lv.' + info.lv);
+  }
+
+  /** 在武将身边逐行飘字（接在还没消失的文字下面） */
+  private floatLines(lines: { text: string; color: string }[]) {
+    const b = this.battle;
+    let base = 0;
+    for (const f of b.fx) if (f.kind === 'text' && f.line !== undefined && f.t < f.dur * 0.7) base = Math.max(base, f.line + 1);
+    if (base > 6) base = 0;
+    lines.forEach((l, i) => {
+      b.fx.push({ kind: 'text', x: b.player.x, y: b.player.y, t: -i * 0.18, dur: 2.6, text: l.text, color: l.color, line: base + i, real: true });
+    });
+  }
 
   /** 选择技能后调用 */
   choose(c: Choice) {
@@ -852,9 +895,20 @@ export class BattleScene implements Scene {
   private drawWorldTexts() {
     const ui = game.ui;
     for (const f of this.battle.fx) {
-      if (f.kind !== 'text') continue;
-      const [sx, sy] = this.renderer.worldToScreen(f.x, f.y);
+      if (f.kind !== 'text' || f.t < 0) continue;
       const k = f.t / f.dur;
+      if (f.line !== undefined) {
+        // 宝箱文字：跟着武将，在头顶右侧逐行排开
+        const p = this.battle.player;
+        const [px, py] = this.renderer.worldToScreen(p.x, p.y);
+        const u = ui.u;
+        ui.ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : Math.min(1, f.t * 6);
+        const x = clamp(px + 40 * u, 20 * u, ui.W - 300 * u);
+        ui.text(f.text!, x, py - 150 * u + f.line * 34 * u - k * 24 * u, 26, f.color || '#fff', 'left');
+        ui.ctx.globalAlpha = 1;
+        continue;
+      }
+      const [sx, sy] = this.renderer.worldToScreen(f.x, f.y);
       ui.ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
       ui.text(f.text!, clamp(sx, ui.W * 0.3, ui.W * 0.7), sy - k * 30 * ui.u, 26, f.color || '#fff');
       ui.ctx.globalAlpha = 1;

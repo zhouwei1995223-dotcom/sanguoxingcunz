@@ -129,7 +129,7 @@ export class HomeCamp {
     // 要排序绘制的物体
     const list: { y: number; draw: () => void }[] = [];
     // 后排栅栏
-    for (let x = -110; x <= 110; x += 6) {
+    for (let x = -176; x <= 176; x += 6) {
       const y = -66 + Math.round(Math.abs(x) * 0.12);
       list.push({ y, draw: () => blit(sprite('camp_stake'), x, y) });
     }

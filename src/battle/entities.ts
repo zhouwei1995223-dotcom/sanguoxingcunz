@@ -199,6 +199,8 @@ export interface Fx {
   r?: number;
   text?: string;
   color?: string;
+  /** 宝箱文字：跟随武将显示的第几行 */
+  line?: number;
   vy?: number;
   big?: boolean;
   /** 击飞的尸体 / 残影 */

@@ -21,6 +21,10 @@ export const ARENA_R = 300, WALL_W = 40, GATE_HALF = 0.15;
 export const ALLY_LEASH = 175;
 /** 守城主打策略：武将本人的伤害只剩这么多，主要靠兵种和建筑 */
 export const DEF_HERO_DMG = 0.4;
+/** 召唤士兵的生命倍率（1.0.6 第二轮：玩家反馈士兵太耐打，×0.75，配合敌人攻击 +25%，士兵存活时间约为原来的六成） */
+export const ALLY_HP_K = 0.75;
+/** 守城的经验倍率：敌人多、宝石自动吸，升级太勤，×0.6 */
+export const DEF_EXP = 0.6;
 
 /** 建筑：在出怪口附近的建造点（每个门左右各一个）用粮草建造，可升到 3 级 */
 export type BuildKind = 'tower' | 'cata' | 'spike';
@@ -41,7 +45,7 @@ for (let s = 0; s < 4; s++) for (const off of [-0.33, 0.33]) { const a = s * (Ma
  * 守城十关：每关的敌人强度（血量 / 攻击倍率、兵种、敌将、场景）取对应章节，
  * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
  */
-export const DEFENSE_HP_K = 0.62, DEFENSE_DMG_K = 0.68, DEFENSE_POWER_K = 1.1;
+export const DEFENSE_HP_K = 0.62, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
 export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
   { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },
   { name: '江夏', subtitle: '刘琦固守', story: '当阳兵败，退守江夏。曹军顺流而下，务必守住这最后的落脚之地。' },

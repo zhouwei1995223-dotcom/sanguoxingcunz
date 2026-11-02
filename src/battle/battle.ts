@@ -20,7 +20,7 @@ import { updateBoss } from './boss';
 import {
   DefenseState, updateDefense, reviveCity, enemyTarget, enemyContact, heroDown, shotHitsCity, hurtCity, orderChoices, readyLinks, applyOrder, applyLink, orderLv,
 } from './defense';
-import { ORDERS, LINKS, OrderId, LinkId, DEF_HERO_DMG, ARENA_R } from '../data/defense';
+import { ORDERS, LINKS, OrderId, LinkId, DEF_HERO_DMG, DEF_EXP, ARENA_R } from '../data/defense';
 
 export type Choice =
   | { kind: 'weapon'; id: WeaponId; lv: number; isNew: boolean }
@@ -350,7 +350,7 @@ export class Battle {
     const tutRage = this.chapter.tutorial ? 6 : 1;
     // 1.0.4：章节一局压到 6 分钟，经验 ×1.3 补回来，阵容能在敌将前成型
     const shortRun = !this.chapter.endless && !this.chapter.tutorial ? 1.3 : 1;
-    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut * shortRun * (hid === 'jiangwei' ? 1.15 : 1);
+    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut * shortRun * (hid === 'jiangwei' ? 1.15 : 1) * (this.chapter.defense ? DEF_EXP : 1);
     if (this.mods?.playerDmg) this.dmgMul *= this.mods.playerDmg;
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
     this.crit = b.crit / 100 + this.critBonus + 0.04 * P('wine');
@@ -1360,7 +1360,7 @@ export class Battle {
       s.life -= dt;
       if (s.spin) s.rot += dt * 10;
       if (s.life <= 0) { this.shots.splice(i, 1); continue; }
-      if (this.def && shotHitsCity(s.x, s.y)) { hurtCity(this, s.dmg * (s.sprite === 'stone' ? 1 : 0.3), 'shot_' + s.sprite); this.shots.splice(i, 1); continue; }
+      if (this.def && shotHitsCity(s.x, s.y)) { hurtCity(this, s.dmg * (s.sprite === 'stone' ? 1 : 0.25), 'shot_' + s.sprite); this.shots.splice(i, 1); continue; }
       if ((s.x - p.x) ** 2 + (s.y - (p.y - 8)) ** 2 < (s.r + p.r * 0.8) ** 2) {
         this.hurtPlayer(s.dmg);
         this.shots.splice(i, 1);

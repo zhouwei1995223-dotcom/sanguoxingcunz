@@ -2,7 +2,7 @@ import { rand, TAU, weighted } from '../core/math';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
   DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_COST, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
-  REPAIR_COST, REPAIR_PCT, REPAIR_CD, ALLY_LEASH, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_SLOTS, BUILD_MAX_LV, buildCost,
+  REPAIR_COST, REPAIR_PCT, REPAIR_CD, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_SLOTS, BUILD_MAX_LV, buildCost,
 } from '../data/defense';
 import type { Battle } from './battle';
 import type { Enemy } from './entities';
@@ -103,11 +103,12 @@ export function unitStats(b: Battle, kind: UnitKind) {
   const oid = (Object.keys(ORDERS) as OrderId[]).find((k) => ORDERS[k].unit === kind)!;
   const lv = orderLv(d, oid);
   const boosts = u.unlock ? Math.max(0, lv - 1) : lv;
-  // 军令卡每级 +25%；武将每升一级，士兵也 +3%（打怪升级同样在强化军队）
-  const mul = (1 + 0.25 * boosts) * (1 + 0.02 * (b.level - 1));
+  // 军令卡每级 +25%；武将每升一级，士兵攻击 +3%、生命 +2%（打怪升级同样在强化军队）
+  // 1.0.6 第二轮：守城升级变慢（经验 ×0.6），攻击的等级加成从 2% 提到 3%，攻击力和原来持平；生命再乘 ALLY_HP_K
+  const mul = 1 + 0.25 * boosts;
   const drum = orderLv(d, 'c_drum');
-  let hp = b.base.hp * u.hpK * mul;
-  let atk = b.base.atk * u.atkK * mul;
+  let hp = b.base.hp * u.hpK * mul * (1 + 0.02 * (b.level - 1)) * ALLY_HP_K;
+  let atk = b.base.atk * u.atkK * mul * (1 + 0.03 * (b.level - 1));
   if (kind === 'shield' && d.links.has('l_iron')) hp *= 2;
   if (kind === 'spear' && d.links.has('l_phalanx')) atk *= 1.5;
   const count = u.count + (lv >= 3 ? 1 : 0) + (lv >= 5 ? 1 : 0) + (kind === 'spear' && d.links.has('l_phalanx') ? 2 : 0);

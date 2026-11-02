@@ -77,7 +77,7 @@ export class HomeScene implements Scene {
     rolloverDaily();
     if (this.tab === 'battle') {
       // 营地：篝火放在「征战 / 守城」页签上方，留出闲逛武将的位置
-      const S = Math.max(3, Math.round(Math.min(ui.W, ui.H) / 280) + 1);
+      const S = Math.max(2, Math.round(Math.min(ui.W, ui.H) / 280));
       this.camp.draw(ui.ctx, dt, ui.W, ui.H, this.battleLayout(ui).cy - 66 * ui.u - 46 * S, S);
     }
     else this.drawPlainBg(ui);

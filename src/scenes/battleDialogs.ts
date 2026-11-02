@@ -197,8 +197,18 @@ export class LevelUpDialog implements Dialog {
     if (showBanish && ui.button('lv_banish', ui.W / 2 + 12 * u, y, bw, bh, this.banishMode ? '取消封禁' : `封禁(${b.banishes})`, this.banishMode ? C.btnGray : C.btnRed)) {
       this.banishMode = !this.banishMode;
     }
+    // 自动选择：打开后以后的升级直接领推荐项（暂停里可以关）
+    if (!tutorial) {
+      const aw = 300 * u;
+      if (ui.button('lv_auto', ui.W / 2 - aw / 2, y + bh + 20 * u, aw, 76 * u, '自动选择：关', C.btnGray, { size: 24 })) {
+        save.settings.autoPick = true; markDirty();
+        ui.toast('已开启自动选择（暂停里可以关闭）');
+        this.scene.choose(this.choices[Math.max(0, rec)]);
+        return false;
+      }
+    }
     if (save.guide === 0 && b.level === 2) guidePointer(ui, ui.W / 2 - cw / 2, ui.H * 0.2 + 110 * u, cw, ch);
-    if (this.banishTip) guideHint(ui, '不满意可以「刷新」，不想要的可以「封禁」', y + bh + 70 * u);
+    if (this.banishTip) guideHint(ui, '不满意可以「刷新」，不想要的可以「封禁」', y + bh + 150 * u);
   }
   t?: number;
 }
@@ -343,80 +353,6 @@ export class StrategyDialog implements Dialog {
   }
 }
 
-export class ChestDialog implements Dialog {
-  private opened = false;
-  constructor(private scene: BattleScene, private rewards: Choice[]) {}
-  t?: number;
-  draw(ui: UI) {
-    const u = ui.u;
-    const t = this.t || 0;
-    const cy = ui.H * 0.36;
-    const hasEvo = this.rewards.some((r) => r.kind === 'evo');
-    if (t < 1.0) {
-      // 宝箱抖动
-      const shake = Math.sin(t * 50) * 8 * u * t;
-      ui.ctx.globalAlpha = Math.min(1, t * 3);
-      const glow = ui.ctx.createRadialGradient(ui.W / 2, cy, 10, ui.W / 2, cy, 300 * u);
-      glow.addColorStop(0, hasEvo ? 'rgba(254,231,97,0.8)' : 'rgba(255,255,255,0.5)');
-      glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ui.ctx.fillStyle = glow;
-      ui.ctx.fillRect(0, cy - 300 * u, ui.W, 600 * u);
-      ui.ctx.globalAlpha = 1;
-      ui.icon(hasEvo ? 'chest_gold' : 'chest', ui.W / 2 + shake, cy, 220 * u);
-      ui.text('开启宝箱…', ui.W / 2, cy + 180 * u, 32, C.gold);
-      return;
-    }
-    if (!this.opened) {
-      this.opened = true;
-      playSfx(hasEvo ? 'evolve' : 'chest');
-      for (const r of this.rewards) this.scene.choose(r);
-    }
-    // 光芒
-    ui.ctx.save();
-    ui.ctx.translate(ui.W / 2, cy);
-    ui.ctx.rotate(t * 0.5);
-    ui.ctx.fillStyle = hasEvo ? 'rgba(254,231,97,0.18)' : 'rgba(255,255,255,0.12)';
-    for (let i = 0; i < 12; i++) {
-      ui.ctx.rotate(Math.PI / 6);
-      ui.ctx.beginPath();
-      ui.ctx.moveTo(0, 0);
-      ui.ctx.lineTo(-40 * u, -500 * u);
-      ui.ctx.lineTo(40 * u, -500 * u);
-      ui.ctx.fill();
-    }
-    ui.ctx.restore();
-    ui.icon('chest_open', ui.W / 2, cy, 200 * u);
-    const linkEvo = this.rewards.some((r) => r.kind === 'evo' && weaponLink(r.id, this.scene.battle.hero.id));
-    ui.ribbon(ui.W / 2, cy - 180 * u, 420 * u, linkEvo ? '★专属联动觉醒！' : hasEvo ? '神兵进化！' : '获得宝物', linkEvo ? '#a2611a' : hasEvo ? '#c96d17' : '#a22633');
-    const cw = ui.W - 70 * u, chh = 150 * u;
-    let y = cy + 140 * u;
-    this.rewards.forEach((r, i) => {
-      const k = Math.max(0, Math.min(1, (t - 1 - i * 0.12) * 5));
-      if (k <= 0) return;
-      ui.ctx.globalAlpha = k;
-      choiceCardStatic(ui, r, ui.W / 2 - cw / 2, y, cw, chh);
-      ui.ctx.globalAlpha = 1;
-      y += chh + 12 * u;
-    });
-    const bw = 300 * u;
-    if (t > 1.4 && ui.button('chest_ok', ui.W / 2 - bw / 2, Math.min(y + 10 * u, ui.H - 140 * u), bw, 92 * u, '确定', C.btnGold)) return false;
-  }
-}
-
-function choiceCardStatic(ui: UI, c: Choice, x: number, y: number, w: number, h: number) {
-  const u = ui.u;
-  const info = choiceInfo(c);
-  ui.pixRect(x, y, w, h, '#120d0c');
-  ui.pixRect(x + 4 * u, y + 4 * u, w - 8 * u, h - 8 * u, info.evo ? '#feae34' : '#c89b5c');
-  ui.pixRect(x + 8 * u, y + 8 * u, w - 16 * u, h - 16 * u, info.evo ? '#5a3a14' : '#3a2c2a');
-  const isz = h - 36 * u;
-  ui.qualityFrame(x + 18 * u, y + 18 * u, isz, info.evo ? '#feae34' : '#8b9bb4');
-  ui.icon(info.icon, x + 18 * u + isz / 2, y + 18 * u + isz / 2, isz * 0.66);
-  const tx = x + 36 * u + isz;
-  ui.text(info.name + (info.lv ? `  Lv.${info.lv}` : ''), tx, y + 40 * u, 30, info.evo ? '#fee761' : '#fff4d6', 'left');
-  ui.wrapText(info.desc, tx, y + 62 * u, w - (tx - x) - 20 * u, 22, '#d9c6a0');
-}
-
 export class PauseDialog implements Dialog {
   constructor(private scene: BattleScene) {}
   t?: number;
@@ -490,6 +426,7 @@ export class PauseDialog implements Dialog {
       ['p_shake', '震屏:' + (save.settings.screenShake ? '开' : '关'), () => { save.settings.screenShake = !save.settings.screenShake; }, save.settings.screenShake],
       ['p_ult', '大招:' + (save.settings.ultRight ? '右' : '左'), () => { save.settings.ultRight = !save.settings.ultRight; }, false],
       ['p_power', '省电:' + (save.settings.lowPower ? '开' : '关'), () => { save.settings.lowPower = !save.settings.lowPower; }, save.settings.lowPower],
+      ['p_auto', '自动选技能:' + (save.settings.autoPick ? '开' : '关'), () => { save.settings.autoPick = !save.settings.autoPick; }, save.settings.autoPick],
       ['p_num', '伤害数字:' + (save.settings.dmgNum ? '开' : '关'), () => { save.settings.dmgNum = !save.settings.dmgNum; b.showDamage = save.settings.dmgNum; }, save.settings.dmgNum],
     ];
     toggles.forEach(([id, label, fn, on], i) => {

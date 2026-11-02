@@ -21,7 +21,8 @@ export default async function ({ page, wait, shot }) {
   await wait(1500);
   await shot('def_start');
   const log = [];
-  for (let i = 0; i < 260; i++) {
+  const N = (process.env.Q || "").includes("full=1") ? 1300 : 260;
+  for (let i = 0; i < N; i++) {
     const s = await page.evaluate(() => {
       const g = window.__game; const sc = g.scene; const b = sc.battle; const d = b.def;
       if (!d) return { err: 'no def' };
@@ -38,7 +39,7 @@ export default async function ({ page, wait, shot }) {
       return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), builds: d.builds.map((x) => x.kind[0] + x.lv).join(''), lvl: b.chapter.id, hp: Math.round(b.chapter.hpMul * 100) / 100, won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
     });
     if (s.err) { log.push(s); break; }
-    if (i % 20 === 0) log.push(s);
+    if (i % 80 === 0) log.push(s);
     // 点召唤按钮（右侧那一列）
     await page.evaluate(() => {
       const g = window.__game; const b = g.scene.battle; const d = b.def;
