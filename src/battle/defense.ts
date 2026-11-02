@@ -71,7 +71,7 @@ export const TOWERS: [number, number][] = [[-48, -36], [48, -36], [-48, 16], [48
 const DIRS = ['东', '南', '西', '北'];
 
 export function createDefense(b: Battle, heroes: Record<string, HeroInfo>): DefenseState {
-  const cityBase = Math.round(1200 * Math.max(1, b.enemyDmgMul));
+  const cityBase = Math.round(1200 * Math.max(0.7, b.enemyDmgMul));
   // 武将从城门口出发
   b.player.x = 0; b.player.y = CITY_R + 24;
   return {
@@ -97,7 +97,7 @@ export function unitStats(b: Battle, kind: UnitKind) {
   const lv = orderLv(d, oid);
   const boosts = u.unlock ? Math.max(0, lv - 1) : lv;
   // 军令卡每级 +25%；武将每升一级，士兵也 +3%（打怪升级同样在强化军队）
-  const mul = (1 + 0.25 * boosts) * (1 + 0.03 * (b.level - 1));
+  const mul = (1 + 0.25 * boosts) * (1 + 0.02 * (b.level - 1));
   const drum = orderLv(d, 'c_drum');
   let hp = b.base.hp * u.hpK * mul;
   let atk = b.base.atk * u.atkK * mul;
@@ -108,7 +108,7 @@ export function unitStats(b: Battle, kind: UnitKind) {
 }
 
 export function grainRate(d: DefenseState): number {
-  return 3.5 * (1 + 0.3 * orderLv(d, 'c_beacon'));
+  return 3 * (1 + 0.3 * orderLv(d, 'c_beacon'));
 }
 
 const soldiers = (d: DefenseState) => d.allies.reduce((n, a) => n + (!a.dead && a.kind !== 'hero' ? 1 : 0), 0);
@@ -580,7 +580,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
   d.trickleT -= dt;
   if (d.trickleT <= 0) {
     d.trickleT = 0.7;
-    const target = Math.min(55, 10 + t * 0.15) * b.densityMul * (bossAlive ? 0.6 : 1);
+    const target = Math.min(90, 16 + t * 0.25) * b.densityMul * (bossAlive ? 0.7 : 1);
     b.targetDensity = target;
     let alive = 0;
     for (const e of b.enemies) if (!e.dead && !e.boss) alive++;
@@ -593,16 +593,18 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     d.waveIdx++;
     d.nextWave += 20;
     const w = d.waveIdx;
-    const sides = w >= 4 && Math.random() < 0.5 ? 2 : 1;
+    // 第 3 波起常常两面夹击，第 8 波起可能三面同时攻城
+    const r = Math.random();
+    const sides = w >= 8 && r < 0.35 ? 3 : w >= 3 && r < 0.65 ? 2 : 1;
     const s0 = (Math.random() * 4) | 0;
-    const ss = sides === 2 ? [s0, (s0 + 2) % 4] : [s0];
+    const ss = sides === 3 ? [s0, (s0 + 1) % 4, (s0 + 2) % 4] : sides === 2 ? [s0, (s0 + 2) % 4] : [s0];
     const pl = pool(t);
-    const n = Math.round((8 + 2 * w) * b.densityMul);
+    const n = Math.round((14 + 4 * w) * b.densityMul);
     for (let i = 0; i < n; i++) spawnAround(b, weighted(pl, (x) => x[1])[0], ss[i % ss.length], 0.4);
-    if (w >= 4) for (let i = 0; i < 1 + Math.floor((w - 4) / 3); i++) spawnAround(b, 'siege_ram', ss[i % ss.length], 0.3);
-    if (w >= 2) for (let i = 0; i < 1 + Math.floor(w / 3); i++) spawnAround(b, 'siege_ladder', ss[i % ss.length], 0.4);
-    if (w >= 6) for (let i = 0; i < 1 + Math.floor((w - 6) / 4); i++) spawnAround(b, 'siege_cata', ss[i % ss.length], 0.3);
-    if (w === 5 || w === 9 || w === 12) for (let i = 0; i < (w >= 9 ? 2 : 1); i++) spawnAround(b, w >= 9 ? 'wei_heavy' : 'wei_shield', ss[0], 0.3, { elite: true });
+    if (w >= 3) for (let i = 0; i < 1 + Math.floor((w - 3) / 2); i++) spawnAround(b, 'siege_ram', ss[i % ss.length], 0.3);
+    if (w >= 2) for (let i = 0; i < 2 + Math.floor(w / 2); i++) spawnAround(b, 'siege_ladder', ss[i % ss.length], 0.4);
+    if (w >= 5) for (let i = 0; i < 1 + Math.floor((w - 5) / 3); i++) spawnAround(b, 'siege_cata', ss[i % ss.length], 0.3);
+    if (w === 4 || w === 7 || w === 10 || w === 12) for (let i = 0; i < Math.min(3, 1 + Math.floor(w / 5)); i++) spawnAround(b, w >= 7 ? 'wei_heavy' : 'wei_shield', ss[i % ss.length], 0.3, { elite: true });
     b.hooks.banner(`第 ${w} 波 · 敌军从${ss.map((s) => DIRS[s]).join('、')}面攻城！`, '#e43b44');
     b.hooks.sfx('boss');
   }
@@ -610,12 +612,12 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
   if (!d.midDone && t >= DEFENSE_MID_AT) {
     d.midDone = true;
     const s = (Math.random() * 4) | 0, a = s * (TAU / 4);
-    b.spawnBoss(b.chapter.midBoss, Math.cos(a) * DEFENSE_SPAWN_R, Math.sin(a) * DEFENSE_SPAWN_R, false, 0.8);
+    b.spawnBoss(b.chapter.midBoss, Math.cos(a) * DEFENSE_SPAWN_R, Math.sin(a) * DEFENSE_SPAWN_R, false, 1.2);
   }
   if (!d.bossDone && t >= DEFENSE_BOSS_AT) {
     d.bossDone = true;
     const s = (Math.random() * 4) | 0, a = s * (TAU / 4);
-    b.spawnBoss(b.chapter.boss, Math.cos(a) * DEFENSE_SPAWN_R, Math.sin(a) * DEFENSE_SPAWN_R, true, 0.9);
+    b.spawnBoss(b.chapter.boss, Math.cos(a) * DEFENSE_SPAWN_R, Math.sin(a) * DEFENSE_SPAWN_R, true, 1.5);
   }
   // 补几个灯笼 / 粮车（打破掉包子、磁石）
   d.breakT -= dt;

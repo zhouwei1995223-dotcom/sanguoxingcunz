@@ -46,15 +46,15 @@ export interface UnitDef {
 }
 
 export const UNITS: Record<UnitKind, UnitDef> = {
-  spear: { kind: 'spear', name: '枪兵', sprite: 'u_shu_spear', icon: 'w_spear', cost: 40, count: 3, atkK: 0.7, hpK: 1.05, cd: 0.9, range: 16, speed: 52, r: 6, unlock: null, desc: '均衡的近战步兵' },
-  shield: { kind: 'shield', name: '盾兵', sprite: 'u_shu_shield', icon: 'p_armor', cost: 50, count: 2, atkK: 0.35, hpK: 3.3, cd: 1.2, range: 16, speed: 38, r: 7, unlock: 'o_shield', desc: '血厚，挡在前排拖住敌人' },
-  archer: { kind: 'archer', name: '弓兵', sprite: 'u_shu_archer', icon: 'w_crossbow', cost: 55, count: 3, atkK: 0.6, hpK: 0.68, cd: 1.1, range: 120, speed: 44, r: 6, unlock: 'o_archer', desc: '远程放箭，跟在后排' },
-  cav: { kind: 'cav', name: '骑兵', sprite: 'u_shu_cav', icon: 'w_horse', cost: 70, count: 2, atkK: 1.1, hpK: 1.8, cd: 0.8, range: 18, speed: 78, r: 9, unlock: 'o_cav', desc: '速度快，追杀四处的敌人' },
-  xbow: { kind: 'xbow', name: '弩车', sprite: 'u_shu_xbow', icon: 'w_catapult', cost: 90, count: 1, atkK: 2.4, hpK: 2.1, cd: 1.6, range: 170, speed: 24, r: 10, unlock: 'o_xbow', desc: '射程最远，弩箭能穿透' },
+  spear: { kind: 'spear', name: '枪兵', sprite: 'u_shu_spear', icon: 'w_spear', cost: 40, count: 3, atkK: 0.42, hpK: 0.63, cd: 0.9, range: 16, speed: 52, r: 6, unlock: null, desc: '均衡的近战步兵' },
+  shield: { kind: 'shield', name: '盾兵', sprite: 'u_shu_shield', icon: 'p_armor', cost: 50, count: 2, atkK: 0.21, hpK: 1.98, cd: 1.2, range: 16, speed: 38, r: 7, unlock: 'o_shield', desc: '血厚，挡在前排拖住敌人' },
+  archer: { kind: 'archer', name: '弓兵', sprite: 'u_shu_archer', icon: 'w_crossbow', cost: 55, count: 3, atkK: 0.36, hpK: 0.41, cd: 1.1, range: 120, speed: 44, r: 6, unlock: 'o_archer', desc: '远程放箭，跟在后排' },
+  cav: { kind: 'cav', name: '骑兵', sprite: 'u_shu_cav', icon: 'w_horse', cost: 70, count: 2, atkK: 0.66, hpK: 1.08, cd: 0.8, range: 18, speed: 78, r: 9, unlock: 'o_cav', desc: '速度快，追杀四处的敌人' },
+  xbow: { kind: 'xbow', name: '弩车', sprite: 'u_shu_xbow', icon: 'w_catapult', cost: 90, count: 1, atkK: 1.44, hpK: 1.26, cd: 1.6, range: 170, speed: 24, r: 10, unlock: 'o_xbow', desc: '射程最远，弩箭能穿透' },
 };
 export const UNIT_ORDER: UnitKind[] = ['spear', 'shield', 'archer', 'cav', 'xbow'];
 /** 同时在场的士兵上限（武将另算） */
-export const MAX_ALLIES = 26;
+export const MAX_ALLIES = 20;
 
 /** 召唤武将：消耗粮草，在场 30 秒，冷却 40 秒，最多同时 2 位 */
 export const HERO_SUMMON_COST = 120, HERO_SUMMON_TIME = 30, HERO_SUMMON_CD = 40, HERO_SUMMON_MAX = 2;

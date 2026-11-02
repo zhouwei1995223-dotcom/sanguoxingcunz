@@ -114,9 +114,10 @@ export class BattleScene implements Scene {
     if (this.chapter.endless) { this.battle.enemyHpMul *= endlessHpMul(); this.battle.enemyDmgMul *= endlessDmgMul(); }
     // 守城：敌人强度跟玩家战力走（士兵、城池也跟武将属性走），新老玩家难度差不多
     if (this.chapter.defense) {
-      const r = Math.max(1, combatPower(stats) / DEFENSE_BASE_POWER);
-      this.battle.enemyHpMul *= Math.pow(r, 0.9);
-      this.battle.enemyDmgMul *= Math.pow(r, 0.65);
+      // 战力低于基准的新玩家敌人也相应变弱（最低 0.6 倍），老玩家按战力线性变强
+      const r = Math.max(0.6, combatPower(stats) / DEFENSE_BASE_POWER);
+      this.battle.enemyHpMul *= r;
+      this.battle.enemyDmgMul *= Math.pow(r, 0.9);
     }
     // 守城：城池、粮草、可召唤的武将（强度按各自的等级 / 星级 / 巅峰等级）
     if (this.chapter.defense) {

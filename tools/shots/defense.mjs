@@ -5,7 +5,15 @@ export default async function ({ page, wait, shot }) {
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; });
   await wait(300);
   await shot('def_home');
-  await page.evaluate(() => { const g = window.__game; g.scene.startBattle(-3); });
+  // ?strong=1：模拟养成很深的老玩家（赵云 60 级五星巅峰 20、吕布关羽可召唤）
+  await page.evaluate(() => {
+    const g = window.__game; const sv = window.__saveMod.save;
+    if (location.search.includes('strong=1')) {
+      Object.assign(sv.heroes.zhaoyun, { lv: 60, star: 5, peak: 20 });
+      for (const id of ['lvbu', 'guanyu']) Object.assign(sv.heroes[id], { owned: true, lv: 50, star: 5 });
+    }
+    g.scene.startBattle(-3);
+  });
   await wait(800);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; });
   await wait(1500);
@@ -24,7 +32,7 @@ export default async function ({ page, wait, shot }) {
       }
       const kinds = ['xbow', 'cav', 'archer', 'shield', 'spear'];
       for (const k of kinds) { const c = { spear: 40, shield: 50, archer: 55, cav: 70, xbow: 90 }[k]; if (d.grain >= c + 20) { const m = window.__defMod; } }
-      return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
+      return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), pow: Math.round(b.enemyHpMul * 100) / 100, won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
     });
     if (s.err) { log.push(s); break; }
     if (i % 20 === 0) log.push(s);
@@ -38,7 +46,7 @@ export default async function ({ page, wait, shot }) {
       for (const id of btns) { const r = g.ui.prevRegions.find((x) => x.id === id); if (r) { g.ui.clickedId = id; break; } }
       if (d.allies.filter((a) => !a.dead && a.kind === 'hero').length === 0 && d.grain > 130) {
         const ids = Object.keys(d.heroes).filter((id) => id !== b.hero.id);
-        if (ids.length) window.__summonHero && window.__summonHero(b, ids[0]);
+        void ids;
       }
       b.player.hp = Math.max(b.player.hp, 1);
     });
