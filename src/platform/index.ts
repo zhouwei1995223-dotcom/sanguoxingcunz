@@ -36,7 +36,7 @@ export function getPlatform(): Platform {
       // idx：今天这个点位的第几次（看完才算）
       const c = (save.daily.adCount = save.daily.adCount || {});
       if (ok) c[placement] = (c[placement] || 0) + 1;
-      p.report('ad_reward', { placement, ok: ok ? 1 : 0, idx: c[placement] || 0 });
+      p.report('ad_reward', { placement, ok: ok ? 1 : 0, idx: c[placement] || 0, src: save.src || '' });
       return ok;
     });
   };

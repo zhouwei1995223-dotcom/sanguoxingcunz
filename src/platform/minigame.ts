@@ -96,9 +96,13 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
   }
 
   let fromSidebar = false;
+  let launchSrc = 's0';
   try {
     const opt = api.getLaunchOptionsSync ? api.getLaunchOptionsSync() : null;
     if (opt && kind === 'tt' && opt.scene === '021036') fromSidebar = true;
+    // 腾讯广告点进来时启动参数里带 gdt_vid / weixinadinfo
+    const q = (opt && opt.query) || {};
+    if (opt) launchSrc = q.gdt_vid || q.weixinadinfo ? 'ad' : 's' + (opt.scene || 0);
   } catch (e) {}
   let sidebarSupported = false;
   if (kind === 'tt') {
@@ -242,23 +246,31 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
       });
     },
     supportsRecommend() { return kind === 'wx' && typeof api.createPageManager === 'function'; },
+    launchSource() { return launchSrc; },
+    preloadRecommend() {
+      // 官方最佳实践：进游戏场景时先 load，需要时再 show
+      if (recommendPM || kind !== 'wx' || typeof api.createPageManager !== 'function') return;
+      try {
+        recommendPM = api.createPageManager();
+        Promise.resolve(recommendPM.load({ openlink: RECOMMEND_OPENLINK })).catch(() => { recommendPM = null; });
+      } catch (e) { recommendPM = null; }
+    },
     showRecommend() {
-      return new Promise<boolean | null>((resolve) => {
+      return new Promise<boolean | null | string>((resolve) => {
+        const errText = (r: any) => `${(r && (r.errCode ?? '')) || ''} ${(r && r.errMsg) || (typeof r === 'string' ? r : '')}`.trim() || 'unknown';
         try {
-          if (!recommendPM) {
-            recommendPM = api.createPageManager();
-            recommendPM.load({ openlink: RECOMMEND_OPENLINK });
-          }
+          if (!recommendPM) recommendPM = api.createPageManager();
           const pm = recommendPM;
           let done = false;
-          const finish = (v: boolean | null) => { if (!done) { done = true; resolve(v); } };
+          const finish = (v: boolean | null | string) => { if (!done) { done = true; resolve(v); } };
           // 基础库 3.8.6 起 destroy 回调带 isRecommended；低版本拿不到，按 null 处理
           try {
             pm.on('destroy', (res: any) => { finish(res && typeof res.isRecommended === 'boolean' ? res.isRecommended : null); recommendPM = null; });
-            pm.on('error', () => { finish(null); recommendPM = null; });
+            pm.on('error', (res: any) => { finish(errText(res)); recommendPM = null; });
           } catch (e) {}
-          Promise.resolve(pm.show({ openlink: RECOMMEND_OPENLINK })).catch(() => { finish(null); recommendPM = null; });
-        } catch (e) { resolve(null); }
+          // 点击事件里同步调用 show（没预加载时 show 会自己先加载）
+          Promise.resolve(pm.show({ openlink: RECOMMEND_OPENLINK })).catch((res: any) => { finish(errText(res)); recommendPM = null; });
+        } catch (e) { resolve(errText(e && (e as any).message)); }
       });
     },
     supportsUpdateNotice() { return kind === 'wx' && typeof api.requestSubscribeSystemMessage === 'function'; },
@@ -281,10 +293,10 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
         try {
           api.requestSubscribeSystemMessage({
             msgTypeList: ['SYS_MSG_TYPE_WHATS_NEW'],
-            success: (res: any) => resolve(res && res.SYS_MSG_TYPE_WHATS_NEW === 'accept'),
-            fail: () => resolve(false),
+            success: (res: any) => resolve(String((res && res.SYS_MSG_TYPE_WHATS_NEW) || 'none')),
+            fail: (res: any) => resolve(`fail ${(res && res.errCode) || ''} ${(res && res.errMsg) || ''}`.trim()),
           });
-        } catch (e) { resolve(false); }
+        } catch (e) { resolve('fail ' + ((e && (e as any).message) || '')); }
       });
     },
     supportsGameClub() { return kind === 'wx' && !!GAME_CLUB.wx && typeof api.createPageManager === 'function'; },

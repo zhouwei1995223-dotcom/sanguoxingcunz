@@ -79,6 +79,8 @@ export interface SaveData {
   funnel: Record<string, boolean>;
   /** 首次安装的日期（YYYY-MM-DD），算第几天回来 */
   installDay: string;
+  /** 第一次进游戏的来源：ad（腾讯广告点进来）/ s<场景值> / web */
+  src: string;
   /** 最近一次上报登录的日期 */
   loginReportDay: string;
   stats: {
@@ -156,6 +158,7 @@ function freshSave(): SaveData {
     tips: {},
     funnel: {},
     installDay: '',
+    src: '',
     loginReportDay: '',
     stats: { kills: 0, runs: 0, bossKills: 0, playSec: 0, wins: 0, chests: 0, upgrades: 0, ads: 0, ults: 0, evos: 0, bestCombo: 0 },
     updatedAt: now,

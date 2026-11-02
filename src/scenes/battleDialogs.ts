@@ -762,7 +762,7 @@ export class ResultDialog implements Dialog {
       return false;
     }
     // 打赢了是推荐的好时机（官方建议在高光时刻拉起推荐组件；不发奖励）
-    if (this.canRecommend && ui.button('res_recommend', ui.W / 2 - 170 * u, y + 116 * u, 340 * u, 64 * u, '觉得好玩？推荐给好友', C.btnGreen, { size: 22, icon: 'thumb' })) openRecommend('result');
+    if (this.canRecommend) ui.button('res_recommend', ui.W / 2 - 170 * u, y + 116 * u, 340 * u, 64 * u, '觉得好玩？推荐给好友', C.btnGreen, { size: 22, icon: 'thumb', tap: () => openRecommend('result') });
   }
   private get canRecommend() {
     return this.win && !this.res.endless && getPlatform().supportsRecommend();

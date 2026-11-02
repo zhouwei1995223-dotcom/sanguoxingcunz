@@ -56,6 +56,9 @@ export class UI {
   safeBottom: number;
 
   private regions: Region[] = [];
+  /** 本帧登记的「点击时立即执行」回调（tapNow），触摸抬起时用上一帧的表 */
+  private taps: Record<string, () => void> = {};
+  private prevTaps: Record<string, () => void> = {};
   private prevRegions: Region[] = [];
   private clickedId: string | null = null;
   private pressedId: string | null = null;
@@ -129,7 +132,12 @@ export class UI {
         this.pointerDown = false;
         if (!this.moved) {
           const r = this.hit(p.x, p.y);
-          if (r && r.id === this.pressedId) this.clickedId = r.id;
+          if (r && r.id === this.pressedId) {
+            const fn = this.prevTaps[r.id];
+            // 微信的订阅消息、推荐组件等要求在点击事件里调用：直接在触摸回调里执行，不等下一帧
+            if (fn) { playSfx('click'); try { fn(); } catch (e) {} }
+            else this.clickedId = r.id;
+          }
         }
         this.pressedId = null;
         this.activeScroll = null;
@@ -159,6 +167,7 @@ export class UI {
   begin(dt: number) {
     this.time += dt;
     this.regions = [];
+    this.taps = {};
     this.layer = 0;
     // 惯性滚动
     for (const id in this.scrolls) {
@@ -175,6 +184,7 @@ export class UI {
 
   end() {
     this.prevRegions = this.regions;
+    this.prevTaps = this.taps;
     this.clickedId = null;
     this.drawToasts();
   }
@@ -182,6 +192,12 @@ export class UI {
   region(id: string, x: number, y: number, w: number, h: number) {
     const clip = this.clipStack.length ? this.clipStack[this.clipStack.length - 1] : undefined;
     this.regions.push({ id, x, y, w, h, layer: this.layer, clip });
+  }
+
+  /** 登记一个点击区域，点中时在触摸事件回调里立即执行 fn（用于必须由用户点击触发的平台接口） */
+  tapNow(id: string, x: number, y: number, w: number, h: number, fn: () => void) {
+    this.region(id, x, y, w, h);
+    this.taps[id] = fn;
   }
 
   /** 区域被点击返回 true */
@@ -324,7 +340,7 @@ export class UI {
   }
 
   /** 按钮：colors = [主色, 暗色, 高光] */
-  button(id: string, x: number, y: number, w: number, h: number, label: string, colors: string[] = C.btnGold, opts: { size?: number; icon?: string; disabled?: boolean; sub?: string; redDot?: boolean } = {}): boolean {
+  button(id: string, x: number, y: number, w: number, h: number, label: string, colors: string[] = C.btnGold, opts: { size?: number; icon?: string; disabled?: boolean; sub?: string; redDot?: boolean; tap?: () => void } = {}): boolean {
     const pressed = this.isPressed(id) && !opts.disabled;
     const off = pressed ? Math.round(3 * this.u) : 0;
     const p = Math.max(2, Math.round(this.u * 4));
@@ -349,6 +365,7 @@ export class UI {
     if (opts.sub) this.text(opts.sub, x + w / 2, ty + size * this.u * 0.95, size * 0.62, '#fff', 'center', '#2a1410');
     if (opts.redDot) this.redDot(x + w - 6 * this.u, y + 6 * this.u);
     if (opts.disabled) { this.region(id + ':disabled', x, y, w, h); return false; }
+    if (opts.tap) { this.tapNow(id, x, y, w, h, opts.tap); return false; }
     return this.clicked(id, x, y, w, h);
   }
 

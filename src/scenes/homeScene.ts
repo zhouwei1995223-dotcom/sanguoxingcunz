@@ -52,6 +52,7 @@ export class HomeScene implements Scene {
     this.bg = new HomeBackground(p.width, p.height);
     playBgm('bgm_home');
     checkUpdateNotice();
+    if (getPlatform().supportsRecommend()) getPlatform().preloadRecommend();
     rolloverDaily();
     tickStamina();
     this.lastPower = combatPower();
@@ -203,7 +204,7 @@ export class HomeScene implements Scene {
     if (ui.clicked('home_hero', hr[0], hr[1], hr[2], hr[3])) this.tab = 'hero';
 
     // 侧边功能按钮
-    const side: { id: string; icon: string; label: string; dot: boolean; on: () => void; show?: boolean }[] = [
+    const side: { id: string; icon: string; label: string; dot: boolean; on: () => void; show?: boolean; now?: boolean }[] = [
       { id: 'signin', icon: 'calendar', label: '签到', dot: canSignin(), on: () => game.openDialog(new SigninDialog()) },
       ...(newbieActive() ? [{ id: 'newbie', icon: 'chest_gold', label: '七日', dot: newbieRedDot(), on: () => game.openDialog(new NewbieDialog()) }] : []),
       { id: 'tasks', icon: 'scroll', label: '任务', dot: tasksRedDot(), on: () => game.openDialog(new TasksDialog()) },
@@ -212,17 +213,20 @@ export class HomeScene implements Scene {
     ];
     const sideR: typeof side = [
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
-      ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, on: () => {
+      ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();
         getPlatform().report('game_club', { from: 'home' });
         getPlatform().openGameClub().then((ok) => { if (!ok) ui.toast('游戏圈暂时打不开，请稍后再试'); });
       } }] : []),
-      ...(getPlatform().supportsRecommend() ? [{ id: 'recommend', icon: 'thumb', label: '推荐', dot: false, on: () => openRecommend('home') }] : []),
-      ...(getPlatform().supportsUpdateNotice() && updateNotice !== 'accept' ? [{ id: 'notice', icon: 'bell', label: '更新提醒', dot: !save.tips.notice, on: () => {
+      ...(getPlatform().supportsRecommend() ? [{ id: 'recommend', icon: 'thumb', label: '推荐', dot: false, now: true, on: () => openRecommend('home') }] : []),
+      ...(getPlatform().supportsUpdateNotice() && updateNotice !== 'accept' ? [{ id: 'notice', icon: 'bell', label: '更新提醒', dot: !save.tips.notice, now: true, on: () => {
         save.tips.notice = true; markDirty();
-        getPlatform().requestUpdateNotice().then((ok) => {
-          getPlatform().report('update_notice', { ok: ok ? 1 : 0 });
-          if (ok) { updateNotice = 'accept'; ui.toast('订阅成功！新版本上线时会通知你'); }
+        getPlatform().requestUpdateNotice().then((r) => {
+          getPlatform().report('update_notice', { ok: r === 'accept' ? 1 : 0 });
+          if (r === 'accept') { updateNotice = 'accept'; ui.toast('订阅成功！新版本上线时会通知你'); }
+          else if (r === 'reject') ui.toast('没有订阅。之前选过「不再询问」的话，可以在小游戏的设置里打开');
+          else if (r === 'ban') ui.toast('更新提醒暂时不可用');
+          else ui.toast('订阅失败：' + r);
         });
       } }] : []),
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
@@ -246,7 +250,8 @@ export class HomeScene implements Scene {
       ui.icon(s.icon, x + b / 2, y + b / 2 + (pressed ? 3 * u : 0), b * 0.58);
       ui.text(s.label, x + b / 2, y + b + 16 * u, 20, '#fff');
       if (s.dot) ui.redDot(x + b - 6 * u, y + 6 * u);
-      if (ui.clicked('side_' + s.id, x, y, b, b)) s.on();
+      if (s.now) ui.tapNow('side_' + s.id, x, y, b, b, s.on);
+      else if (ui.clicked('side_' + s.id, x, y, b, b)) s.on();
     });
     drawSide(side, 18 * u, false);
     drawSide(sideR, ui.W - bs - 18 * u, true);
@@ -719,6 +724,7 @@ export function checkUpdateNotice() {
 /** 打开微信推荐组件（评价与推荐）；官方不提倡用奖励换推荐，这里不发任何奖励 */
 export function openRecommend(from: string) {
   getPlatform().showRecommend().then((ok) => {
+    if (typeof ok === 'string') { game.ui.toast('推荐组件打不开：' + ok); getPlatform().report('recommend', { from, ok: -2 }); return; }
     getPlatform().report('recommend', { from, ok: ok === null ? -1 : ok ? 1 : 0 });
   });
 }

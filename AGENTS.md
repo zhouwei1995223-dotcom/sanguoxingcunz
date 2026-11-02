@@ -69,6 +69,10 @@
   - 客服入口（2026-11-01）：设置页「联系客服 / 反馈」→ 平台接口 `openCustomerService(sessionFrom)`（`wx.openCustomerServiceConversation`，sessionFrom 带版本 / 通关章数 / 武将）；上报 `service`；隐私政策（`texts.ts`，`IS_WX`）加了客服消息的说明。不需要服务器：后台绑定客服人员，用「客服小助手」小程序或网页端客服工具回复，不要开消息推送。
   - 腾讯广告投流：用户在测试（日预算要限、等 1.0.3 发布后再投）；跳转参数暂不用，以后要区分广告来源再加读取 `query` 并上报。
   - 2026-11-02：1.0.4 审核通过。流量主 10-30~11-01 三天：拉取 1002、曝光 291、点击 31（点击率 10.65% 偏高）、eCPM 137（11-01 掉到 54，新广告位初期出价高，按 50~80 估算）、收入 39.89 元。准备投流，建议先测 3~5 天、日预算 50~100 元，投之前在 1.0.5 加广告来源上报。
+- 1.0.5（2026-11-02，用户反馈 1.0.4 真机上「推荐」「更新提醒」点了没反应，「联系客服」正常）：
+  - 原因：立即模式 UI 在下一帧才处理点击，不在触摸事件里，`wx.requestSubscribeSystemMessage` 要求「仅在点击行为时调用」；而且失败时什么提示都没有。新增 `ui.tapNow(id, rect, fn)` / `ui.button(..., { tap })`：在 touchend 回调里同步执行。主界面「游戏圈」「推荐」「更新提醒」和结算页「推荐给好友」改用它（`tools/shots/tapnow.mjs` 验证回调在 touchend 事件内执行）。
+  - 推荐组件按官方最佳实践进主界面时 `preloadRecommend()` 预加载，点击时 `show`；出错弹「推荐组件打不开：错误码」，`recommend` 上报 ok=-2。更新提醒按 accept / reject / ban / 失败分别提示（加入游戏圈等同于订阅；之前选过「不再询问」会直接返回 reject）。
+  - 启动来源：`platform.launchSource()`（启动参数 query 带 `gdt_vid` / `weixinadinfo` 为 `ad`，否则 `s<场景值>`），第一次登录记到 `save.src`（1.0.5 之前装的记 `old`），`login`、`ad_reward` 上报带 `src`。We分析要给这两个事件加 `src`（字符型）。说明在 `docs/promo/1.0.5/更新说明.md`。
 - 仓库外的东西（新会话需要时重新准备）：打包的 zip（在 .gitignore 里，`npm run build` 后按上面的命令重新打）；推广图 / 视频标题用的思源宋体 Noto Serif CJK Black（`tools/promo/*.py`、`tools/video/compose*.py` 的第一个参数，需要自己下载）；小红书官方打包审计脚本 minitool-zip-builder 1.7.0（`audit_artifact.py`，要从小红书创服平台重新下载）。
 - 备案被驳回过一次（击杀图标是骷髅）：已换成交叉双刀，去掉地图骨头、「尸横遍野」等。新内容同样不要出现骷髅、血腥、烟酒等元素。
 

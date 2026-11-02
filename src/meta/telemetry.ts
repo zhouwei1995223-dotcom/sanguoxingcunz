@@ -37,12 +37,14 @@ export function reportDailyLogin() {
   // 同意隐私政策之前不上报
   if (!save.agreedPrivacy) return;
   const t = today();
+  // 第一次进游戏的来源（1.0.5 之前装的老玩家记为 old），用来区分投放带来的玩家
+  if (!save.src) save.src = save.installDay ? 'old' : getPlatform().launchSource();
   if (!save.installDay) save.installDay = t;
   if (save.loginReportDay === t) return;
   save.loginReportDay = t;
   markDirty();
   const day = Math.round((Date.parse(t) - Date.parse(save.installDay)) / 86400000);
-  getPlatform().report('login', { day, runs: save.stats.runs });
+  getPlatform().report('login', { day, runs: save.stats.runs, src: save.src });
 }
 
 export function initTelemetry() {

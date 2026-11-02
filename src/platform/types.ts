@@ -66,13 +66,18 @@ export interface Platform {
   supportsCustomerService(): boolean;
   openCustomerService(sessionFrom: string): Promise<boolean>;
   /** 微信小游戏推荐组件（评价与推荐）：返回玩家关闭时是否推荐了（拿不到时为 null） */
+  /** 本次启动来源：广告点进来的返回 'ad'，否则 's' + 场景值（网页版 'web'） */
+  launchSource(): string;
   supportsRecommend(): boolean;
-  showRecommend(): Promise<boolean | null>;
+  /** 提前加载推荐组件（进主界面时调用，点按钮时就能直接展示） */
+  preloadRecommend(): void;
+  /** 返回 true / false（是否推荐了）、null（拿不到结果），出错时返回错误信息字符串 */
+  showRecommend(): Promise<boolean | null | string>;
   /** 游戏更新提醒（系统订阅消息 SYS_MSG_TYPE_WHATS_NEW，订阅一次永久有效，版本发布后平台自动推送） */
   supportsUpdateNotice(): boolean;
   updateNoticeState(): Promise<'accept' | 'reject' | 'none'>;
-  /** 必须在点击里调用 */
-  requestUpdateNotice(): Promise<boolean>;
+  /** 必须在点击里调用（ui.tapNow）。返回 accept / reject / ban，失败时返回错误信息 */
+  requestUpdateNotice(): Promise<string>;
   addShortcut(): Promise<boolean>;
 
   /** 排行榜 */
