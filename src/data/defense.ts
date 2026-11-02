@@ -53,6 +53,8 @@ export const DEFENSE_HP_K = 0.72, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
  * 各关额外的 [血量, 攻击] 倍率（没写的关是 1）：第 1、2 关新手熟悉玩法，光秃秃的存档也能轻松守住；
  * 第 3~6 关血量 +8%（按「装备 + 军略 + 武将培养卡在推荐战力」的存档测，第 4 关原来 3/3 太稳）。
  */
+/** 敌将打城墙的伤害倍率（第 1、2 关；主将登场后武将一倒下，城池半分钟就被拆完） */
+export const DEFENSE_BOSS_WALL: number[] = [0.4, 0.5];
 export const DEFENSE_EASE: [number, number][] = [[0.45, 0.5], [0.55, 0.65], [1.08, 1], [1.08, 1], [1.08, 1], [1.08, 1]];
 export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
   { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },

@@ -2,7 +2,7 @@ import { rand, TAU, weighted } from '../core/math';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
   DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
-  REPAIR_PCT, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_KINDS, BUILD_SLOTS, BUILD_MAX_LV, BUILD_PER_KIND, BUILD_CARD_MAX, UNIT_ORDER, defenseCityMul,
+  REPAIR_PCT, ALLY_LEASH, ALLY_HP_K, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_KINDS, BUILD_SLOTS, BUILD_MAX_LV, BUILD_PER_KIND, BUILD_CARD_MAX, UNIT_ORDER, defenseCityMul, DEFENSE_BOSS_WALL,
 } from '../data/defense';
 import type { Battle } from './battle';
 import type { Enemy } from './entities';
@@ -386,7 +386,7 @@ export function enemyContact(b: Battle, e: Enemy, tgt: { ally: Ally | null; city
         e.atkCd = e.def?.id === 'siege_ram' ? 2.2 : 1.1;
         // 普通步兵拆城墙很慢，冲车 / 云梯 / 敌将才是真正的威胁
         const siege = e.def && (e.def.ai === 'siege' || e.def.id === 'siege_cata');
-        hurtCity(b, e.dmg * (e.boss ? 1 : siege ? 1 : 0.25), e.boss ? 'boss' : e.def!.id);
+        hurtCity(b, e.dmg * (e.boss ? (b.chapter.defense ? DEFENSE_BOSS_WALL[b.chapter.id - 1] ?? 1 : 1) : siege ? 1 : 0.25), e.boss ? 'boss' : e.def!.id);
       }
     }
     return true;
