@@ -49,8 +49,11 @@ for (let s = 0; s < 4; s++) for (const off of [-0.32, 0.32]) { const a = Math.PI
  * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
  */
 export const DEFENSE_HP_K = 0.72, DEFENSE_DMG_K = 0.85, DEFENSE_POWER_K = 1.1;
-/** 第 1、2 关额外的 [血量, 攻击] 倍率 */
-export const DEFENSE_EASE: [number, number][] = [[0.5, 0.6], [0.6, 0.7]];
+/**
+ * 各关额外的 [血量, 攻击] 倍率（没写的关是 1）：第 1、2 关新手熟悉玩法，光秃秃的存档也能轻松守住；
+ * 第 3~6 关血量 +8%（按「装备 + 军略 + 武将培养卡在推荐战力」的存档测，第 4 关原来 3/3 太稳）。
+ */
+export const DEFENSE_EASE: [number, number][] = [[0.45, 0.5], [0.55, 0.65], [1.08, 1], [1.08, 1], [1.08, 1], [1.08, 1]];
 export const DEFENSE_LEVELS: { name: string; subtitle: string; story: string }[] = [
   { name: '新野', subtitle: '火烧博望', story: '曹军南下，先锋直逼新野。守住小城，为主公撤往樊城争取时间！' },
   { name: '江夏', subtitle: '刘琦固守', story: '当阳兵败，退守江夏。曹军顺流而下，务必守住这最后的落脚之地。' },
@@ -78,7 +81,7 @@ export function defenseChapter(n: number): ChapterDef {
   const L = DEFENSE_LEVELS[lv - 1];
   return {
     ...DEFENSE, id: lv, name: L.name, subtitle: L.subtitle, story: L.story, theme: ch.theme,
-    // 前两关是新手熟悉玩法，光秃秃的存档也能轻松守住：血量 / 攻击再打折（DEFENSE_EASE）
+    // 各关额外倍率（DEFENSE_EASE）：前两关放宽，第 3~6 关稍难
     hpMul: ch.hpMul * DEFENSE_HP_K * (DEFENSE_EASE[lv - 1]?.[0] ?? 1), dmgMul: ch.dmgMul * DEFENSE_DMG_K * (DEFENSE_EASE[lv - 1]?.[1] ?? 1), growth: DEFENSE.growth,
     waves: ch.waves, events: ch.events, midBoss: ch.midBoss, boss: ch.boss, goldBase: ch.goldBase,
     power: Math.round((ch.power * DEFENSE_POWER_K) / 100) * 100,
