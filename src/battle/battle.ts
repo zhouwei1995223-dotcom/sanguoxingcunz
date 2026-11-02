@@ -20,7 +20,7 @@ import { updateBoss } from './boss';
 import {
   DefenseState, updateDefense, reviveCity, enemyTarget, enemyContact, heroDown, shotHitsCity, hurtCity, orderChoices, readyLinks, applyOrder, applyLink, orderLv,
 } from './defense';
-import { ORDERS, LINKS, OrderId, LinkId } from '../data/defense';
+import { ORDERS, LINKS, OrderId, LinkId, DEF_HERO_DMG, ARENA_R } from '../data/defense';
 
 export type Choice =
   | { kind: 'weapon'; id: WeaponId; lv: number; isNew: boolean }
@@ -871,7 +871,7 @@ export class Battle {
         e.y += e.vy * dt;
         e.life -= dt;
         if (e.life <= 0) { e.dead = true; continue; }
-      } else if (e.def!.ai === 'ranged') {
+      } else if (e.def!.ai === 'ranged' && !(tgt && tgt.path)) {
         const range = e.def!.range || 90;
         let mv = 0;
         if (d > range + 10) mv = 1; else if (d < range - 20) mv = -0.6;
@@ -919,7 +919,7 @@ export class Battle {
       }
 
       // 守城：攻城 / 打士兵
-      if (tgt && (tgt.city || tgt.ally) && !e.fixedDir) { enemyContact(this, e, tgt); continue; }
+      if (tgt && (tgt.city || tgt.ally || tgt.path) && !e.fixedDir) { if (!tgt.path) enemyContact(this, e, tgt); continue; }
       // 接触伤害
       const cr = e.r + p.r * 0.7;
       if (d < cr) {
@@ -996,6 +996,8 @@ export class Battle {
     // 屏幕外的敌人打不到：敌人一定会先出现在玩家眼前（大招除外）
     if (!opts.force && !e.boss && !this.canHit(e)) return false;
     let dmg = base * this.dmgMul * this.dynMul;
+    // 守城主打兵种和建筑：武将本人伤害打折
+    if (this.def) dmg *= DEF_HERO_DMG;
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (this.hero.id === 'dianwei' && this.player.hp < this.player.maxHp * 0.5) dmg *= 1.25; // 古之恶来
     if (this.hero.id === 'machao' && this.player.moving) dmg *= 1.15; // 神威天将军
@@ -1152,6 +1154,8 @@ export class Battle {
   }
 
   dropPickup(kind: Pickup['kind'], x: number, y: number, value: number, boss = false): Pickup {
+    // 守城：掉在山林外（敌人在出怪口外被打死）的东西挪到场地里面，保证捡得到
+    if (this.def) { const dd = Math.hypot(x, y), R = ARENA_R - 16; if (dd > R) { x *= R / dd; y *= R / dd; } }
     const pk: Pickup = { kind, x, y, value, vx: 0, vy: 0, pulled: false, t: 0, boss };
     if (kind === 'gem') this.gemCount++;
     this.pickups.push(pk);

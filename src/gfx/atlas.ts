@@ -4,7 +4,7 @@ import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
 import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
 import { awakenFrames } from './art/awaken';
-import { cityImage, ramFrames, catapultFrames, crossbowCartFrames, withLadder } from './art/defense';
+import { cityImage, ramFrames, catapultFrames, crossbowCartFrames, withLadder, arrowTowerImage, shuCatapultFrames } from './art/defense';
 import { soldierFrames, generalFrames } from './art/units';
 import { SOLDIER_STYLES, GENERAL_STYLES } from './art/roster';
 import * as I from './art/items';
@@ -160,6 +160,8 @@ export function buildAtlas() {
   addUnit('u_siege_cata', catapultFrames());
   addUnit('u_siege_ladder', withLadder(soldierFrames(SOLDIER_STYLES.wei_spear)));
   addUnit('u_shu_xbow', crossbowCartFrames());
+  for (const lv of [1, 2, 3]) addSprite('b_tower' + lv, arrowTowerImage(lv), 'bottom');
+  addUnit('u_shu_cata', shuCatapultFrames());
 
   [0, 1, 2].forEach((k) => addSprite('gem' + k, I.gem(k as 0)));
   I.coinFrames().forEach((c, i) => addSprite('coin' + i, c));

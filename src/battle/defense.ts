@@ -2,7 +2,7 @@ import { rand, TAU, weighted } from '../core/math';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
   DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_COST, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
-  REPAIR_COST, REPAIR_PCT, REPAIR_CD,
+  REPAIR_COST, REPAIR_PCT, REPAIR_CD, ALLY_LEASH, ARENA_R, WALL_W, GATE_HALF, BUILDS, BuildKind, BUILD_SLOTS, BUILD_MAX_LV, buildCost,
 } from '../data/defense';
 import type { Battle } from './battle';
 import type { Enemy } from './entities';
@@ -31,7 +31,12 @@ export interface Ally {
 export interface AllyArrow {
   x: number; y: number; tx: number; ty: number; t: number; dur: number;
   target: Enemy | null; dmg: number; fire: boolean; pierce: boolean; big: boolean;
+  /** 投石台：落地范围伤害的半径 */
+  aoe?: number;
 }
+
+/** 建在建造点上的建筑 */
+export interface Building { slot: number; kind: BuildKind; lv: number; cdT: number }
 
 export interface Log { x: number; y: number; vx: number; vy: number; life: number; hit: Set<number>; dmg: number; rot: number }
 
@@ -64,6 +69,7 @@ export interface DefenseState {
   breakT: number;
   /** 平衡统计：城池受到的伤害按来源累计 */
   dmgBy: Record<string, number>;
+  builds: Building[];
 }
 
 /** 四座角楼的位置（和城池图对应） */
@@ -76,10 +82,10 @@ export function createDefense(b: Battle, heroes: Record<string, HeroInfo>): Defe
   // 武将从城门口出发
   b.player.x = 0; b.player.y = CITY_R + 24;
   return {
-    cityHp: cityBase, cityMax: cityBase, cityBase, cityFlash: 0, grain: 80,
+    cityHp: cityBase, cityMax: cityBase, cityBase, cityFlash: 0, grain: 120,
     allies: [], arrows: [], logs: [], orders: {}, links: new Set(), heroes, heroCd: {}, repairCd: 0,
     towerT: [0.5, 0.7, 0.9, 1.1], spikeT: 0.5, logT: 7, waveIdx: 0, nextWave: 12, trickleT: 1, midDone: false, bossDone: false,
-    downT: 0, lost: false, allyKills: 0, breakT: 10, dmgBy: {},
+    downT: 0, lost: false, allyKills: 0, breakT: 10, dmgBy: {}, builds: [],
   };
 }
 
@@ -109,7 +115,7 @@ export function unitStats(b: Battle, kind: UnitKind) {
 }
 
 export function grainRate(d: DefenseState): number {
-  return 3 * (1 + 0.3 * orderLv(d, 'c_beacon'));
+  return 4.5 * (1 + 0.3 * orderLv(d, 'c_beacon'));
 }
 
 const soldiers = (d: DefenseState) => d.allies.reduce((n, a) => n + (!a.dead && a.kind !== 'hero' ? 1 : 0), 0);
@@ -127,11 +133,12 @@ export function summonUnit(b: Battle, kind: UnitKind): string | null {
   d.grain -= u.cost;
   const n = Math.min(room, st.count);
   // 从离武将最近的一面城墙出城
-  const a0 = Math.atan2(b.player.y, b.player.x);
+  // 驻守在武将所在方向（最近的出怪口那一侧）的城外
+  const a0 = nearestGate(b.player.x, b.player.y) * (TAU / 4);
   for (let i = 0; i < n; i++) {
     const a = a0 + rand(-0.6, 0.6);
     const R = CITY_R + 14;
-    const post = a0 + rand(-1.2, 1.2), pr = CITY_R + 30 + rand(0, 50);
+    const post = a0 + rand(-0.7, 0.7), pr = CITY_R + 35 + rand(0, ALLY_LEASH - CITY_R - 50);
     d.allies.push({
       kind, x: Math.cos(a) * R, y: Math.sin(a) * R + 10, r: u.r, hp: st.hp, maxHp: st.hp, atk: st.atk, cd: u.cd, cdT: rand(0, 0.5), range: u.range, speed: st.speed,
       life: -1, left: Math.cos(a) < 0, anim: rand(0, 4), flash: 0, dead: false, sprite: u.sprite, skillT: rand(1, 4), dashT: 0, dvx: 0, dvy: 0,
@@ -236,10 +243,99 @@ export function orderChoices(d: DefenseState): { id: OrderId; lv: number; w: num
   return out;
 }
 
+// —— 地形：一圈山林 + 四个出怪口 ——
+/** 角度离最近的出怪口有多远（弧度） */
+function gateDelta(a: number): number {
+  let m = 9;
+  for (let s = 0; s < 4; s++) { let d = a - s * (TAU / 4); while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; m = Math.min(m, Math.abs(d)); }
+  return m;
+}
+export const inGate = (x: number, y: number) => gateDelta(Math.atan2(y, x)) < GATE_HALF;
+/** 最近的出怪口（0 东、1 南、2 西、3 北） */
+export function nearestGate(x: number, y: number): number {
+  const a = Math.atan2(y, x);
+  let best = 0, bd = 9;
+  for (let s = 0; s < 4; s++) { let d = a - s * (TAU / 4); while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; if (Math.abs(d) < bd) { bd = Math.abs(d); best = s; } }
+  return best;
+}
+/** 把撞进山林里的单位推出去（在出怪口里不推） */
+export function terrainPush(o: { x: number; y: number }, r: number) {
+  const dist = Math.hypot(o.x, o.y);
+  if (dist < ARENA_R - r || dist > ARENA_R + WALL_W + r) return;
+  if (gateDelta(Math.atan2(o.y, o.x)) < GATE_HALF) return;
+  const to = dist < ARENA_R + WALL_W / 2 ? ARENA_R - r : ARENA_R + WALL_W + r;
+  o.x *= to / (dist || 1); o.y *= to / (dist || 1);
+}
+
+// —— 建筑 ——
+/** 离武将最近的建造点 */
+export function nearestSlot(b: Battle): number {
+  const p = b.player;
+  let best = 0, bd = 1e9;
+  BUILD_SLOTS.forEach(([x, y], i) => { const dd = (x - p.x) ** 2 + (y - p.y) ** 2; if (dd < bd) { bd = dd; best = i; } });
+  return best;
+}
+export const buildingAt = (d: DefenseState, slot: number) => d.builds.find((x) => x.slot === slot) || null;
+/** 在最近的建造点建造 / 升级，返回错误提示或 null */
+export function buildAt(b: Battle, kind: BuildKind): string | null {
+  const d = b.def!;
+  const slot = nearestSlot(b);
+  const cur = buildingAt(d, slot);
+  if (cur && cur.kind !== kind) return `这里已经有${BUILDS[cur.kind].name}了`;
+  const lv = cur ? cur.lv + 1 : 1;
+  if (lv > BUILD_MAX_LV) return `${BUILDS[kind].name}已经满级`;
+  const cost = buildCost(kind, lv);
+  if (d.grain < cost) return `粮草不足（需要 ${cost}）`;
+  d.grain -= cost;
+  if (cur) cur.lv = lv; else d.builds.push({ slot, kind, lv: 1, cdT: 0.5 });
+  const [x, y] = BUILD_SLOTS[slot];
+  b.fx.push({ kind: 'shock', x, y: y - 6, t: 0, dur: 0.45, r: 46, w: 8, color: '#fee761', real: true });
+  b.hooks.sfx('evolve');
+  b.hooks.banner(lv > 1 ? `${BUILDS[kind].name}升到 ${lv} 级` : `建成${BUILDS[kind].name}`, '#fee761');
+  return null;
+}
+
+function updateBuilds(b: Battle, dt: number) {
+  const d = b.def!;
+  const atk = b.base.atk;
+  for (const bd of d.builds) {
+    bd.cdT -= dt;
+    if (bd.cdT > 0) continue;
+    const [x, y] = BUILD_SLOTS[bd.slot];
+    const k = 1 + 0.6 * (bd.lv - 1);
+    if (bd.kind === 'tower') {
+      const e = nearestEnemy(b, x, y, 190);
+      if (!e) { bd.cdT = 0.2; continue; }
+      bd.cdT = 0.65;
+      shoot(b, x, y - 26, e, atk * 1.3 * k, { fire: d.links.has('l_fire') });
+    } else if (bd.kind === 'cata') {
+      const e = nearestEnemy(b, x, y, 230);
+      if (!e) { bd.cdT = 0.3; continue; }
+      bd.cdT = 2.2;
+      const dist = Math.hypot(e.x - x, e.y - y);
+      d.arrows.push({ x, y: y - 14, tx: e.x, ty: e.y - 6, t: 0, dur: 0.5 + dist / 600, target: null, dmg: atk * 2.6 * k, fire: false, pierce: false, big: true, aoe: 34 + 6 * bd.lv });
+      b.hooks.sfx('thrust');
+    } else {
+      bd.cdT = 0.5;
+      for (const e of b.enemies) {
+        if (e.dead || (e.x - x) ** 2 + (e.y - y) ** 2 > (36 + e.r) ** 2) continue;
+        b.allyDamage(e, atk * 0.7 * k);
+        if (!e.boss) { e.slow = Math.max(e.slow, 0.55); e.slowT = Math.max(e.slowT, 0.6); }
+      }
+    }
+  }
+}
+
 /** 敌人当前追击的目标：攻城兵种只打城；武将在附近就打武将；身边有我方士兵就打士兵；否则攻城 */
-export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: Ally | null; city: boolean } {
+export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: Ally | null; city: boolean; path?: boolean } {
   const d = b.def!;
   const p = b.player;
+  // 还在山林外面（没从出怪口进来）：先绕到最近的出怪口
+  const ed = Math.hypot(e.x, e.y);
+  if (ed > ARENA_R - 12 && !inGate(e.x, e.y)) {
+    const g = nearestGate(e.x, e.y) * (TAU / 4);
+    return { x: Math.cos(g) * (ARENA_R + WALL_W + 30), y: Math.sin(g) * (ARENA_R + WALL_W + 30), ally: null, city: false, path: true } as ReturnType<typeof enemyTarget>;
+  }
   const siege = e.def && (e.def.ai === 'siege' || e.def.id === 'siege_cata');
   if (!siege) {
     const heroUp = d.downT <= 0;
@@ -326,12 +422,12 @@ export function reviveCity(b: Battle) {
   b.hooks.banner('死守城池！', '#fee761');
 }
 
-function nearestEnemy(b: Battle, x: number, y: number, maxD: number): Enemy | null {
+function nearestEnemy(b: Battle, x: number, y: number, maxD: number, fromCity = ARENA_R + 16): Enemy | null {
   let best: Enemy | null = null, bd = maxD * maxD;
   for (const e of b.enemies) {
     if (e.dead) continue;
     // 太远的（还在城外老远）不追，免得士兵跑散
-    if (e.x * e.x + e.y * e.y > (DEFENSE_LEASH + 40) ** 2) continue;
+    if (e.x * e.x + e.y * e.y > fromCity * fromCity) continue;
     const dd = (e.x - x) ** 2 + (e.y - y) ** 2;
     if (dd < bd) { bd = dd; best = e; }
   }
@@ -379,7 +475,8 @@ function updateAllies(b: Battle, dt: number) {
       a.anim += dt * 14;
       continue;
     }
-    const e = nearestEnemy(b, a.x, a.y, a.kind === 'archer' || a.kind === 'xbow' ? 220 : 180);
+    // 只迎击主城附近的敌人（远程兵多算一点射程）
+    const e = nearestEnemy(b, a.x, a.y, a.kind === 'archer' || a.kind === 'xbow' ? 220 : 180, ALLY_LEASH + (a.range > 60 ? a.range * 0.6 : 25));
     let mx = 0, my = 0;
     if (!e) {
       const dx = a.ox - a.x, dy = a.oy - a.y, dist = Math.hypot(dx, dy);
@@ -490,6 +587,13 @@ function updateArrows(b: Battle, dt: number) {
       b.fx.push({ kind: 'explo', x: fx, y: fy, t: 0, dur: 0.3 });
       continue;
     }
+    if (ar.aoe) {
+      splash(b, ar.tx, ar.ty + 6, ar.aoe, ar.dmg, 14);
+      b.fx.push({ kind: 'explo', x: ar.tx, y: ar.ty + 6, t: 0, dur: 0.35 });
+      b.fx.push({ kind: 'shock', x: ar.tx, y: ar.ty + 6, t: 0, dur: 0.3, r: ar.aoe, w: 6, color: '#e8b796' });
+      b.hooks.shake(1.5);
+      continue;
+    }
     if (ar.target && !ar.target.dead) b.allyDamage(ar.target, ar.dmg);
     if (ar.fire) {
       splash(b, ar.tx, ar.ty + 6, 26, ar.dmg * 0.5);
@@ -560,8 +664,9 @@ function updateCityDefense(b: Battle, dt: number) {
 }
 
 function spawnAround(b: Battle, id: string, side: number, spread = 0.7, opts: { elite?: boolean; hpMul?: number } = {}) {
-  const a = side * (TAU / 4) + rand(-spread, spread);
-  const R = DEFENSE_SPAWN_R + rand(0, 40);
+  // 从出怪口外面冒出来，排成一路纵队往里走
+  const a = side * (TAU / 4) + rand(-0.05, 0.05) * (0.5 + spread);
+  const R = DEFENSE_SPAWN_R + rand(0, 70);
   return b.spawnEnemy(id, Math.cos(a) * R, Math.sin(a) * R, opts);
 }
 
@@ -593,11 +698,11 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
   d.trickleT -= dt;
   if (d.trickleT <= 0) {
     d.trickleT = 0.7;
-    const target = Math.min(90, 16 + t * 0.25) * b.densityMul * (bossAlive ? 0.7 : 1);
+    const target = Math.min(150, 30 + t * 0.42) * b.densityMul * (bossAlive ? 0.75 : 1);
     b.targetDensity = target;
     let alive = 0;
     for (const e of b.enemies) if (!e.dead && !e.boss) alive++;
-    const need = Math.min(4, Math.ceil(target - alive));
+    const need = Math.min(7, Math.ceil(target - alive));
     const pl = pool(b, t);
     for (let i = 0; i < need; i++) spawnAround(b, weighted(pl, (x) => x[1])[0], (Math.random() * 4) | 0, 0.78);
   }
@@ -612,7 +717,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     const s0 = (Math.random() * 4) | 0;
     const ss = sides === 3 ? [s0, (s0 + 1) % 4, (s0 + 2) % 4] : sides === 2 ? [s0, (s0 + 2) % 4] : [s0];
     const pl = pool(b, t);
-    const n = Math.round((14 + 4 * w) * b.densityMul);
+    const n = Math.round((24 + 6 * w) * b.densityMul);
     for (let i = 0; i < n; i++) spawnAround(b, weighted(pl, (x) => x[1])[0], ss[i % ss.length], 0.4);
     if (w >= 3) for (let i = 0; i < 1 + Math.floor((w - 3) / 2); i++) spawnAround(b, 'siege_ram', ss[i % ss.length], 0.3);
     if (w >= 2) for (let i = 0; i < 2 + Math.floor(w / 2); i++) spawnAround(b, 'siege_ladder', ss[i % ss.length], 0.4);
@@ -664,9 +769,14 @@ export function updateDefense(b: Battle, dt: number) {
       b.hooks.banner(`${b.hero.name}重整完毕，再度出城！`, '#fee761');
     }
   }
-  // 不能离城太远
+  // 地形：武将、士兵出不去山林，出怪口也只能走到口子里；敌人撞到山林会被推开
+  terrainPush(p, p.r);
   const pd = Math.hypot(p.x, p.y);
-  if (pd > DEFENSE_LEASH) { p.x *= DEFENSE_LEASH / pd; p.y *= DEFENSE_LEASH / pd; }
+  if (pd > ARENA_R + 6) { p.x *= (ARENA_R + 6) / pd; p.y *= (ARENA_R + 6) / pd; }
+  // 士兵和召唤武将不离主城太远
+  for (const a of d.allies) if (!a.dead && a.dashT <= 0) { const ad = Math.hypot(a.x, a.y); if (ad > ALLY_LEASH) { a.x *= ALLY_LEASH / ad; a.y *= ALLY_LEASH / ad; } }
+  for (const e of b.enemies) if (!e.dead && !e.fixedDir) terrainPush(e, e.r);
+  updateBuilds(b, dt);
   // 撑到时间：胜利
   if (b.t >= DEFENSE_DURATION && !b.won && !d.lost) {
     for (const e of b.enemies) if (!e.dead) { e.dead = true; b.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }

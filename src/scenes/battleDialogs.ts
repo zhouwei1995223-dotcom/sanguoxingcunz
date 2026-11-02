@@ -20,8 +20,8 @@ import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
-import { heroCanSummon, summonHero } from '../battle/defense';
-import { HERO_SUMMON_COST, HERO_SUMMON_TIME, ORDERS, LINKS } from '../data/defense';
+import { heroCanSummon, summonHero, nearestSlot, buildingAt, buildAt } from '../battle/defense';
+import { HERO_SUMMON_COST, HERO_SUMMON_TIME, ORDERS, LINKS, BUILDS, BUILD_KINDS, BUILD_MAX_LV, buildCost } from '../data/defense';
 
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
@@ -609,6 +609,48 @@ export class HeroSummonDialog implements Dialog {
     if (this.closed) return false;
   }
   closed?: boolean;
+}
+
+/** 守城：在离武将最近的建造点建造 / 升级（暂停战斗） */
+export class BuildDialog implements Dialog {
+  t?: number;
+  closed?: boolean;
+  constructor(private scene: BattleScene) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const b = this.scene.battle;
+    const d = b.def!;
+    const slot = nearestSlot(b);
+    const cur = buildingAt(d, slot);
+    const w = ui.W - 80 * u, h = 760 * u;
+    const f = dialogFrame(ui, w, h, '建造', this.t, 'bd_close');
+    if (f.close) return false;
+    const gates = ['东', '南', '西', '北'];
+    ui.text(`${gates[Math.floor(slot / 2)]}门${slot % 2 ? '右' : '左'}侧建造点（离武将最近，地上黄色虚线圈）`, ui.W / 2, f.y + 92 * u, 20, C.textDim);
+    ui.text(`现有粮草 ${Math.floor(d.grain)}`, ui.W / 2, f.y + 124 * u, 22, '#fee761');
+    let y = f.y + 160 * u;
+    for (const k of BUILD_KINDS) {
+      const bd = BUILDS[k];
+      const mine = cur && cur.kind === k;
+      const lv = mine ? cur!.lv + 1 : 1;
+      const blocked = !!cur && !mine;
+      const maxed = lv > BUILD_MAX_LV;
+      const cost = maxed ? 0 : buildCost(k, lv);
+      const ok = !blocked && !maxed && d.grain >= cost;
+      ui.pixRect(f.x + 30 * u, y, w - 60 * u, 168 * u, ok ? '#3a4a30' : '#2e2624');
+      ui.qualityFrame(f.x + 46 * u, y + 20 * u, 120 * u, ok ? '#feae34' : '#5a4038');
+      ui.icon(bd.icon, f.x + 106 * u, y + 80 * u, 80 * u, ok ? 1 : 0.5);
+      ui.text(`${bd.name}${mine ? ` Lv.${cur!.lv}` : ''}`, f.x + 190 * u, y + 44 * u, 30, '#fff4d6', 'left');
+      ui.text(bd.desc, f.x + 190 * u, y + 88 * u, 20, '#d9c6a0', 'left');
+      ui.text(blocked ? '这个建造点已被占用' : maxed ? '已满级' : `${mine ? '升级' : '建造'}：${cost} 粮草${mine ? '（伤害 +60%）' : ''}`, f.x + 190 * u, y + 128 * u, 20, ok ? '#9be37a' : '#a86a5a', 'left');
+      if (ui.clicked('bd_' + k, f.x + 30 * u, y, w - 60 * u, 168 * u)) {
+        const err = buildAt(b, k);
+        if (err) ui.toast(err); else this.closed = true;
+      }
+      y += 184 * u;
+    }
+    if (this.closed) return false;
+  }
 }
 
 /** 直取敌将确认：跳过多久、补多少经验，确认后再跳，防止误触 */

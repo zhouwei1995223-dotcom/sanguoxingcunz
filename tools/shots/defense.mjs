@@ -29,12 +29,13 @@ export default async function ({ page, wait, shot }) {
       if (g.dialogs.length) {
         const dl = g.dialogs[g.dialogs.length - 1];
         if (dl.choices && dl.scene) { const k = b.recommend(dl.choices); dl.scene.choose(dl.choices[Math.max(0, k)]); g.dialogs.length = 0; }
+        else if (dl.constructor.name === 'BuildDialog') { const k = ['bd_tower', 'bd_cata', 'bd_spike'][(Math.random() * 3) | 0]; g.ui.clickedId = k; if (Math.random() < 0.3) g.dialogs.length = 0; }
         else if (dl.constructor.name === 'HeroSummonDialog') { const r = g.ui.prevRegions.find((x) => x.id.startsWith('hsum_') && x.id !== 'hsum_close'); if (r) g.ui.clickedId = r.id; else g.dialogs.length = 0; }
         else g.dialogs.length = 0;
       }
       const kinds = ['xbow', 'cav', 'archer', 'shield', 'spear'];
       for (const k of kinds) { const c = { spear: 40, shield: 50, archer: 55, cav: 70, xbow: 90 }[k]; if (d.grain >= c + 20) { const m = window.__defMod; } }
-      return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), lvl: b.chapter.id, hp: Math.round(b.chapter.hpMul * 100) / 100, won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
+      return { t: Math.round(b.t), city: Math.round(d.cityHp), max: d.cityMax, grain: Math.round(d.grain), allies: d.allies.filter((a) => !a.dead).length, wave: d.waveIdx, lv: b.level, orders: JSON.stringify(d.orders), links: [...d.links].join(','), dmg: JSON.stringify(Object.fromEntries(Object.entries(d.dmgBy).map(([k, v]) => [k, Math.round(v)]))), builds: d.builds.map((x) => x.kind[0] + x.lv).join(''), lvl: b.chapter.id, hp: Math.round(b.chapter.hpMul * 100) / 100, won: b.won, dead: b.dead, down: d.downT > 0, enemies: b.enemies.filter((e) => !e.dead).length };
     });
     if (s.err) { log.push(s); break; }
     if (i % 20 === 0) log.push(s);
@@ -43,6 +44,7 @@ export default async function ({ page, wait, shot }) {
       const g = window.__game; const b = g.scene.battle; const d = b.def;
       if (Math.random() < 0.5) return;
       if (d.cityHp < d.cityMax * 0.6 && d.repairCd <= 0 && d.grain >= 60) { g.ui.clickedId = 'def_repair'; return; }
+      if (d.grain >= 160 && Math.random() < 0.35) { g.ui.clickedId = 'def_build'; return; }
       if (d.grain >= 120 && Math.random() < 0.3 && g.ui.prevRegions.find((x) => x.id === 'def_hero')) { g.ui.clickedId = 'def_hero'; return; }
       const btns = ['def_xbow', 'def_cav', 'def_archer', 'def_shield', 'def_spear'];
       for (const id of btns) { const r = g.ui.prevRegions.find((x) => x.id === id); if (r) { g.ui.clickedId = id; break; } }

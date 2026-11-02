@@ -19,7 +19,7 @@ import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog, HeroSummonDialog } from './battleDialogs';
+import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog, HeroSummonDialog, BuildDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
@@ -526,7 +526,7 @@ export class BattleScene implements Scene {
     const top = ui.safeTop + 8 * u;
     void top;
     const right = !save.settings.ultRight;
-    const bw = 112 * u, bh = 92 * u, gap = 10 * u;
+    const bw = 112 * u, bh = 84 * u, gap = 8 * u;
     const x = right ? ui.W - bw - 14 * u : 14 * u;
     let y = ui.H * 0.44;
     // 粮草（按钮列上方）
@@ -551,6 +551,7 @@ export class BattleScene implements Scene {
       btn('def_' + k, un.icon, un.name, un.cost, d.grain >= un.cost, () => { const err = summonUnit(b, k); if (err) ui.toast(err); });
     }
     const heroIds = Object.keys(d.heroes).filter((id) => id !== b.hero.id);
+    btn('def_build', 'w_catapult', '建造', 70, d.grain >= 70, () => game.openDialog(new BuildDialog(this)), '70起');
     if (heroIds.length) btn('def_hero', 'star', '武将', HERO_SUMMON_COST, d.grain >= HERO_SUMMON_COST, () => game.openDialog(new HeroSummonDialog(this)));
     btn('def_repair', 'p_armor', '修城', REPAIR_COST, d.grain >= REPAIR_COST && d.repairCd <= 0 && d.cityHp < d.cityMax, () => { const err = repairCity(b); if (err) ui.toast(err); }, d.repairCd > 0 ? `${Math.ceil(d.repairCd)}秒` : undefined);
     // 城池不在屏幕里：屏幕边缘画一个指向城池的箭头（城墙挨打时变红闪烁）
@@ -575,7 +576,7 @@ export class BattleScene implements Scene {
       ui.ctx.fillRect(0, ui.H * 0.46, ui.W, 70 * u);
       ui.text(`${b.hero.name}回城重整中…… ${Math.ceil(d.downT)} 秒`, ui.W / 2, ui.H * 0.46 + 35 * u, 30, '#ff8a80');
     }
-    this.tip('defense', '守住城池！右侧花粮草召唤士兵', true);
+    this.tip('defense', '守住城池！右侧花粮草召唤士兵、建造箭塔', true);
     if (b.t > 20) this.tip('defense2', '升级时可选兵种、城防「军令」，凑齐还能联动');
   }
 

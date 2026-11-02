@@ -1,5 +1,12 @@
-import { CITY_R } from '../data/defense';
-import { TOWERS } from './defense';
+import { CITY_R, ARENA_R, WALL_W, GATE_HALF, BUILD_SLOTS } from '../data/defense';
+
+/** 角度离最近的出怪口有多远 */
+function gateGap(a: number): number {
+  let m = 9;
+  for (let s = 0; s < 4; s++) { let d = a - s * (Math.PI / 2); while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; m = Math.min(m, Math.abs(d)); }
+  return m;
+}
+import { TOWERS, nearestSlot, buildingAt } from './defense';
 import { getPlatform } from '../platform';
 import { sprite, scaled, Sprite } from '../gfx/atlas';
 import { THEMES, GroundTheme } from '../gfx/art/env';
@@ -1004,9 +1011,96 @@ export class WorldRenderer {
   }
 
   /** 守城：城池、我方士兵 / 武将加入排序列表 */
+  /** 守城地形：沿一圈摆的树 / 石头（第一次用时算好位置） */
+  private ringDecor: { x: number; y: number; name: string }[] | null = null;
+  private buildRing() {
+    const tall = this.theme.decor.map((x) => x[0]).filter((n) => TALL.has(n) && n !== 'banner');
+    const names = tall.length ? tall : ['bigRock'];
+    const out: { x: number; y: number; name: string }[] = [];
+    let k = 0;
+    for (const [rr, step] of [[ARENA_R + 6, 13], [ARENA_R + 19, 14], [ARENA_R + 33, 15]] as [number, number][]) {
+      const n = Math.round((TAU * rr) / step);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + (rr % 7) * 0.01;
+        if (!(gateGap(a) > GATE_HALF + 0.03)) continue;
+        const j = hash2(i, rr, 5);
+        out.push({ x: Math.cos(a) * (rr + (j - 0.5) * 6), y: Math.sin(a) * (rr + (j - 0.5) * 6), name: names[(k++ + Math.floor(j * 7)) % names.length] });
+      }
+    }
+    return out;
+  }
+
   private pushDefense(b: Battle) {
     const d = b.def!;
     const g = this.ctx;
+    // 山林地形底色：一圈深色土坡（出怪口处断开）
+    g.strokeStyle = 'rgba(40,28,20,0.4)';
+    g.lineWidth = WALL_W + 8;
+    for (let s = 0; s < 4; s++) {
+      const a0 = s * (TAU / 4) + GATE_HALF, a1 = (s + 1) * (TAU / 4) - GATE_HALF;
+      g.beginPath(); g.arc(-this.camX, -this.camY, ARENA_R + WALL_W / 2, a0, a1); g.stroke();
+    }
+    // 山林：只把镜头附近的树 / 石头放进排序列表
+    if (!this.ringDecor) this.ringDecor = this.buildRing();
+    const cx = this.camX, cy = this.camY;
+    for (const r of this.ringDecor) {
+      if (r.x < cx - 20 || r.x > cx + this.w + 20 || r.y < cy - 10 || r.y > cy + this.h + 50) continue;
+      const s = sprite(`env_${this.themeName}_${r.name}`);
+      this.list.push({ y: r.y, draw: () => this.blit(s, r.x, r.y) });
+    }
+    // 出怪口：两根石柱 + 红色敌旗
+    for (let s = 0; s < 4; s++) {
+      const a = s * (TAU / 4);
+      for (const side of [-1, 1]) {
+        const pa = a + side * (GATE_HALF + 0.02), pr = ARENA_R + WALL_W / 2;
+        const px = Math.cos(pa) * pr, py = Math.sin(pa) * pr;
+        this.list.push({ y: py, draw: () => {
+          const x = Math.round(px - this.camX), y = Math.round(py - this.camY);
+          g.fillStyle = '#181425'; g.fillRect(x - 4, y - 23, 9, 24);
+          g.fillStyle = '#8b9bb4'; g.fillRect(x - 3, y - 22, 7, 22);
+          g.fillStyle = '#c0cbdc'; g.fillRect(x - 3, y - 22, 2, 22);
+          g.fillStyle = '#733e39'; g.fillRect(x, y - 36, 1, 14);
+          g.fillStyle = '#e43b44'; g.fillRect(x + 1, y - 36, 7, 5);
+          g.fillStyle = '#a22633'; g.fillRect(x + 1, y - 32, 6, 1);
+        } });
+      }
+    }
+    // 建造点 / 建筑
+    const near = nearestSlot(b);
+    BUILD_SLOTS.forEach(([x, y], i) => {
+      const bd = buildingAt(d, i);
+      if (!bd) {
+        // 空建造点：虚线圈，离武将最近的那个高亮
+        g.globalAlpha = i === near ? 0.9 : 0.45;
+        g.strokeStyle = i === near ? '#fee761' : '#ead4aa';
+        g.lineWidth = 1;
+        g.setLineDash ? g.setLineDash([3, 3]) : null;
+        this.ellipse(x, y, 13, 9, true);
+        g.setLineDash ? g.setLineDash([]) : null;
+        g.fillStyle = i === near ? '#fee761' : '#ead4aa';
+        g.fillRect(Math.round(x - this.camX) - 3, Math.round(y - this.camY) - 1, 7, 2);
+        g.fillRect(Math.round(x - this.camX) - 1, Math.round(y - this.camY) - 3, 2, 7);
+        g.globalAlpha = 1;
+        return;
+      }
+      if (bd.kind === 'spike') {
+        g.globalAlpha = 0.25; g.fillStyle = '#5a6988'; this.ellipse(x, y, 36, 26); g.globalAlpha = 1;
+        for (let k = 0; k < 10 + bd.lv * 4; k++) {
+          const a = (k / (10 + bd.lv * 4)) * TAU, rr = 10 + (k % 3) * 9;
+          const sx = Math.round(x + Math.cos(a) * rr - this.camX), sy = Math.round(y + Math.sin(a) * rr * 0.7 - this.camY);
+          g.fillStyle = '#733e39'; g.fillRect(sx - 3, sy, 7, 2);
+          g.fillStyle = '#c0cbdc'; g.fillRect(sx - 3, sy - 1, 1, 1); g.fillRect(sx + 3, sy - 1, 1, 1);
+        }
+        return;
+      }
+      this.list.push({ y, draw: () => {
+        if (bd.kind === 'tower') this.blit(sprite('b_tower' + bd.lv), x, y + 2);
+        else this.blit(sprite(`u_shu_cata_${bd.cdT > 1.9 ? 2 : 0}${x > 0 ? '_L' : ''}`), x, y + 2);
+        // 等级星
+        g.fillStyle = '#fee761';
+        for (let k = 0; k < bd.lv; k++) g.fillRect(Math.round(x - this.camX) - 4 + k * 3, Math.round(y - this.camY) + 4, 2, 2);
+      } });
+    });
     // 拒马：城墙外一圈尖桩
     const spike = d.orders.c_spike || 0;
     if (spike) {
@@ -1050,6 +1144,13 @@ export class WorldRenderer {
     const g = this.ctx;
     for (const ar of d.arrows) {
       const k = Math.min(1, ar.t / ar.dur);
+      if (ar.aoe) {
+        // 投石台的石头：高高抛起再砸下
+        const x = ar.x + (ar.tx - ar.x) * k, y = ar.y + (ar.ty - ar.y) * k - Math.sin(k * Math.PI) * 60;
+        g.globalAlpha = 0.3; g.fillStyle = '#181425'; this.ellipse(ar.tx, ar.ty + 6, ar.aoe * 0.6 * k, ar.aoe * 0.3 * k); g.globalAlpha = 1;
+        this.blitScaled(sprite('stone'), x, y, 2);
+        continue;
+      }
       const x = ar.x + (ar.tx - ar.x) * k, y = ar.y + (ar.ty - ar.y) * k - Math.sin(k * Math.PI) * (ar.big || ar.pierce ? 4 : 14);
       const a = Math.atan2(ar.ty - ar.y, ar.tx - ar.x);
       g.strokeStyle = ar.pierce ? '#2ce8f5' : ar.fire ? '#f77622' : '#fff4c0';

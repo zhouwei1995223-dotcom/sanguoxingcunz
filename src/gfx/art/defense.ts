@@ -107,3 +107,29 @@ export function withLadder(frames: PixelImage[]): PixelImage[] {
     return img.outline();
   });
 }
+
+/** 我方箭塔：木制高台 + 小屋顶 + 绿旗；lv 越高屋顶越华丽 */
+export function arrowTowerImage(lv: number): PixelImage {
+  const img = new PixelImage(22, 36);
+  // 四根立柱 + 斜撑
+  img.rect(4, 16, 2, 19, 'U'); img.rect(16, 16, 2, 19, 'U');
+  img.line(5, 33, 16, 20, 'u'); img.line(16, 33, 5, 20, 'u');
+  // 平台
+  img.rect(2, 13, 18, 4, 'u'); img.rect(2, 16, 18, 1, 'U');
+  for (let x = 3; x < 19; x += 3) img.set(x, 13, 'L');
+  // 弓手
+  img.rect(9, 8, 4, 5, 'g'); img.rect(9, 6, 4, 2, 'q'); img.rect(9, 5, 4, 1, 'G');
+  img.line(14, 6, 15, 11, 'U'); img.line(13, 8, 16, 8, 'S');
+  // 屋顶
+  const roof = lv >= 3 ? 'R' : lv >= 2 ? 'y' : 'z';
+  img.rect(1, 2, 20, 3, roof); img.rect(3, 0, 16, 2, roof); img.rect(0, 4, 22, 1, 'K');
+  img.rect(10, -1, 2, 1, 'Y');
+  // 绿旗
+  img.rect(19, -1, 1, 6, 'U'); img.rect(20, 0, 2, 2, 'G');
+  return img.outline();
+}
+
+/** 我方投石台：把攻城投石车换成蜀军配色 */
+export function shuCatapultFrames(): PixelImage[] {
+  return catapultFrames().map((f) => f.recolor({ n: 'G', u: 'L', U: 'u' }));
+}

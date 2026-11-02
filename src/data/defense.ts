@@ -7,11 +7,36 @@ export const DEFENSE_DURATION = 300;
 /** 中途敌将 / 主将登场时间 */
 export const DEFENSE_MID_AT = 150, DEFENSE_BOSS_AT = 240;
 /** 敌人从离城多远的地方出现 */
-export const DEFENSE_SPAWN_R = 330;
+export const DEFENSE_SPAWN_R = 385;
 /** 武将最远能离开城池多远 */
 export const DEFENSE_LEASH = 300;
 /** 城池碰撞半径（城墙外沿） */
 export const CITY_R = 52;
+/**
+ * 战场地形：一圈山林（内沿半径 ARENA_R，厚 WALL_W），东南西北各留一个出怪口（半张角 GATE_HALF）。
+ * 武将、士兵出不去，敌人只能从四个出怪口进来。
+ */
+export const ARENA_R = 300, WALL_W = 40, GATE_HALF = 0.15;
+/** 士兵和召唤武将离主城最远多少（只迎击这个范围附近的敌人，出怪口交给建筑） */
+export const ALLY_LEASH = 175;
+/** 守城主打策略：武将本人的伤害只剩这么多，主要靠兵种和建筑 */
+export const DEF_HERO_DMG = 0.4;
+
+/** 建筑：在出怪口附近的建造点（每个门左右各一个）用粮草建造，可升到 3 级 */
+export type BuildKind = 'tower' | 'cata' | 'spike';
+export interface BuildDef { kind: BuildKind; name: string; icon: string; cost: number; desc: string }
+export const BUILDS: Record<BuildKind, BuildDef> = {
+  tower: { kind: 'tower', name: '箭塔', icon: 'w_crossbow', cost: 90, desc: '射程远，连续射击单个敌人' },
+  cata: { kind: 'cata', name: '投石台', icon: 'w_catapult', cost: 140, desc: '投出巨石，范围伤害' },
+  spike: { kind: 'spike', name: '拒马阵', icon: 'w_caltrop', cost: 70, desc: '减速并刺伤经过的敌人' },
+};
+export const BUILD_KINDS: BuildKind[] = ['tower', 'cata', 'spike'];
+export const BUILD_MAX_LV = 3;
+/** 升到第 n 级的花费倍率（建造是 1 级） */
+export const buildCost = (kind: BuildKind, toLv: number) => Math.round(BUILDS[kind].cost * [1, 1, 1.5, 2.2][toLv]);
+/** 建造点：每个出怪口内侧左右各一个 */
+export const BUILD_SLOTS: [number, number][] = [];
+for (let s = 0; s < 4; s++) for (const off of [-0.33, 0.33]) { const a = s * (Math.PI / 2) + off; BUILD_SLOTS.push([Math.cos(a) * 232, Math.sin(a) * 232]); }
 /**
  * 守城十关：每关的敌人强度（血量 / 攻击倍率、兵种、敌将、场景）取对应章节，
  * 固定不随玩家战力变化——战力高打低关卡照样轻松；推荐战力比同序号章节高 10%（同战力下比章节稍难）。
@@ -76,11 +101,11 @@ export interface UnitDef {
 }
 
 export const UNITS: Record<UnitKind, UnitDef> = {
-  spear: { kind: 'spear', name: '枪兵', sprite: 'u_shu_spear', icon: 'w_spear', cost: 40, count: 3, atkK: 0.42, hpK: 0.63, cd: 0.9, range: 16, speed: 52, r: 6, unlock: null, desc: '均衡的近战步兵' },
-  shield: { kind: 'shield', name: '盾兵', sprite: 'u_shu_shield', icon: 'p_armor', cost: 50, count: 2, atkK: 0.21, hpK: 1.98, cd: 1.2, range: 16, speed: 38, r: 7, unlock: 'o_shield', desc: '血厚，挡在前排拖住敌人' },
-  archer: { kind: 'archer', name: '弓兵', sprite: 'u_shu_archer', icon: 'w_crossbow', cost: 55, count: 3, atkK: 0.36, hpK: 0.41, cd: 1.1, range: 120, speed: 44, r: 6, unlock: 'o_archer', desc: '远程放箭，跟在后排' },
-  cav: { kind: 'cav', name: '骑兵', sprite: 'u_shu_cav', icon: 'w_horse', cost: 70, count: 2, atkK: 0.66, hpK: 1.08, cd: 0.8, range: 18, speed: 78, r: 9, unlock: 'o_cav', desc: '速度快，追杀四处的敌人' },
-  xbow: { kind: 'xbow', name: '弩车', sprite: 'u_shu_xbow', icon: 'w_catapult', cost: 90, count: 1, atkK: 1.44, hpK: 1.26, cd: 1.6, range: 170, speed: 24, r: 10, unlock: 'o_xbow', desc: '射程最远，弩箭能穿透' },
+  spear: { kind: 'spear', name: '枪兵', sprite: 'u_shu_spear', icon: 'w_spear', cost: 40, count: 3, atkK: 0.76, hpK: 0.88, cd: 0.9, range: 16, speed: 52, r: 6, unlock: null, desc: '均衡的近战步兵' },
+  shield: { kind: 'shield', name: '盾兵', sprite: 'u_shu_shield', icon: 'p_armor', cost: 50, count: 2, atkK: 0.38, hpK: 2.77, cd: 1.2, range: 16, speed: 38, r: 7, unlock: 'o_shield', desc: '血厚，挡在前排拖住敌人' },
+  archer: { kind: 'archer', name: '弓兵', sprite: 'u_shu_archer', icon: 'w_crossbow', cost: 55, count: 3, atkK: 0.65, hpK: 0.57, cd: 1.1, range: 120, speed: 44, r: 6, unlock: 'o_archer', desc: '远程放箭，跟在后排' },
+  cav: { kind: 'cav', name: '骑兵', sprite: 'u_shu_cav', icon: 'w_horse', cost: 70, count: 2, atkK: 1.19, hpK: 1.51, cd: 0.8, range: 18, speed: 78, r: 9, unlock: 'o_cav', desc: '速度快，追杀四处的敌人' },
+  xbow: { kind: 'xbow', name: '弩车', sprite: 'u_shu_xbow', icon: 'w_catapult', cost: 90, count: 1, atkK: 2.59, hpK: 1.76, cd: 1.6, range: 170, speed: 24, r: 10, unlock: 'o_xbow', desc: '射程最远，弩箭能穿透' },
 };
 export const UNIT_ORDER: UnitKind[] = ['spear', 'shield', 'archer', 'cav', 'xbow'];
 /** 同时在场的士兵上限（武将另算） */
