@@ -26,7 +26,7 @@ import {
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
-import { heroSpriteName, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
+import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
 import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
@@ -343,7 +343,7 @@ export class HomeScene implements Scene {
     // 人物
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ui.ctx.fillRect(ui.W / 2 - 150 * u, top + 60 * u, 300 * u, 330 * u);
-    ui.icon(`${heroSpriteName(save.hero)}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, top + 230 * u, 280 * u);
+    ui.icon(heroIdleFrame(heroSpriteName(save.hero), ui.time), ui.W / 2, top + 230 * u, 280 * u);
     ui.text(`${HERO_BY_ID[save.hero].name} · Lv.${save.heroes[save.hero].lv}`, ui.W / 2, top + 50 * u, 28, C.gold);
     const st = computeStats();
     ui.text(`攻击 ${fmtNum(st.atk)}`, ui.W / 2 - 80 * u, top + 425 * u, 26, '#ffb070');
@@ -471,7 +471,7 @@ export class HomeScene implements Scene {
     // 立绘区
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ui.ctx.fillRect(50 * u, y, ui.W - 100 * u, 260 * u);
-    ui.icon(`${heroSpriteName(h.id)}_${Math.floor(ui.time * 6) % 4}`, ui.W / 2, y + 130 * u, 250 * u, st.owned ? 1 : 0.5);
+    ui.icon(heroIdleFrame(heroSpriteName(h.id), ui.time), ui.W / 2, y + 130 * u, 250 * u, st.owned ? 1 : 0.5);
     ui.text(h.title, ui.W / 2, y + 290 * u, 34, h.color);
     ui.text(`「${h.quote}」`, ui.W / 2, y + 334 * u, 22, '#fff4d6');
     ui.pixRect(60 * u, y + 14 * u, 140 * u, 40 * u, '#231917');
@@ -558,7 +558,7 @@ export class HomeScene implements Scene {
       const can = st.owned && st.star >= MAX_STAR;
       ui.pixRect(lx, ay, ui.W - lx * 2, 160 * u, '#231917');
       ui.qualityFrame(lx + 14 * u, ay + 14 * u, 132 * u, can ? '#fee761' : '#3a3040');
-      ui.icon(`hero_${h.id}_awk_${Math.floor(ui.time * 6) % 4}`, lx + 80 * u, ay + 80 * u, 126 * u, can ? 1 : 0.35);
+      ui.icon(`hero_${h.id}_awk_${Math.floor(ui.time * 6) % 8}`, lx + 80 * u, ay + 80 * u, 126 * u, can ? 1 : 0.35);
       ui.text('五星觉醒 · 步战造型', lx + 166 * u, ay + 40 * u, 26, '#fee761', 'left');
       ui.text(`效果：伤害 +${AWAKEN_DMG}%，生命 +${Math.round(AWAKEN_HP * 100)}%`, lx + 166 * u, ay + 80 * u, 20, '#d9c6a0', 'left');
       if (!can) ui.text(st.owned ? `升至五星解锁（当前${st.star}星）` : '获得武将并升至五星解锁', lx + 166 * u, ay + 116 * u, 20, '#ff8a80', 'left');

@@ -502,7 +502,8 @@ export class WorldRenderer {
   private drawPlayer(b: Battle) {
     const p = b.player;
     const g = this.ctx;
-    const frame = p.moving ? Math.floor(p.anim) % 4 : 0;
+    // 觉醒造型站着不动时播放待机动画（第 4~7 帧）
+    const frame = p.moving ? Math.floor(p.anim) % 4 : b.heroSprite.endsWith('_awk') ? 4 + (Math.floor(b.t * 5) % 4) : 0;
     const flash = p.hurtFlash > 0 && Math.floor(p.hurtFlash * 30) % 2 === 0;
     this.blit(sprite('shadow_l'), p.x, p.y + 1);
     if (p.iframe > 0.5) g.globalAlpha = 0.5 + 0.5 * Math.sin(b.t * 30);

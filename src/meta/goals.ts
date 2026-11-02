@@ -181,6 +181,11 @@ export function heroSpriteName(hero: string): string {
   return skinOn(hero) ? `hero_${hero}_skin` : `hero_${hero}`;
 }
 
+/** 站着展示用的帧名：觉醒造型有专门的待机动画（第 4~7 帧），其他造型用走路帧 */
+export function heroIdleFrame(name: string, t: number): string {
+  return name.endsWith('_awk') ? `${name}_${4 + (Math.floor(t * 5) % 4)}` : `${name}_${Math.floor(t * 6) % 4}`;
+}
+
 /** 看一次视频推进皮肤进度，达到次数后解锁并自动穿上 */
 export function skinAdProgress(hero: string): boolean {
   const s = skinState(hero);
