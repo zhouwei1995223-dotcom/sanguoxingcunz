@@ -1,0 +1,121 @@
+import type { ChapterDef } from './chapters';
+
+// 守城模式：城池在地图正中，敌军从四面来攻。一局 5 分钟，4:00 敌军主将压阵，撑到 5:00 或击败主将即胜利。
+// 资源「粮草」随时间和击杀增加，在右侧按钮召唤兵种 / 武将（做法 B）；升级三选一里会出现「军令」卡（兵种、城防）和军令联动。
+
+export const DEFENSE_DURATION = 300;
+/** 中途敌将 / 主将登场时间 */
+export const DEFENSE_MID_AT = 150, DEFENSE_BOSS_AT = 240;
+/** 敌人从离城多远的地方出现 */
+export const DEFENSE_SPAWN_R = 330;
+/** 武将最远能离开城池多远 */
+export const DEFENSE_LEASH = 300;
+/** 城池碰撞半径（城墙外沿） */
+export const CITY_R = 52;
+/** 敌人强度的基准战力：玩家战力每高出这个数一倍，敌人血量约 ×1.9、伤害约 ×1.6 */
+export const DEFENSE_BASE_POWER = 1000;
+
+export const DEFENSE: ChapterDef = {
+  id: 50, name: '守城', subtitle: '保卫城池', theme: 'changban', defense: true,
+  story: '曹军四面围城！召集兵马、加固城防，守住城池五分钟。',
+  duration: DEFENSE_DURATION, hpMul: 0.9, dmgMul: 1, growth: 0.32, goldBase: 0, power: 0,
+  waves: [], events: [], midBoss: 'xiahouen', boss: 'caochun',
+};
+
+export type UnitKind = 'spear' | 'shield' | 'archer' | 'cav' | 'xbow';
+
+export interface UnitDef {
+  kind: UnitKind;
+  name: string;
+  sprite: string;
+  icon: string;
+  /** 召唤消耗的粮草 */
+  cost: number;
+  /** 每次召唤几个 */
+  count: number;
+  /** 相对武将攻击 / 生命的倍率 */
+  atkK: number;
+  hpK: number;
+  cd: number;
+  range: number;
+  speed: number;
+  r: number;
+  /** 解锁它的军令卡（null = 开局就有） */
+  unlock: OrderId | null;
+  desc: string;
+}
+
+export const UNITS: Record<UnitKind, UnitDef> = {
+  spear: { kind: 'spear', name: '枪兵', sprite: 'u_shu_spear', icon: 'w_spear', cost: 40, count: 3, atkK: 0.7, hpK: 1.05, cd: 0.9, range: 16, speed: 52, r: 6, unlock: null, desc: '均衡的近战步兵' },
+  shield: { kind: 'shield', name: '盾兵', sprite: 'u_shu_shield', icon: 'p_armor', cost: 50, count: 2, atkK: 0.35, hpK: 3.3, cd: 1.2, range: 16, speed: 38, r: 7, unlock: 'o_shield', desc: '血厚，挡在前排拖住敌人' },
+  archer: { kind: 'archer', name: '弓兵', sprite: 'u_shu_archer', icon: 'w_crossbow', cost: 55, count: 3, atkK: 0.6, hpK: 0.68, cd: 1.1, range: 120, speed: 44, r: 6, unlock: 'o_archer', desc: '远程放箭，跟在后排' },
+  cav: { kind: 'cav', name: '骑兵', sprite: 'u_shu_cav', icon: 'w_horse', cost: 70, count: 2, atkK: 1.1, hpK: 1.8, cd: 0.8, range: 18, speed: 78, r: 9, unlock: 'o_cav', desc: '速度快，追杀四处的敌人' },
+  xbow: { kind: 'xbow', name: '弩车', sprite: 'u_shu_xbow', icon: 'w_catapult', cost: 90, count: 1, atkK: 2.4, hpK: 2.1, cd: 1.6, range: 170, speed: 24, r: 10, unlock: 'o_xbow', desc: '射程最远，弩箭能穿透' },
+};
+export const UNIT_ORDER: UnitKind[] = ['spear', 'shield', 'archer', 'cav', 'xbow'];
+/** 同时在场的士兵上限（武将另算） */
+export const MAX_ALLIES = 26;
+
+/** 召唤武将：消耗粮草，在场 30 秒，冷却 40 秒，最多同时 2 位 */
+export const HERO_SUMMON_COST = 120, HERO_SUMMON_TIME = 30, HERO_SUMMON_CD = 40, HERO_SUMMON_MAX = 2;
+/** 修城：消耗粮草修复 20% 城池生命，冷却 15 秒 */
+export const REPAIR_COST = 60, REPAIR_PCT = 0.2, REPAIR_CD = 15;
+
+export type OrderId = 'o_spear' | 'o_shield' | 'o_archer' | 'o_cav' | 'o_xbow' | 'c_wall' | 'c_tower' | 'c_spike' | 'c_beacon' | 'c_drum' | 'c_log';
+
+export interface OrderDef {
+  id: OrderId;
+  name: string;
+  icon: string;
+  max: number;
+  /** 兵种卡对应的兵种 */
+  unit?: UnitKind;
+  /** 每一级的说明（下标 = 等级 - 1） */
+  levels: string[];
+}
+
+const unitLevels = (name: string, first: string) => [first, `${name}生命、攻击 +25%`, `${name}生命、攻击 +25%，每次多召唤 1 个`, `${name}生命、攻击 +25%`, `${name}生命、攻击 +25%，每次再多召唤 1 个`];
+
+export const ORDERS: Record<OrderId, OrderDef> = {
+  o_spear: { id: 'o_spear', name: '枪兵营', icon: 'w_spear', max: 5, unit: 'spear', levels: unitLevels('枪兵', '枪兵生命、攻击 +25%') },
+  o_shield: { id: 'o_shield', name: '盾兵营', icon: 'p_armor', max: 5, unit: 'shield', levels: unitLevels('盾兵', '解锁盾兵：血厚的前排，拖住敌人') },
+  o_archer: { id: 'o_archer', name: '弓兵营', icon: 'w_crossbow', max: 5, unit: 'archer', levels: unitLevels('弓兵', '解锁弓兵：远程放箭的后排') },
+  o_cav: { id: 'o_cav', name: '骑兵营', icon: 'w_horse', max: 5, unit: 'cav', levels: unitLevels('骑兵', '解锁骑兵：快速追杀四处的敌人') },
+  o_xbow: { id: 'o_xbow', name: '弩车营', icon: 'w_catapult', max: 5, unit: 'xbow', levels: unitLevels('弩车', '解锁弩车：射程最远，弩箭穿透') },
+  c_wall: { id: 'c_wall', name: '城墙加固', icon: 'p_armor', max: 5, levels: Array(5).fill('城池生命上限 +20%，并立即修复 30%') },
+  c_tower: { id: 'c_tower', name: '角楼弓手', icon: 'w_crossbow', max: 5, levels: ['一座角楼派驻弓手，自动射击', '再加一座角楼', '再加一座角楼', '四座角楼全部派驻弓手', '角楼弓手伤害 +60%'] },
+  c_spike: { id: 'c_spike', name: '拒马', icon: 'w_caltrop', max: 5, levels: ['城下布满拒马：贴近城墙的敌人持续受伤', '拒马伤害 +50%', '拒马伤害 +50%，并减速敌人', '拒马伤害 +50%', '拒马伤害 +50%'] },
+  c_beacon: { id: 'c_beacon', name: '烽火台', icon: 'p_horn', max: 5, levels: Array(5).fill('粮草产量 +30%，击杀敌人多得粮草') },
+  c_drum: { id: 'c_drum', name: '战鼓', icon: 'w_drum', max: 5, levels: Array(5).fill('我方士兵攻击速度 +10%，移动速度 +6%') },
+  c_log: { id: 'c_log', name: '滚木礌石', icon: 'w_rock', max: 5, levels: ['每 7 秒从四面城墙滚出滚木，碾过敌人', '滚木伤害 +40%', '每面城墙多滚一根', '滚木伤害 +40%', '滚木伤害 +40%，间隔缩短到 5 秒'] },
+};
+export const ORDER_IDS = Object.keys(ORDERS) as OrderId[];
+
+export type LinkId = 'l_phalanx' | 'l_iron' | 'l_fire' | 'l_charge' | 'l_thunder';
+
+/** 军令联动：兵种卡满级 + 对应城防卡，选择后兵种进化（和武器进化一样） */
+export interface LinkDef {
+  id: LinkId;
+  name: string;
+  icon: string;
+  unit: OrderId;
+  city: OrderId;
+  desc: string;
+}
+
+export const LINKS: Record<LinkId, LinkDef> = {
+  l_phalanx: { id: 'l_phalanx', name: '长枪方阵', icon: 'w_spear', unit: 'o_spear', city: 'c_spike', desc: '枪兵每次出枪刺穿面前一排敌人，伤害 +50%，每次召唤多 2 个' },
+  l_iron: { id: 'l_iron', name: '铁壁阵', icon: 'p_armor', unit: 'o_shield', city: 'c_wall', desc: '盾兵生命翻倍，吸引附近敌人围攻自己，并反弹一半伤害' },
+  l_fire: { id: 'l_fire', name: '火箭营', icon: 'w_fire', unit: 'o_archer', city: 'c_tower', desc: '弓兵和角楼改射火箭，命中后小范围爆炸' },
+  l_charge: { id: 'l_charge', name: '铁骑冲阵', icon: 'w_horse', unit: 'o_cav', city: 'c_drum', desc: '骑兵每 4 秒向前冲锋，撞飞沿途敌人，造成双倍伤害' },
+  l_thunder: { id: 'l_thunder', name: '霹雳弩', icon: 'w_thunder', unit: 'o_xbow', city: 'c_log', desc: '弩车射出霹雳弩箭，贯穿一整条线并在终点爆炸' },
+};
+export const LINK_IDS = Object.keys(LINKS) as LinkId[];
+
+/** 敌人池：随时间加入更强的兵种 */
+export const DEFENSE_POOLS: { from: number; pool: [string, number][] }[] = [
+  { from: 0, pool: [['wei_spear', 10], ['bandit', 5]] },
+  { from: 50, pool: [['wei_spear', 8], ['wei_shield', 3], ['wei_archer', 3], ['siege_ladder', 1]] },
+  { from: 120, pool: [['wei_spear', 6], ['wei_shield', 4], ['wei_archer', 3], ['wei_cavalry', 4], ['siege_ladder', 1.5]] },
+  { from: 200, pool: [['wei_shield', 4], ['wei_archer', 3], ['tiger_cavalry', 4], ['wei_heavy', 2], ['siege_ladder', 2]] },
+];

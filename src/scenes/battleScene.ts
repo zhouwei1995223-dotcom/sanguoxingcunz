@@ -19,12 +19,17 @@ import { save, markDirty, flushSave } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
-import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog } from './battleDialogs';
+import { LevelUpDialog, ChestDialog, PauseDialog, ReviveDialog, ResultDialog, BossIntroDialog, EvoTableDialog, StrategyDialog, RushConfirmDialog, QiyuDialog, HeroSummonDialog } from './battleDialogs';
 import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
 import { funnel } from '../meta/telemetry';
 import { NO_ADS } from '../data/platformConfig';
+import { HEROES } from '../data/heroes';
+import { heroBase } from '../meta/ops';
+import { createDefense, HeroInfo, grainRate, unitUnlocked, summonUnit, repairCity } from '../battle/defense';
+import { UNITS, UNIT_ORDER, HERO_SUMMON_COST, REPAIR_COST } from '../data/defense';
+import { ORDERS, LINKS, DEFENSE, DEFENSE_BASE_POWER } from '../data/defense';
 
 export class BattleScene implements Scene {
   battle!: Battle;
@@ -58,10 +63,12 @@ export class BattleScene implements Scene {
   private speedAcc = 0;
   videoPath: Promise<string | null> | null = null;
 
-  /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼 */
+  /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼，-3 为守城模式 */
   constructor(chapterId: number, diff = 0) {
     const themes = Object.keys(THEMES);
-    if (chapterId === -2) {
+    if (chapterId === -3) {
+      this.chapter = { ...DEFENSE, theme: themes[(Math.random() * themes.length) | 0] };
+    } else if (chapterId === -2) {
       this.chapter = TUTORIAL;
     } else if (chapterId === 0) {
       this.chapter = { ...ENDLESS, theme: themes[(Math.random() * themes.length) | 0] };
@@ -82,7 +89,7 @@ export class BattleScene implements Scene {
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
     infoHero = this.battle.hero.id;
     // 敌将血量跟玩家战力挂钩：战力 ÷ 推荐战力
-    if (!this.chapter.endless && !this.chapter.tutorial) this.battle.powerRatio = combatPower(stats) / Math.max(1, recommendedPower(this.chapter, this.diff));
+    if (!this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense) this.battle.powerRatio = combatPower(stats) / Math.max(1, recommendedPower(this.chapter, this.diff));
     if (this.weekly) {
       this.battle.mods = this.weekly;
       if (this.weekly.enemyHp) this.battle.enemyHpMul *= this.weekly.enemyHp;
@@ -105,6 +112,19 @@ export class BattleScene implements Scene {
     this.battle.enemyDmgMul *= this.diff.dmg;
     // 无尽模式的敌人强度跟随玩家的章节进度
     if (this.chapter.endless) { this.battle.enemyHpMul *= endlessHpMul(); this.battle.enemyDmgMul *= endlessDmgMul(); }
+    // 守城：敌人强度跟玩家战力走（士兵、城池也跟武将属性走），新老玩家难度差不多
+    if (this.chapter.defense) {
+      const r = Math.max(1, combatPower(stats) / DEFENSE_BASE_POWER);
+      this.battle.enemyHpMul *= Math.pow(r, 0.9);
+      this.battle.enemyDmgMul *= Math.pow(r, 0.65);
+    }
+    // 守城：城池、粮草、可召唤的武将（强度按各自的等级 / 星级 / 巅峰等级）
+    if (this.chapter.defense) {
+      const heroes: Record<string, HeroInfo> = {};
+      for (const h of HEROES) if (save.heroes[h.id]?.owned) { const hb = heroBase(h.id); heroes[h.id] = { atk: hb.atk, hp: hb.hp, name: h.name, ultName: h.ultName.split('·')[0], sprite: heroSpriteName(h.id) }; }
+      this.battle.def = createDefense(this.battle, heroes);
+      this.renderer.clearCenter = true;
+    }
     this.battle.showDamage = save.settings.dmgNum;
     this.battle.hooks = {
       sfx: (n) => playSfx(n as Sfx),
@@ -302,6 +322,7 @@ export class BattleScene implements Scene {
     if (this.weekly) return `每周挑战 · ${this.weekly.name}`;
     if (this.chapter.endless) return '无尽战场';
     if (this.chapter.tutorial) return '新手试炼';
+    if (this.chapter.defense) return '守城 · 保卫城池';
     return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
   }
 
@@ -325,7 +346,7 @@ export class BattleScene implements Scene {
 
   /** 结算 */
   get modeName(): string {
-    return this.weekly ? 'weekly' : this.chapter.endless ? 'endless' : 'chapter';
+    return this.weekly ? 'weekly' : this.chapter.endless ? 'endless' : this.chapter.defense ? 'defense' : 'chapter';
   }
 
   finish(win: boolean) {
@@ -372,6 +393,14 @@ export class BattleScene implements Scene {
       // 无尽模式：正计时，显示最佳记录
       ui.text(fmtTime(b.t), ui.W / 2, top + 70 * u, 40, b.t > save.endlessBest && save.endlessBest > 0 ? C.gold : '#fff');
       ui.text(`无尽战场 · 最佳 ${fmtTime(save.endlessBest)}`, ui.W / 2, top + 108 * u, 20, C.textDim);
+    } else if (b.def) {
+      // 守城：剩余时间 + 城池血条
+      const d = b.def;
+      ui.text(fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 64 * u, 38, '#fff');
+      const cw = ui.W * 0.44, cx0 = ui.W / 2 - cw / 2, cy0 = top + 90 * u;
+      ui.bar(cx0, cy0, cw, 28 * u, d.cityHp / d.cityMax, d.cityHp < d.cityMax * 0.3 ? '#e43b44' : '#63c74d', '#2a1414');
+      if (d.cityFlash > 0) { ui.ctx.globalAlpha = 0.5; ui.pixRect(cx0, cy0, cw, 28 * u, '#ffffff'); ui.ctx.globalAlpha = 1; }
+      ui.text(`城池 ${fmtNum(Math.ceil(d.cityHp))}/${fmtNum(d.cityMax)}`, ui.W / 2, cy0 + 14 * u, 18, '#fff');
     } else {
       const remain = b.finalBoss ? 0 : this.chapter.duration - b.t;
       ui.text(b.finalBoss ? '击败敌将' : fmtTime(Math.max(0, remain)), ui.W / 2, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
@@ -481,12 +510,75 @@ export class BattleScene implements Scene {
     this.drawCombo(dt);
     this.drawUltButton();
     this.drawPotionButton();
+    if (b.def) this.drawDefensePanel();
 
     if (!game.dialogs.length) this.drawTip(dt);
     // 新手提示
     if (save.guide === 0 && this.tutorialT < 9 && !game.dialogs.length) {
       guideHint(ui, this.tutorialT < 4.5 ? `按住屏幕任意位置拖动，控制${this.battle.hero.name}移动` : `${this.battle.hero.name}会自动攻击，拾取蓝色宝石升级`, ui.H * 0.72);
     }
+  }
+
+  /** 守城：粮草、召唤兵种 / 武将、修城按钮（放在大招按钮的另一侧，竖排） */
+  private drawDefensePanel() {
+    const ui = game.ui;
+    const u = ui.u;
+    const b = this.battle;
+    const d = b.def!;
+    const top = ui.safeTop + 8 * u;
+    void top;
+    const right = !save.settings.ultRight;
+    const bw = 112 * u, bh = 92 * u, gap = 10 * u;
+    const x = right ? ui.W - bw - 14 * u : 14 * u;
+    let y = ui.H * 0.44;
+    // 粮草（按钮列上方）
+    ui.pixRect(x, y - 62 * u, bw, 54 * u, 'rgba(10,6,8,0.65)');
+    ui.icon('p_ration', x + 24 * u, y - 35 * u, 32 * u);
+    ui.text(`${Math.floor(d.grain)}`, x + 72 * u, y - 44 * u, 24, '#fee761');
+    ui.text(`+${grainRate(d).toFixed(1)}/秒`, x + 72 * u, y - 20 * u, 15, C.textDim);
+    const btn = (id: string, icon: string, label: string, cost: number, ok: boolean, on: () => void, extra?: string) => {
+      const pressed = ui.isPressed(id);
+      const off = pressed ? 3 * u : 0;
+      ui.pixRect(x, y + off, bw, bh, ok ? 'rgba(20,40,20,0.82)' : 'rgba(30,24,24,0.7)');
+      ui.pixRect(x, y + off, bw, 3 * u, ok ? '#63c74d' : '#5a4038');
+      ui.icon(icon, x + 30 * u, y + bh / 2 - 8 * u + off, 44 * u, ok ? 1 : 0.45);
+      ui.text(label, x + 76 * u, y + 30 * u + off, 20, ok ? '#fff4d6' : '#9a8a7a');
+      ui.text(extra || String(cost), x + 76 * u, y + 62 * u + off, 20, ok ? '#9be37a' : '#a86a5a');
+      if (ui.clicked(id, x, y, bw, bh)) on();
+      y += bh + gap;
+    };
+    for (const k of UNIT_ORDER) {
+      if (!unitUnlocked(d, k)) continue;
+      const un = UNITS[k];
+      btn('def_' + k, un.icon, un.name, un.cost, d.grain >= un.cost, () => { const err = summonUnit(b, k); if (err) ui.toast(err); });
+    }
+    const heroIds = Object.keys(d.heroes).filter((id) => id !== b.hero.id);
+    if (heroIds.length) btn('def_hero', 'star', '武将', HERO_SUMMON_COST, d.grain >= HERO_SUMMON_COST, () => game.openDialog(new HeroSummonDialog(this)));
+    btn('def_repair', 'p_armor', '修城', REPAIR_COST, d.grain >= REPAIR_COST && d.repairCd <= 0 && d.cityHp < d.cityMax, () => { const err = repairCity(b); if (err) ui.toast(err); }, d.repairCd > 0 ? `${Math.ceil(d.repairCd)}秒` : undefined);
+    // 城池不在屏幕里：屏幕边缘画一个指向城池的箭头（城墙挨打时变红闪烁）
+    const [sx, sy] = this.renderer.worldToScreen(0, -8);
+    const scx = sx, scy = sy;
+    if (scx < 0 || scx > ui.W || scy < ui.safeTop + 120 * u || scy > ui.H) {
+      const cx = ui.W / 2, cy = ui.H / 2;
+      const ang = Math.atan2(scy - cy, scx - cx);
+      const ex = Math.max(70 * u, Math.min(ui.W - 70 * u, cx + Math.cos(ang) * ui.W)), ey = Math.max(ui.safeTop + 200 * u, Math.min(ui.H - 260 * u, cy + Math.sin(ang) * ui.H));
+      const hit = d.cityFlash > 0 || d.cityHp < d.cityMax * 0.3;
+      const g = ui.ctx;
+      g.save(); g.translate(ex, ey); g.rotate(ang);
+      g.fillStyle = hit && Math.floor(ui.time * 6) % 2 ? '#e43b44' : '#fee761';
+      g.beginPath(); g.moveTo(34 * u, 0); g.lineTo(6 * u, -18 * u); g.lineTo(6 * u, 18 * u); g.closePath(); g.fill();
+      g.restore();
+      ui.pixRect(ex - 30 * u, ey - 20 * u, 60 * u, 40 * u, 'rgba(10,6,8,0.7)');
+      ui.text('城', ex, ey, 26, hit ? '#ff8a80' : '#fee761');
+    }
+    // 武将倒下
+    if (d.downT > 0) {
+      ui.ctx.fillStyle = 'rgba(10,6,8,0.55)';
+      ui.ctx.fillRect(0, ui.H * 0.46, ui.W, 70 * u);
+      ui.text(`${b.hero.name}回城重整中…… ${Math.ceil(d.downT)} 秒`, ui.W / 2, ui.H * 0.46 + 35 * u, 30, '#ff8a80');
+    }
+    this.tip('defense', '守住城池！右侧花粮草召唤士兵', true);
+    if (b.t > 20) this.tip('defense2', '升级时可选兵种、城防「军令」，凑齐还能联动');
   }
 
   private ultBtn: { x: number; y: number; r: number } | null = null;
@@ -781,6 +873,14 @@ export function choiceInfo(c: Choice): { icon: string; name: string; desc: strin
       return { icon: 'bun', name: '肉包子', desc: '回复30%生命', lv: 0, max: 0, isNew: false, evo: false };
     case 'gold':
       return { icon: 'gold', name: '军饷', desc: '获得30金币', lv: 0, max: 0, isNew: false, evo: false };
+    case 'order': {
+      const d = ORDERS[c.id];
+      return { icon: d.icon, name: d.name, desc: d.levels[c.lv - 1], lv: c.lv, max: d.max, isNew: c.isNew, evo: false };
+    }
+    case 'link': {
+      const d = LINKS[c.id];
+      return { icon: d.icon, name: d.name, desc: d.desc, lv: 0, max: 0, isNew: false, evo: true };
+    }
   }
 }
 

@@ -1,3 +1,5 @@
+import { CITY_R } from '../data/defense';
+import { TOWERS } from './defense';
 import { getPlatform } from '../platform';
 import { sprite, scaled, Sprite } from '../gfx/atlas';
 import { THEMES, GroundTheme } from '../gfx/art/env';
@@ -57,6 +59,8 @@ export class WorldRenderer {
     this.tile = this.buildTile();
   }
 
+  /** 守城模式：城池周围不放装饰 */
+  clearCenter = false;
   private chunks = new Map<string, HTMLCanvasElement>();
   /** 地图块：地砖 + 矮装饰（草、花、石头……）画在一张图里，按需生成，最近用过的留在缓存 */
   private chunk(kx: number, ky: number): HTMLCanvasElement {
@@ -82,6 +86,8 @@ export class WorldRenderer {
         for (const d of decor) { acc += d[1] / total; if (r <= acc) { name = d[0]; break; } }
         if (TALL.has(name)) continue;
         const wx = gx * CELL + hash2(gx, gy, 31) * (CELL - 8), wy = gy * CELL + hash2(gx, gy, 41) * (CELL - 8);
+        // 守城：城池周围不放装饰
+        if (this.clearCenter && wx * wx + wy * wy < 110 * 110) continue;
         const s = sprite(`env_${this.themeName}_${name}`);
         const ss = scaled(s, K);
         g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(wx - s.ax - x0) * K, Math.round(wy - s.ay - y0) * K, s.w * K, s.h * K);
@@ -174,6 +180,7 @@ export class WorldRenderer {
         // 矮装饰已经画进地图块，这里只处理需要和人物前后遮挡的高装饰
         if (!TALL.has(name)) continue;
         const wx = gx * CELL + hash2(gx, gy, 31) * (CELL - 8), wy = gy * CELL + hash2(gx, gy, 41) * (CELL - 8);
+        if (this.clearCenter && wx * wx + wy * wy < 110 * 110) continue;
         const s = sprite(`env_${this.themeName}_${name}`);
         this.list.push({ y: wy, draw: () => this.blit(s, wx, wy) });
       }
@@ -325,8 +332,9 @@ export class WorldRenderer {
       this.list.push(d);
     }
 
-    // 玩家
-    this.list.push({ y: p.y, draw: () => this.drawPlayer(b) });
+    // 玩家（守城模式倒下重整时不画）
+    if (!b.def || b.def.downT <= 0) this.list.push({ y: p.y, draw: () => this.drawPlayer(b) });
+    if (b.def) this.pushDefense(b);
 
     // 白马义从
     for (const pr of b.projs) {
@@ -432,6 +440,7 @@ export class WorldRenderer {
     }
     // 敌方投射物
     for (const s of b.shots) this.blitRot(sprite(s.sprite), s.x, s.y, s.rot);
+    if (b.def) this.drawDefenseTop(b);
 
     // 大招时整体压暗，突出白龙
     if (b.ult) {
@@ -782,6 +791,74 @@ export class WorldRenderer {
       this.blitRot(sprite('icon_w_halberd'), x + Math.cos(a0) * R * 0.85, y + Math.sin(a0) * R * 0.68, a0 + Math.PI / 4);
     }
     g.globalAlpha = 1;
+  }
+
+  /** 守城：城池、我方士兵 / 武将加入排序列表 */
+  private pushDefense(b: Battle) {
+    const d = b.def!;
+    const g = this.ctx;
+    // 拒马：城墙外一圈尖桩
+    const spike = d.orders.c_spike || 0;
+    if (spike) {
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * TAU;
+        const sx = Math.round(Math.cos(a) * (CITY_R + 8) - this.camX), sy = Math.round(Math.sin(a) * (CITY_R + 8) - 8 - this.camY);
+        g.fillStyle = '#733e39'; g.fillRect(sx - 3, sy, 7, 2);
+        g.fillStyle = '#c0cbdc'; g.fillRect(sx - 3, sy - 1, 1, 1); g.fillRect(sx + 3, sy - 1, 1, 1);
+      }
+    }
+    this.list.push({ y: 40, draw: () => {
+      if (d.cityFlash > 0) g.globalAlpha = 0.75;
+      this.blit(sprite('city'), 0, 40);
+      g.globalAlpha = 1;
+      // 角楼弓手
+      const towers = Math.min(4, d.orders.c_tower || 0);
+      for (let i = 0; i < towers; i++) this.blit(sprite(`u_shu_archer_${Math.floor(b.t * 3 + i) % 4}${TOWERS[i][0] < 0 ? '_L' : ''}`), TOWERS[i][0], TOWERS[i][1] - 12);
+    } });
+    for (const a of d.allies) {
+      if (a.dead) continue;
+      this.list.push({ y: a.y, draw: () => {
+        if (!this.crowded) this.blit(sprite(a.kind === 'hero' ? 'shadow_l' : 'shadow_s'), a.x, a.y + 1);
+        if (a.kind === 'hero') g.globalAlpha = a.life < 3 ? 0.5 + 0.5 * Math.sin(b.t * 20) : 1;
+        const f = Math.floor(a.anim) % 4;
+        this.blit(sprite(`${a.sprite}_${f}${a.left ? '_L' : ''}${a.flash > 0 ? (a.left ? 'W' : '_W') : ''}`), a.x, a.y);
+        g.globalAlpha = 1;
+        // 血条（受伤了才画）
+        if (a.hp < a.maxHp) {
+          const w = a.kind === 'hero' ? 20 : 12;
+          const x = Math.round(a.x - w / 2 - this.camX), y = Math.round(a.y + 2 - this.camY);
+          g.fillStyle = '#181425'; g.fillRect(x - 1, y - 1, w + 2, 4);
+          g.fillStyle = '#63c74d'; g.fillRect(x, y, Math.max(0, Math.round((w * a.hp) / a.maxHp)), 2);
+        }
+      } });
+    }
+  }
+
+  /** 守城：箭、滚木 */
+  private drawDefenseTop(b: Battle) {
+    const d = b.def!;
+    const g = this.ctx;
+    for (const ar of d.arrows) {
+      const k = Math.min(1, ar.t / ar.dur);
+      const x = ar.x + (ar.tx - ar.x) * k, y = ar.y + (ar.ty - ar.y) * k - Math.sin(k * Math.PI) * (ar.big || ar.pierce ? 4 : 14);
+      const a = Math.atan2(ar.ty - ar.y, ar.tx - ar.x);
+      g.strokeStyle = ar.pierce ? '#2ce8f5' : ar.fire ? '#f77622' : '#fff4c0';
+      g.lineWidth = ar.big ? 2 : 1;
+      g.beginPath();
+      g.moveTo(x - this.camX, y - this.camY);
+      g.lineTo(x - Math.cos(a) * (ar.big ? 10 : 6) - this.camX, y - Math.sin(a) * (ar.big ? 10 : 6) - this.camY);
+      g.stroke();
+      if (ar.fire) { g.fillStyle = '#fee761'; g.fillRect(Math.round(x - this.camX), Math.round(y - this.camY), 2, 2); }
+    }
+    for (const l of d.logs) {
+      g.save();
+      g.translate(Math.round(l.x - this.camX), Math.round(l.y - this.camY));
+      g.rotate(l.rot + Math.PI / 2);
+      g.fillStyle = '#733e39'; g.fillRect(-11, -3, 22, 6);
+      g.fillStyle = '#b86f50'; g.fillRect(-11, -3, 22, 2);
+      g.fillStyle = '#3e2731'; g.fillRect(-11, -3, 2, 6); g.fillRect(9, -3, 2, 6);
+      g.restore();
+    }
   }
 
   // —— 基础绘制 ——

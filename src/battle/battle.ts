@@ -10,20 +10,27 @@ import {
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
 import { QiyuId, QIYUS } from '../data/qiyu';
-import { STRATS, STRAT_TIMES, STRAT_TIMES_ENDLESS, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
+import { STRATS, STRAT_TIMES, STRAT_TIMES_ENDLESS, STRAT_TIMES_DEFENSE, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
 import {
   Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
 } from './entities';
 import { updateWeapons } from './weapons';
 import { skipHordesBefore, updateSpawner } from './spawner';
 import { updateBoss } from './boss';
+import {
+  DefenseState, updateDefense, reviveCity, enemyTarget, enemyContact, heroDown, shotHitsCity, hurtCity, orderChoices, readyLinks, applyOrder, applyLink, orderLv,
+} from './defense';
+import { ORDERS, LINKS, OrderId, LinkId } from '../data/defense';
 
 export type Choice =
   | { kind: 'weapon'; id: WeaponId; lv: number; isNew: boolean }
   | { kind: 'passive'; id: PassiveId; lv: number; isNew: boolean }
   | { kind: 'evo'; id: WeaponId }
   | { kind: 'heal' }
-  | { kind: 'gold' };
+  | { kind: 'gold' }
+  /** 守城模式：军令卡（兵种 / 城防）与军令联动 */
+  | { kind: 'order'; id: OrderId; lv: number; isNew: boolean }
+  | { kind: 'link'; id: LinkId };
 
 export interface UltRing {
   r: number;
@@ -83,7 +90,7 @@ const BOSS_POWER_EXP = 0.6;
 /** 直取敌将：游戏时间 2:30 以后才出现，每局只能用一次 */
 /** 1.0.4：章节敌人攻击力整体提高（第 1 章不加，新手友好）；血量和数量不动，割草手感不变 */
 const CHAPTER_DMG = 1.5;
-const chapterDmgMul = (ch: ChapterDef) => (ch.tutorial || ch.endless || ch.id === 1 ? 1 : CHAPTER_DMG);
+const chapterDmgMul = (ch: ChapterDef) => (ch.tutorial || ch.endless || ch.defense || ch.id === 1 ? 1 : CHAPTER_DMG);
 const BOSS_MIN_TIME = { mid: 30, final: 50, ch1Mid: 15, ch1Final: 25 };
 
 /** 点 (x,y) 是否在预警范围内（margin 用来算上角色的身体半径）。和 render.ts 画出来的形状一致 */
@@ -168,6 +175,8 @@ export class Battle {
   reinforced = false;
   finalBoss: Enemy | null = null;
   midBoss: Enemy | null = null;
+  /** 守城模式的状态（其他模式为 null） */
+  def: DefenseState | null = null;
   eventIdx = 0;
   spawnT = 0;
   moveX = 0;
@@ -598,7 +607,8 @@ export class Battle {
 
     // 移动
     const dashing = !!this.ult && this.ult.kind === 'dragon';
-    let mx = dashing ? 0 : this.moveX, my = dashing ? 0 : this.moveY;
+    const down = !!this.def && this.def.downT > 0;
+    let mx = dashing || down ? 0 : this.moveX, my = dashing || down ? 0 : this.moveY;
     const ml = Math.hypot(mx, my);
     if (ml > 1) { mx /= ml; my /= ml; }
     p.moving = ml > 0.05 || dashing;
@@ -629,7 +639,8 @@ export class Battle {
     updateSpawner(this, dt);
     this.updateDirector(dt);
     this.updateEnemies(dt);
-    updateWeapons(this, dt);
+    if (!down) updateWeapons(this, dt);
+    if (this.def) updateDefense(this, dt);
     this.updateProjectiles(dt);
     this.updatePools(dt);
     this.updateShots(dt);
@@ -658,8 +669,12 @@ export class Battle {
       this.hooks.sfx('evolve');
     }
     if (p.hp <= 0 && !this.dead) {
-      this.dead = true;
-      this.hooks.vibrate(true);
+      // 守城：武将倒下只是回城重整，城池失守才算输
+      if (this.def) heroDown(this);
+      else {
+        this.dead = true;
+        this.hooks.vibrate(true);
+      }
     }
   }
 
@@ -691,7 +706,7 @@ export class Battle {
   /** 可以「直取敌将」：普通章节、击败中途敌将以后、每局一次、场上没有敌将、后面还有敌将（点了要看一次广告） */
   canRush(): boolean {
     const ch = this.chapter;
-    if (ch.endless || ch.tutorial || this.finalBoss || this.midBoss || this.ult || this.dead || this.won) return false;
+    if (ch.endless || ch.tutorial || ch.defense || this.finalBoss || this.midBoss || this.ult || this.dead || this.won) return false;
     if (!this.midBossDown || this.rushes > 0) return false;
     const ev = this.nextBossEvent();
     return !!ev && ev.t - this.t > 3;
@@ -758,13 +773,13 @@ export class Battle {
 
   /** 本模式的锦囊时间点 */
   get stratTimes(): number[] {
-    return this.chapter.endless ? STRAT_TIMES_ENDLESS : STRAT_TIMES;
+    return this.chapter.defense ? STRAT_TIMES_DEFENSE : this.chapter.endless ? STRAT_TIMES_ENDLESS : STRAT_TIMES;
   }
 
   /** 章节时间：章节一局压到 6 分钟后，成长曲线仍按 10 分钟设计，用实际秒数 ÷ 0.6 换算；无尽 / 新手试炼就是实际秒数 */
   get ct(): number {
     const ch = this.chapter;
-    return ch.endless || ch.tutorial ? this.t : this.t / CHAPTER_TIME_SCALE;
+    return ch.endless || ch.tutorial || ch.defense ? this.t : this.t / CHAPTER_TIME_SCALE;
   }
 
   spawnEnemy(id: string, x: number, y: number, opts: { elite?: boolean; hpMul?: number } = {}): Enemy {
@@ -778,7 +793,7 @@ export class Battle {
     const endlessQ = ch.endless && ch.duration >= 1e8 ? 0.22 : 0.05;
     const grow = ch.endless ? 1 + ch.growth * minute + endlessQ * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
-    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial ? 1 : tension(this.ct, ch.id));
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial || ch.defense ? 1 : tension(this.ct, ch.id));
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
@@ -811,7 +826,7 @@ export class Battle {
     e.r = d.radius;
     const ch = this.chapter;
     const strong = ch.tutorial ? 1 : BOSS_HP;
-    const normal = !ch.tutorial && !ch.endless;
+    const normal = !ch.tutorial && !ch.endless && !ch.defense;
     // 第 1 章也按战力加血，但幅度小一些（新手友好）
     const over = normal ? Math.pow(Math.max(1, this.powerRatio), ch.id > 1 ? BOSS_POWER_EXP : 0.4) : 1;
     e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong * over);
@@ -841,7 +856,9 @@ export class Battle {
       e.atkCd = Math.max(0, e.atkCd - dt);
       if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
       const spd = e.speed * (1 - e.slow);
-      let dx = p.x - e.x, dy = p.y - e.y;
+      // 守城：敌人的目标可能是城池或我方士兵
+      const tgt = this.def ? enemyTarget(this, e) : null;
+      let dx = (tgt ? tgt.x : p.x) - e.x, dy = (tgt ? tgt.y : p.y) - e.y;
       const d = Math.hypot(dx, dy) || 1;
       dx /= d; dy /= d;
 
@@ -899,6 +916,8 @@ export class Battle {
         }
       }
 
+      // 守城：攻城 / 打士兵
+      if (tgt && (tgt.city || tgt.ally) && !e.fixedDir) { enemyContact(this, e, tgt); continue; }
       // 接触伤害
       const cr = e.r + p.r * 0.7;
       if (d < cr) {
@@ -911,7 +930,7 @@ export class Battle {
       } else e.touching = false;
 
       // 远离玩家的普通敌人：重新放到玩家前进方向的视野外
-      if (!e.boss && !e.elite && !e.fixedDir && d > viewR + 120) {
+      if (!this.def && !e.boss && !e.elite && !e.fixedDir && d > viewR + 120) {
         const a = Math.atan2(p.dirY, p.dirX) + rand(-1.2, 1.2);
         e.x = p.x + Math.cos(a) * (viewR + 20);
         e.y = p.y + Math.sin(a) * (viewR + 20);
@@ -925,7 +944,7 @@ export class Battle {
 
   hurtPlayer(dmg: number, contact = false) {
     const p = this.player;
-    if (p.iframe > 0 || this.dead || this.ult) return;
+    if (p.iframe > 0 || this.dead || this.ult || (this.def && this.def.downT > 0)) return;
     if (contact && this.contactIframe > 0) return;
     if (this.mirrorCd > 0 && this.mirrorT <= 0) {
       // 护心镜：抵挡这次伤害
@@ -946,6 +965,27 @@ export class Battle {
     this.hooks.sfx('hurt');
     this.hooks.vibrate();
     if (this.showDamage) this.addNum(p.x, p.y - 22, Math.round(v), 'r');
+  }
+
+  /** 守城：我方士兵 / 城防造成的伤害（不吃武将自身的加成），返回是否击杀 */
+  allyDamage(e: Enemy, dmg: number): boolean {
+    if (e.dead) return false;
+    let v = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
+    if (e.boss || e.elite) v = Math.round(v * 0.6);
+    if (e.shield > 0) {
+      const a = Math.min(e.shield, v);
+      e.shield -= a; v -= a;
+      if (e.shield <= 0) this.breakShield(e);
+    }
+    e.hp -= v;
+    e.flash = 0.06;
+    if (this.showDamage && v > 0 && Math.random() < 0.25) this.addNum(e.x + rand(-4, 4), e.y - 10 * e.scale, v, 'g');
+    if (e.hp <= 0) {
+      if (this.def) this.def.allyKills++;
+      this.killEnemy(e);
+      return true;
+    }
+    return false;
   }
 
   /** 对敌人造成伤害，返回是否击杀 */
@@ -1314,6 +1354,7 @@ export class Battle {
       s.life -= dt;
       if (s.spin) s.rot += dt * 10;
       if (s.life <= 0) { this.shots.splice(i, 1); continue; }
+      if (this.def && shotHitsCity(s.x, s.y)) { hurtCity(this, s.dmg * (s.sprite === 'stone' ? 1 : 0.4), 'shot_' + s.sprite); this.shots.splice(i, 1); continue; }
       if ((s.x - p.x) ** 2 + (s.y - (p.y - 8)) ** 2 < (s.r + p.r * 0.8) ** 2) {
         this.hurtPlayer(s.dmg);
         this.shots.splice(i, 1);
@@ -1347,7 +1388,7 @@ export class Battle {
       k.t += dt;
       const dx = p.x - k.x, dy = p.y - 6 - k.y;
       const d2 = dx * dx + dy * dy;
-      if (!k.pulled && (k.kind === 'gem' || k.kind === 'coin') && (d2 < pr2 || (k.t > 9 && d2 < 220 * 220))) k.pulled = true;
+      if (!k.pulled && (k.kind === 'gem' || k.kind === 'coin') && (d2 < pr2 || (k.t > 9 && d2 < 220 * 220) || (this.def && k.t > 0.6))) k.pulled = true;
       if (!k.pulled && k.kind !== 'gem' && k.kind !== 'coin' && d2 < 18 * 18) k.pulled = true;
       if (k.pulled) {
         const d = Math.sqrt(d2) || 1;
@@ -1901,6 +1942,11 @@ export class Battle {
       const k = Math.min(1, 8 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: (wanted.has(id) ? 3 : 1.4) * k });
     }
+    // 守城：军令卡和军令联动
+    if (this.def) {
+      for (const o of orderChoices(this.def)) if (ok('order', o.id)) pool.push({ c: { kind: 'order', id: o.id, lv: o.lv, isNew: o.lv === 1 }, w: o.w });
+      for (const id of readyLinks(this.def)) pool.push({ c: { kind: 'link', id }, w: 8 });
+    }
     const out: Choice[] = [];
     const items = shuffle(pool.slice());
     while (out.length < n && items.length) {
@@ -1915,7 +1961,7 @@ export class Battle {
   /** 封禁一个新技能选项：本局不再出现，并换一个新的 */
   banish(choices: Choice[], i: number): boolean {
     const c = choices[i];
-    if (this.banishes <= 0 || (c.kind !== 'weapon' && c.kind !== 'passive') || !c.isNew) return false;
+    if (this.banishes <= 0 || (c.kind !== 'weapon' && c.kind !== 'passive' && c.kind !== 'order') || !c.isNew) return false;
     this.banishes--;
     this.banned.add(c.kind + ':' + c.id);
     const key = (x: Choice) => x.kind + ':' + ('id' in x ? x.id : '');
@@ -1932,6 +1978,12 @@ export class Battle {
       return !!w && !w.evo && c.lv >= MAX_WEAPON_LV && this.passiveLv(WEAPONS[c.id].evoPassive) > 0;
     }
     if (c.kind === 'passive' && c.isNew) return this.weapons.some((w) => !w.evo && w.lv >= MAX_WEAPON_LV && WEAPONS[w.id].evoPassive === c.id);
+    if (c.kind === 'order' && this.def) {
+      const d = this.def;
+      return Object.values(LINKS).some((l) => !d.links.has(l.id) && (
+        (l.unit === c.id && c.lv >= ORDERS[c.id].max && orderLv(d, l.city) > 0) ||
+        (l.city === c.id && c.lv === 1 && orderLv(d, l.unit) >= ORDERS[l.unit].max)));
+    }
     return false;
   }
 
@@ -1953,6 +2005,11 @@ export class Battle {
       } else if (c.kind === 'passive') {
         const helps = this.evoTargets(c.id).length > 0;
         s += c.isNew ? 25 + (helps ? 35 : 0) : 30 + (helps ? 12 : 0);
+      } else if (c.kind === 'link') s += 120;
+      else if (c.kind === 'order' && this.def) {
+        // 城快守不住时优先加固城防；兵种卡先解锁、再升级
+        const hurt = this.def.cityHp < this.def.cityMax * 0.5;
+        s += c.id === 'c_wall' && hurt ? 90 : ORDERS[c.id].unit ? (c.isNew ? 52 : 44 + c.lv * 2) : 42 + c.lv * 2;
       }
       if (s > bs) { bs = s; best = i; }
     });
@@ -1990,6 +2047,12 @@ export class Battle {
         break;
       case 'gold':
         this.coins += 30;
+        break;
+      case 'order':
+        if (this.def) applyOrder(this, c.id, c.lv);
+        break;
+      case 'link':
+        if (this.def) applyLink(this, c.id);
         break;
     }
     this.recalc();
@@ -2052,6 +2115,8 @@ export class Battle {
       this.recalc();
       this.hooks.banner(Battle.reviveBonusText(adRevive), '#fee761');
     }
+    // 守城：复活的是城池
+    if (this.def) { reviveCity(this); return; }
     p.hp = p.maxHp;
     if (this.stratSet.has('qixing')) this.qixingBuff = true;
     p.iframe = adRevive === 3 ? 3 : 2.5;

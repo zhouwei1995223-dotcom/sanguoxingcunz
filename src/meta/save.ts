@@ -70,6 +70,8 @@ export interface SaveData {
   selectedDiff: number;
   endlessBest: number;
   endlessRuns: number;
+  /** 守城模式：最多守到第几波、胜场、当天第一次胜利的日期 */
+  defense?: { best: number; wins: number; day: string };
   patrolTs: number;
   signinCount: number;
   signinDay: string;

@@ -42,6 +42,8 @@ export interface ChapterDef {
   endless?: boolean;
   /** 新手试炼：第一次进游戏的短关卡 */
   tutorial?: boolean;
+  /** 守城模式 */
+  defense?: boolean;
 }
 
 // —— 难度 ——

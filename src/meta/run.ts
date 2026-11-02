@@ -65,6 +65,8 @@ export interface RunResult {
   shardReward?: { hero: string; n: number };
   /** 无尽模式 */
   endless?: boolean;
+  /** 守城模式：守到第几波、是否当天首胜 */
+  defense?: { waves: number; dailyFirst: boolean };
   best?: number;
   /** 三星评价：本局拿到的星（位）、第一次集齐三星的元宝奖励 */
   stars?: number;
@@ -152,6 +154,33 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   getPlatform().submitScore('score', bestScore());
   markDirty();
   return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus };
+}
+
+/** 守城模式结算：按坚守时间发金币玄铁，胜利送元宝和碎片（每天第一次胜利翻倍） */
+export function settleDefense(win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number): RunResult {
+  const m = Math.min(5, t / 60);
+  const dfs = (save.defense = save.defense || { best: 0, wins: 0, day: '' });
+  const today = new Date().toISOString().slice(0, 10);
+  const dailyFirst = win && dfs.day !== today;
+  const gold = Math.round((150 * m * (1 + save.maxCleared * 0.3) + coins * 2) * (win ? 1.5 : 1));
+  const iron = Math.round(3 * m * (1 + save.maxCleared * 0.2)) + (win ? 6 : 0);
+  const yuanbao = win ? (dailyFirst ? 60 : 30) : 0;
+  const items: EquipItem[] = [];
+  for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(Math.max(1, save.maxCleared), 0)));
+  let shardReward: { hero: string; n: number } | undefined;
+  const sn = win ? (dailyFirst ? 6 : 3) : waves >= 6 ? 1 : 0;
+  if (sn) { shardReward = { hero: randomShardHero(true), n: sn }; grantShards(shardReward.hero, sn); }
+  const newBest = waves > dfs.best;
+  if (newBest) dfs.best = waves;
+  if (win) { dfs.wins++; dfs.day = today; }
+  save.gold += gold;
+  save.iron += iron;
+  save.yuanbao += yuanbao;
+  progressTask('battle', 1);
+  progressTask('kill', kills);
+  if (bossKills) progressTask('boss', bossKills);
+  markDirty();
+  return { win, firstClear: false, gold, iron, yuanbao, items, newBest, shardReward, defense: { waves, dailyFirst } };
 }
 
 /** 无尽模式结算：按坚持时间发奖励，每 5 分钟额外送碎片 */

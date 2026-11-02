@@ -1,3 +1,4 @@
+import { updateDefenseSpawner } from './defense';
 import { lerp, rand, weighted, TAU } from '../core/math';
 import { ENEMIES } from '../data/enemies';
 import { ChapterEvent, ENDLESS_POOLS } from '../data/chapters';
@@ -84,6 +85,10 @@ function updateEndless(b: Battle, dt: number) {
 export function updateSpawner(b: Battle, dt: number) {
   const ch = b.chapter;
   const t = b.t;
+  if (ch.defense) {
+    updateDefenseSpawner(b, dt);
+    return;
+  }
   if (ch.endless) {
     updateEndless(b, dt);
     breakableT -= dt;

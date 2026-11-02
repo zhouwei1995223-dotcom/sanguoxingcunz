@@ -4,6 +4,7 @@ import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
 import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
 import { awakenFrames } from './art/awaken';
+import { cityImage, ramFrames, catapultFrames, crossbowCartFrames, withLadder } from './art/defense';
 import { soldierFrames, generalFrames } from './art/units';
 import { SOLDIER_STYLES, GENERAL_STYLES } from './art/roster';
 import * as I from './art/items';
@@ -153,6 +154,12 @@ export function buildAtlas() {
   for (const id of HERO_IDS) { addUnit('hero_' + id, DEBUG.artV2 && id === 'zhaoyun' ? zhaoyunFramesV2() : heroFramesFor(id)); addUnit('hero_' + id + '_skin', heroSkinFrames(id)); addUnit('hero_' + id + '_awk', awakenFrames(id)); }
   for (const k in SOLDIER_STYLES) addUnit('u_' + k, soldierFrames(SOLDIER_STYLES[k]));
   for (const k in GENERAL_STYLES) addUnit('u_' + k, generalFrames(GENERAL_STYLES[k]));
+  // 守城模式
+  addSprite('city', cityImage(), 'bottom');
+  addUnit('u_siege_ram', ramFrames());
+  addUnit('u_siege_cata', catapultFrames());
+  addUnit('u_siege_ladder', withLadder(soldierFrames(SOLDIER_STYLES.wei_spear)));
+  addUnit('u_shu_xbow', crossbowCartFrames());
 
   [0, 1, 2].forEach((k) => addSprite('gem' + k, I.gem(k as 0)));
   I.coinFrames().forEach((c, i) => addSprite('coin' + i, c));

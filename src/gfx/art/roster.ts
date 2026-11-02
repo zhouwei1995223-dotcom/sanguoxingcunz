@@ -27,6 +27,10 @@ export const SOLDIER_STYLES: Record<string, SoldierStyle> = {
   wu_archer: { helm: 'l', helmDark: 'r', armor: 'L', armorDark: 'l', pants: 'z', weapon: 'bow', headband: 'R' },
   // 西凉重甲（董卓部）
   xl_heavy: { helm: 'm', helmDark: 'z', armor: 'z', armorDark: 'k', pants: 'k', weapon: 'club', plume: 'R', big: true },
+  // 守城模式：我方蜀军（绿甲金缨）
+  shu_spear: { helm: 'G', helmDark: 'd', armor: 'g', armorDark: 'G', pants: 'U', weapon: 'spear', plume: 'y' },
+  shu_shield: { helm: 'S', helmDark: 'N', armor: 'G', armorDark: 'd', pants: 'U', weapon: 'shield', plume: 'R' },
+  shu_archer: { helm: 'u', helmDark: 'U', armor: 'g', armorDark: 'G', pants: 'U', weapon: 'bow', headband: 'G' },
   // 魏国精锐（黑金）
   elite_guard: { helm: 'K', helmDark: 'k', armor: 'K', armorDark: 'k', pants: 'k', weapon: 'halberd', plume: 'y', big: true },
 };
@@ -38,6 +42,8 @@ export const GENERAL_STYLES: Record<string, GeneralStyle> = {
   qiang_cavalry: { horse: 'brown', colors: { R: 'Y', r: 'y', S: 'm', w: 'M', G: 'z', g: 'm', n: 'z', y: 'U', q: 'E' }, cloth: 'm', trim: 'y', weapon: 'spear' },
   yuan_cavalry: { horse: 'gold', colors: { R: 'R', r: 'r', S: 'y', w: 'Y', G: 'o', g: 'y', n: 'U', y: 'R' }, cloth: 'y', trim: 'R', weapon: 'spear' },
   wu_cavalry: { horse: 'brown', colors: { R: 'Y', r: 'y', S: 'R', w: 'f', G: 'r', g: 'R', n: 'z' }, cloth: 'R', trim: 'y', weapon: 'spear' },
+  // 守城模式：我方骑兵
+  shu_cav: { horse: 'white', colors: { R: 'y', r: 'o', S: 'G', w: 'g', G: 'd', g: 'G', n: 'U', y: 'y' }, cloth: 'G', trim: 'y', weapon: 'spear' },
   // 武将
   huaxiong: { horse: 'black', colors: { R: 'R', r: 'r', S: 'm', w: 'M', G: 'z', g: 'm', n: 'k', q: 'E' }, cloth: 'm', trim: 'R', weapon: 'blade', weaponColor: 'S' },
   dongzhuo: { horse: 'black', colors: { R: 'Y', r: 'y', S: 'z', w: 'U', G: 'm', g: 'M', n: 'k', q: 'E' }, cloth: 'k', trim: 'y', weapon: 'club' },

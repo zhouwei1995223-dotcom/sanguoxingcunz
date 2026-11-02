@@ -9,7 +9,7 @@ import type { Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, WeaponId } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
-import { settleRun, settleEndless, settleWeeklyRun, settleTutorial, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
+import { settleRun, settleEndless, settleDefense, settleWeeklyRun, settleTutorial, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
 import { settleWeekly } from '../meta/goals';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
@@ -20,6 +20,8 @@ import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
+import { heroCanSummon, summonHero } from '../battle/defense';
+import { HERO_SUMMON_COST, HERO_SUMMON_TIME, ORDERS, LINKS } from '../data/defense';
 
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
@@ -50,6 +52,15 @@ export function cardExtra(b: Battle, c: Choice): CardExtra {
     const has = b.passiveLv(d.evoPassive) > 0;
     ex.recipe = `进化：满级 + ${PASSIVES[d.evoPassive].name} → ${link ? '★' + link.name : d.evoName}`;
     ex.recipeOk = has;
+  } else if (c.kind === 'order' && b.def) {
+    const d = b.def;
+    const l = Object.values(LINKS).find((x) => x.unit === c.id || x.city === c.id);
+    if (l) {
+      const ready = (d.orders[l.unit] || 0) >= ORDERS[l.unit].max || (c.id === l.unit && c.lv >= ORDERS[l.unit].max);
+      const city = (d.orders[l.city] || 0) > 0 || c.id === l.city;
+      ex.recipe = `联动：${ORDERS[l.unit].name}满级 + ${ORDERS[l.city].name} → ${l.name}`;
+      ex.recipeOk = ready && city;
+    }
   } else if (c.kind === 'passive') {
     const helps = b.evoTargets(c.id);
     if (helps.length) {
@@ -509,10 +520,10 @@ export class ReviveDialog implements Dialog {
     const u = ui.u;
     const b = this.scene.battle;
     const w = ui.W - 100 * u, h = 640 * u;
-    const f = dialogFrame(ui, w, h, '力竭', this.t);
+    const f = dialogFrame(ui, w, h, b.def ? '城池失守' : '力竭', this.t);
     if (!this.busy) this.remain -= dt;
     const left = Math.max(0, this.remain);
-    ui.text(`${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
+    ui.text(b.def ? '城池被攻破……是否死守？' : `${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
     ui.icon('revive', ui.W / 2, f.y + 230 * u, 140 * u);
     ui.text(String(Math.ceil(left)), ui.W / 2, f.y + 230 * u, 48, '#fff');
     let y = f.y + 340 * u;
@@ -563,6 +574,39 @@ export class ReviveDialog implements Dialog {
       this.scene.finish(false);
       return false;
     }
+  }
+  closed?: boolean;
+}
+
+/** 守城：选择召唤哪位武将（暂停战斗） */
+export class HeroSummonDialog implements Dialog {
+  t?: number;
+  constructor(private scene: BattleScene) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const b = this.scene.battle;
+    const d = b.def!;
+    const ids = Object.keys(d.heroes).filter((id) => id !== b.hero.id);
+    const rows = Math.ceil(ids.length / 3);
+    const w = ui.W - 80 * u, h = 260 * u + rows * 250 * u;
+    const f = dialogFrame(ui, w, h, '召唤武将', this.t, 'hsum_close');
+    if (f.close) return false;
+    ui.text(`消耗粮草 ${HERO_SUMMON_COST}（现有 ${Math.floor(d.grain)}），助战 ${HERO_SUMMON_TIME} 秒`, ui.W / 2, f.y + 96 * u, 22, C.textDim);
+    const cw = (w - 60 * u) / 3;
+    ids.forEach((id, i) => {
+      const x = f.x + 30 * u + (i % 3) * cw, y = f.y + 130 * u + Math.floor(i / 3) * 250 * u;
+      const err = heroCanSummon(b, id);
+      const hi = d.heroes[id];
+      ui.qualityFrame(x + 10 * u, y, cw - 20 * u, err ? '#3a3040' : '#feae34');
+      ui.icon(`${hi.sprite}_0`, x + cw / 2, y + (cw - 20 * u) / 2, (cw - 20 * u) * 0.85, err ? 0.45 : 1);
+      ui.text(hi.name, x + cw / 2, y + cw + 6 * u, 24, err ? '#9a8a7a' : '#fff4d6');
+      ui.text(err ? (d.heroCd[id] > 0 ? `${Math.ceil(d.heroCd[id])}秒` : '不可召唤') : `攻 ${fmtNum(hi.atk)}`, x + cw / 2, y + cw + 36 * u, 18, err ? '#a86a5a' : '#9be37a');
+      if (ui.clicked('hsum_' + id, x, y, cw, cw + 50 * u)) {
+        if (err) ui.toast(err);
+        else { summonHero(b, id); this.closed = true; }
+      }
+    });
+    if (this.closed) return false;
   }
   closed?: boolean;
 }
@@ -652,7 +696,9 @@ export class ResultDialog implements Dialog {
       }
       this.tierCount = w.rewards.length;
     } else {
-      this.res = b.chapter.tutorial
+      this.res = b.def
+        ? settleDefense(win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx)
+        : b.chapter.tutorial
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless
         ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
@@ -673,6 +719,7 @@ export class ResultDialog implements Dialog {
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
+    else if (this.res.defense) ui.text(this.win ? (this.res.defense.dailyFirst ? '城池守住了！今日首胜奖励翻倍' : '城池守住了！') : `城池失守 · 守到第 ${this.res.defense.waves} 波${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 30, this.win ? C.gold : '#fff4d6');
     else if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
     else if (this.res.endless) ui.text(this.res.newBest ? `新纪录！坚持 ${fmtTime(b.t)}` : `最佳纪录 ${fmtTime(this.res.best || 0)}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');

@@ -1,6 +1,6 @@
 // 敌人数据。外观在 gfx/art/roster.ts，按 sprite 字段关联。
 
-export type EnemyAI = 'chase' | 'ranged' | 'charger' | 'boss';
+export type EnemyAI = 'chase' | 'ranged' | 'charger' | 'boss' | 'siege';
 
 export interface EnemyDef {
   id: string;
@@ -20,6 +20,10 @@ export interface EnemyDef {
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
+  // 守城模式的攻城兵种：siege 只认城池，不理会武将和士兵
+  siege_ram: { id: 'siege_ram', name: '冲车', sprite: 'siege_ram', hp: 150, speed: 13, dmg: 20, radius: 11, exp: 8, ai: 'siege', mass: 30 },
+  siege_ladder: { id: 'siege_ladder', name: '云梯兵', sprite: 'siege_ladder', hp: 14, speed: 40, dmg: 5, radius: 7, exp: 2, ai: 'siege', mass: 1 },
+  siege_cata: { id: 'siege_cata', name: '投石车', sprite: 'siege_cata', hp: 70, speed: 12, dmg: 12, radius: 11, exp: 6, ai: 'ranged', range: 150, shootCd: 4, proj: 'stone', mass: 20 },
   wei_spear: { id: 'wei_spear', name: '曹军枪兵', sprite: 'wei_spear', hp: 10, speed: 30, dmg: 5, radius: 6, exp: 1, ai: 'chase' },
   wei_shield: { id: 'wei_shield', name: '曹军盾兵', sprite: 'wei_shield', hp: 32, speed: 22, dmg: 7, radius: 7, exp: 2, ai: 'chase', mass: 3 },
   wei_archer: { id: 'wei_archer', name: '曹军弓手', sprite: 'wei_archer', hp: 8, speed: 28, dmg: 6, radius: 6, exp: 2, ai: 'ranged', range: 95, shootCd: 3.2, proj: 'arrow' },
