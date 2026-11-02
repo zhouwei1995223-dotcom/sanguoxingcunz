@@ -302,7 +302,8 @@ export class Battle {
     this.player = { x: 0, y: 0, r: 8, hp: base.hp, maxHp: base.hp, dirX: 1, dirY: 0, left: false, moving: false, anim: 0, iframe: 0, hurtFlash: 0 };
     // 升级刷新：每局送 1 次免费，军略「奇谋」再加
     this.rerolls = base.reroll + 1;
-    this.revives = base.revive;
+    // 每局第一次复活免费（不看广告），军略「不屈」再加；之后看广告复活
+    this.revives = base.revive + 1;
     this.potionBase = potionStats(base.potion || 0);
     this.hero = HERO_BY_ID[base.hero] || HERO_BY_ID.zhaoyun;
     this.cleared = base.cleared ?? 99;
