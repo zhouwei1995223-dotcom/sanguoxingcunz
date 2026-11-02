@@ -7,7 +7,7 @@ import { resetSpawner } from '../battle/spawner';
 import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, recommendedPower } from '../meta/run';
-import { currentWeekly, recordCodex, heroSpriteName } from '../meta/goals';
+import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../meta/goals';
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
 import type { WeaponId } from '../data/skills';
@@ -133,6 +133,7 @@ export class BattleScene implements Scene {
       banner: (text, color) => this.banners.push({ text, color: color || C.gold, t: 0 }),
       vibrate: (l) => vibrate(l),
       bossAppear: (d: BossDef) => this.onBoss(d),
+      ultCast: () => { this.cutIn = 0; },
     };
     playBgm('bgm_battle');
     this.banners.push({ text: this.label, color: this.chapter.endless ? '#ff8a80' : this.diff.color, t: 0 });
@@ -509,6 +510,7 @@ export class BattleScene implements Scene {
       ui.ctx.globalAlpha = 1;
     }
     this.drawCombo(dt);
+    this.drawCutIn(dt);
     this.drawUltButton();
     this.drawPotionButton();
     if (b.def) this.drawDefensePanel();
@@ -580,6 +582,71 @@ export class BattleScene implements Scene {
     }
     this.tip('defense', '守住城池！右侧花粮草召唤士兵', true);
     if (b.t > 20) this.tip('defense2', '升级时可选兵种、城防「军令」，凑齐还能联动');
+  }
+
+  /** 大招立绘切入的计时（-1 表示没有） */
+  private cutIn = -1;
+
+  /** 大招切入：斜向黑底横幅 + 武将立绘滑入 + 大招名，约 1.1 秒 */
+  private drawCutIn(dt: number) {
+    if (this.cutIn < 0) return;
+    this.cutIn += dt;
+    const t = this.cutIn;
+    if (t > 1.1) { this.cutIn = -1; return; }
+    const ui = game.ui;
+    const u = ui.u;
+    const g = ui.ctx;
+    const b = this.battle;
+    const hero = b.hero;
+    const inK = Math.min(1, t / 0.18), outK = t > 0.9 ? (t - 0.9) / 0.2 : 0;
+    const ease = 1 - (1 - inK) * (1 - inK);
+    const cy = ui.H * 0.27, bh = 230 * u * (1 - outK * 0.8), skew = 60 * u;
+    g.save();
+    g.globalAlpha = 1 - outK;
+    // 横幅底
+    g.fillStyle = 'rgba(14,8,12,0.88)';
+    g.beginPath();
+    g.moveTo(0, cy - bh / 2 + skew); g.lineTo(ui.W, cy - bh / 2 - skew + skew * 0.6);
+    g.lineTo(ui.W, cy + bh / 2 - skew + skew * 0.6); g.lineTo(0, cy + bh / 2 + skew);
+    g.closePath(); g.fill();
+    // 上下两道武将本色描边
+    g.strokeStyle = hero.color; g.lineWidth = 6 * u;
+    g.beginPath(); g.moveTo(0, cy - bh / 2 + skew); g.lineTo(ui.W, cy - bh / 2 - skew * 0.4); g.stroke();
+    g.beginPath(); g.moveTo(0, cy + bh / 2 + skew); g.lineTo(ui.W, cy + bh / 2 - skew * 0.4); g.stroke();
+    // 速度线
+    g.save();
+    g.beginPath();
+    g.moveTo(0, cy - bh / 2 + skew); g.lineTo(ui.W, cy - bh / 2 - skew * 0.4); g.lineTo(ui.W, cy + bh / 2 - skew * 0.4); g.lineTo(0, cy + bh / 2 + skew); g.closePath();
+    g.clip();
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 14; i++) {
+      const yy = cy - bh / 2 + ((i * 37) % 100) / 100 * bh + skew * 0.3;
+      const len = (80 + ((i * 53) % 120)) * u;
+      const xx = ui.W - ((t * 1800 * u + i * 211 * u) % (ui.W + len));
+      g.globalAlpha = (0.25 + (i % 3) * 0.12) * (1 - outK);
+      g.fillStyle = i % 4 === 0 ? hero.color : '#ffffff';
+      g.fillRect(xx, yy, len, 3 * u);
+    }
+    g.restore();
+    // 立绘：从左边滑入，背后一圈本色光
+    const hx = -200 * u + (ui.W * 0.28 + 200 * u) * ease, hy = cy + 20 * u;
+    g.globalCompositeOperation = 'lighter';
+    const glow = g.createRadialGradient(hx, hy - 40 * u, 10 * u, hx, hy - 40 * u, 190 * u);
+    glow.addColorStop(0, hero.color); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalAlpha = 0.55 * (1 - outK);
+    g.fillStyle = glow;
+    g.fillRect(hx - 200 * u, hy - 240 * u, 400 * u, 400 * u);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1 - outK;
+    ui.icon(heroIdleFrame(b.heroSprite, ui.time), hx, hy - 40 * u, 330 * u);
+    // 大招名：从右边滑入
+    const [pre, main] = hero.ultName.includes('·') ? hero.ultName.split('·') : ['', hero.ultName];
+    const tx = ui.W + 300 * u - (ui.W * 0.35 + 300 * u) * ease;
+    if (pre) ui.text(pre, tx, cy - 58 * u, 30, hero.color, 'center', '#120d0c');
+    ui.text(main, tx, cy + 6 * u, 64, '#fff4d6', 'center', '#3a0d12');
+    ui.text(hero.name, tx, cy + 70 * u, 26, C.gold, 'center', '#120d0c');
+    g.restore();
+    g.globalAlpha = 1;
   }
 
   private ultBtn: { x: number; y: number; r: number } | null = null;

@@ -415,18 +415,41 @@ export class WorldRenderer {
     const hb = b.weapon('halberd');
     if (hb && hb.active > 0) this.drawWhirl(p.x, p.y - 6, levelData(hb).area * b.areaMul, hb.angle, hb.evo ? '#feae34' : '#e43b44');
     // 大招：天下无双 / 青龙出水
-    if (b.ult && b.ult.kind === 'whirl') this.drawWhirl(p.x, p.y - 6, 62, b.t * 40, '#ff2a3a', true);
+    if (b.ult && b.ult.kind === 'whirl') {
+      this.drawAura(p.x, p.y - 6, 78, '#b55088', 0.5 + 0.15 * Math.sin(b.t * 12));
+      this.drawWhirl(p.x, p.y - 6, 62, b.t * 40, '#ff2a3a', true);
+    }
+    // 典韦狂战：脚下血色光晕一明一暗
+    if (b.frenzy) this.drawAura(p.x, p.y - 4, 46, '#e43b44', 0.45 + 0.25 * Math.sin(b.t * 10));
     if (b.ult && b.ult.kind === 'crescent') {
       for (const ring of b.ult.rings) {
         const R = Math.hypot(this.w, this.h) * 0.55;
         if (ring.r > R) continue;
-        g.globalAlpha = 0.85 * (1 - ring.r / R);
+        const fade = 1 - ring.r / R;
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.35 * fade;
+        g.strokeStyle = '#3e8948';
+        g.lineWidth = 22;
+        this.ellipse(p.x, p.y - 6, ring.r, ring.r * 0.85, true);
+        g.globalAlpha = 0.85 * fade;
         g.strokeStyle = '#63c74d';
         g.lineWidth = 10;
         this.ellipse(p.x, p.y - 6, ring.r, ring.r * 0.85, true);
         g.strokeStyle = '#e8ffd8';
         g.lineWidth = 3;
         this.ellipse(p.x, p.y - 6, ring.r, ring.r * 0.85, true);
+        // 环上四把旋转的偃月刀气
+        g.fillStyle = '#e8ffd8';
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * TAU + ring.r * 0.02;
+          g.save();
+          g.translate(Math.round(p.x + Math.cos(a) * ring.r - this.camX), Math.round(p.y - 6 + Math.sin(a) * ring.r * 0.85 - this.camY));
+          g.rotate(a + Math.PI / 2);
+          g.globalAlpha = fade;
+          g.beginPath(); g.arc(0, 0, 14, Math.PI, TAU); g.arc(0, 4, 11, TAU, Math.PI, true); g.closePath(); g.fill();
+          g.restore();
+        }
+        g.globalCompositeOperation = 'source-over';
         g.globalAlpha = 1;
       }
     }
@@ -720,6 +743,175 @@ export class WorldRenderer {
         g.globalAlpha = 1;
         break;
       }
+      case 'particle': {
+        // 发光粒子：抛物线飞散，越来越小
+        if (f.t < 0) break;
+        const x = f.x + f.vx! * f.t, y = f.y + f.vy! * f.t + 0.5 * (f.g || 0) * f.t * f.t;
+        const sz = Math.max(1, Math.round((f.r || 2) * (1 - k * 0.6)));
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 1 - k;
+        g.fillStyle = f.color || '#fee761';
+        g.fillRect(Math.round(x - this.camX - sz / 2), Math.round(y - this.camY - sz / 2), sz, sz);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'shock': {
+        // 冲击波：实心光环向外扩散 + 白色亮边
+        if (f.t < 0) break;
+        const e = 1 - (1 - k) * (1 - k);
+        const r = f.r! * (0.15 + 0.85 * e);
+        const lw = Math.max(2, (f.w || 10) * (1 - k));
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.55 * (1 - k);
+        g.strokeStyle = f.color || '#fee761';
+        g.lineWidth = lw;
+        this.ellipse(f.x, f.y, r, r * 0.8, true);
+        g.globalAlpha = 0.9 * (1 - k);
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = Math.max(1, lw / 4);
+        this.ellipse(f.x, f.y, r, r * 0.8, true);
+        g.globalAlpha = 0.12 * (1 - k);
+        g.fillStyle = f.color || '#fee761';
+        this.ellipse(f.x, f.y, r, r * 0.8);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'rays': {
+        // 放射光：一圈尖三角光芒慢慢旋转、变长后淡出
+        const n = 12;
+        const len = f.r! * (0.4 + 0.6 * Math.min(1, k * 2.5));
+        const rot = (f.a || 0) + f.t * 1.2;
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.scale(1, 0.8);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.5 * (1 - k);
+        g.fillStyle = f.color || '#fee761';
+        g.beginPath();
+        for (let i = 0; i < n; i++) {
+          const a = rot + (i / n) * TAU, w = 0.07 + (i % 2) * 0.05, L = len * (i % 2 ? 0.7 : 1);
+          g.moveTo(Math.cos(a - w) * 8, Math.sin(a - w) * 8);
+          g.lineTo(Math.cos(a) * L, Math.sin(a) * L);
+          g.lineTo(Math.cos(a + w) * 8, Math.sin(a + w) * 8);
+        }
+        g.fill();
+        g.restore();
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'pillar': {
+        // 光柱：从地面直冲天际，底部一圈光晕
+        const w = (f.w || 16) * (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) * 0.8);
+        const h = f.len || 160;
+        const x = Math.round(f.x - this.camX), y = Math.round(f.y - this.camY);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.5 * (1 - k);
+        g.fillStyle = f.color || '#8fb8ff';
+        g.fillRect(x - w / 2, y - h, w, h);
+        g.globalAlpha = 0.9 * (1 - k);
+        g.fillStyle = '#ffffff';
+        g.fillRect(x - w / 6, y - h, w / 3, h);
+        g.globalAlpha = 0.35 * (1 - k);
+        g.fillStyle = f.color || '#8fb8ff';
+        this.ellipse(f.x, f.y, w * 1.6, w * 0.6);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'meteor': {
+        // 流星：从右上方的高空坠向落点，拖着长尾
+        const q = Math.min(1, k);
+        const sx = f.x + 70 * (1 - q), sy = f.y - 170 * (1 - q);
+        const tx = sx + 70 * 0.35, ty = sy - 170 * 0.35;
+        g.globalCompositeOperation = 'lighter';
+        g.strokeStyle = f.color || '#8fb8ff';
+        g.lineCap = 'round';
+        for (const [lw, al] of [[7, 0.25], [3, 0.6], [1.2, 1]] as [number, number][]) {
+          g.globalAlpha = al;
+          g.lineWidth = lw;
+          g.beginPath(); g.moveTo(tx - this.camX, ty - this.camY); g.lineTo(sx - this.camX, sy - this.camY); g.stroke();
+        }
+        g.globalAlpha = 1;
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(sx - this.camX, sy - this.camY, 3, 0, TAU); g.fill();
+        g.lineCap = 'butt';
+        g.globalCompositeOperation = 'source-over';
+        break;
+      }
+      case 'dragon': {
+        // 白龙冲杀：一条蜿蜒发光的龙身，龙头在冲刺终点
+        const len = f.len!, w = f.w || 20;
+        const N = Math.max(6, Math.round(len / 8));
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.rotate(f.a!);
+        g.globalCompositeOperation = 'lighter';
+        g.lineCap = 'round';
+        g.lineJoin = 'round';
+        const path = () => {
+          g.beginPath();
+          for (let i = 0; i <= N; i++) {
+            const px = (i / N) * len, amp = w * 0.45 * Math.sin((i / N) * Math.PI);
+            const py = Math.sin(i * 0.9 - f.t * 18) * amp;
+            if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+          }
+        };
+        for (const [col, lw, al] of [[f.color || '#2ce8f5', w * 0.9, 0.22], [f.color || '#2ce8f5', w * 0.45, 0.5], ['#ffffff', w * 0.18, 0.95]] as [string, number, number][]) {
+          g.globalAlpha = al * (1 - k);
+          g.strokeStyle = col;
+          g.lineWidth = Math.max(1, lw * (1 - k * 0.5));
+          path(); g.stroke();
+        }
+        // 龙头 + 双角
+        g.globalAlpha = 1 - k;
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.moveTo(len + 10, 0); g.lineTo(len - 4, -6); g.lineTo(len - 4, 6); g.closePath(); g.fill();
+        g.fillStyle = '#fee761';
+        g.fillRect(len - 6, -9, 6, 2); g.fillRect(len - 6, 7, 6, 2);
+        g.restore();
+        g.lineCap = 'butt';
+        g.lineJoin = 'miter';
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'bagua': {
+        // 八卦阵：脚下旋转的八边形法阵 + 八组卦爻
+        const r = f.r! * Math.min(1, k * 4);
+        const rot = f.t * 1.5;
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.scale(1, 0.6);
+        g.rotate(rot);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.85 * (k > 0.75 ? (1 - k) / 0.25 : 1);
+        g.strokeStyle = f.color || '#2ce8f5';
+        g.lineWidth = 2;
+        for (const rr of [r, r * 0.72]) {
+          g.beginPath();
+          for (let i = 0; i <= 8; i++) { const a = (i / 8) * TAU + Math.PI / 8; if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+          g.stroke();
+        }
+        g.fillStyle = f.color || '#2ce8f5';
+        for (let i = 0; i < 8; i++) {
+          g.save();
+          g.rotate((i / 8) * TAU);
+          for (let j = 0; j < 3; j++) {
+            const yy = -r * 0.86 + j * 4, broken = (i >> j) & 1;
+            if (broken) { g.fillRect(-7, yy, 5, 2); g.fillRect(2, yy, 5, 2); } else g.fillRect(-7, yy, 14, 2);
+          }
+          g.restore();
+        }
+        g.globalAlpha *= 0.5;
+        g.beginPath(); g.arc(0, 0, r * 0.2, 0, TAU); g.stroke();
+        g.restore();
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        break;
+      }
       case 'num': {
         const col = f.color || 'w';
         const str = f.text!;
@@ -739,6 +931,23 @@ export class WorldRenderer {
       }
     }
     void b;
+  }
+
+  /** 发光光晕（叠加混合的径向渐变） */
+  private drawAura(x: number, y: number, r: number, color: string, alpha: number) {
+    const g = this.ctx;
+    const sx = Math.round(x - this.camX), sy = Math.round(y - this.camY);
+    g.save();
+    g.translate(sx, sy);
+    g.scale(1, 0.8);
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = Math.max(0, Math.min(1, alpha));
+    const gr = g.createRadialGradient(0, 0, r * 0.1, 0, 0, r);
+    gr.addColorStop(0, color);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
+    g.restore();
   }
 
   private drawWind(x: number, y: number, a: number) {

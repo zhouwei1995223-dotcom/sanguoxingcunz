@@ -186,7 +186,9 @@ export interface Breakable {
 }
 
 export interface Fx {
-  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum' | 'volley' | 'blade';
+  kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum' | 'volley' | 'blade'
+    // 大招特效（发光叠加）：粒子、冲击波、放射光、光柱、流星、龙形轨迹、八卦阵
+    | 'particle' | 'shock' | 'rays' | 'pillar' | 'meteor' | 'dragon' | 'bagua';
   x: number;
   y: number;
   t: number;
@@ -208,6 +210,10 @@ export interface Fx {
   pts?: number[];
   /** 借刀杀人：这具尸体已经撞过的敌人 */
   hit?: Set<number>;
+  /** 按真实时间播放（大招慢动作期间也正常速度） */
+  real?: boolean;
+  /** 粒子重力 */
+  g?: number;
 }
 
 /** 首领技能预警 */

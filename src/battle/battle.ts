@@ -62,6 +62,8 @@ export interface BattleHooks {
   banner(text: string, color?: string): void;
   vibrate(long?: boolean): void;
   bossAppear(def: BossDef): void;
+  /** 放大招（场景播放立绘切入） */
+  ultCast?(): void;
 }
 
 const noopHooks: BattleHooks = { sfx() {}, shake() {}, banner() {}, vibrate() {}, bossAppear() {} };
@@ -647,7 +649,7 @@ export class Battle {
     this.updatePickups(dt);
     this.updateBreakables(dt);
     this.updateJiedao();
-    this.updateFx(dt);
+    this.updateFx(dt, rawDt);
 
     // 清理
     if (this.enemies.length > 0 && this.t % 1 < dt) this.enemies = this.enemies.filter((e) => !e.dead);
@@ -1545,17 +1547,28 @@ export class Battle {
     this.ultCasts++;
     if (this.stratSet.has('guohe')) this.ultBuffT = this.t + 17;
     const kind = this.hero.ult;
-    this.hooks.banner(this.hero.ultName.replace('·', ' · '), this.hero.color);
+    // 有立绘切入时不再弹横幅
+    if (!this.hooks.ultCast) this.hooks.banner(this.hero.ultName.replace('·', ' · '), this.hero.color);
     this.hooks.sfx('evolve');
     this.hooks.vibrate(true);
     const p = this.player;
     const st: UltState = { kind, slow: 1, tickT: 0, rings: [], spawned: 0, idx: -1, t: 0, dur: 0, x0: p.x, y0: p.y, x1: 0, y1: 0, finale: 0 };
     this.ult = st;
+    // 起手：武将本色的冲击波 + 放射光 + 粒子
+    const col = this.hero.color;
+    this.fx.push({ kind: 'shock', x: p.x, y: p.y - 8, t: 0, dur: 0.55, r: 120, w: 14, color: col, real: true });
+    this.fx.push({ kind: 'rays', x: p.x, y: p.y - 8, t: 0, dur: 0.75, r: 140, a: rand(TAU), color: col, real: true });
+    this.burst(p.x, p.y - 8, 28, [col, '#ffffff', '#fee761'], 170, 0.7);
+    if (this.hooks.ultCast) this.hooks.ultCast();
     switch (kind) {
       case 'dragon': st.slow = 0.12; this.nextDash(); break;
       case 'crescent': st.slow = 0.25; st.dur = 1.35; break;
       case 'roar': st.slow = 0.2; st.dur = 0.7; this.doRoar(); break;
-      case 'tornado': st.slow = 0.3; st.dur = 0.5; this.spawnTornados(); break;
+      case 'tornado':
+        st.slow = 0.3; st.dur = 0.5; this.spawnTornados();
+        this.fx.push({ kind: 'bagua', x: p.x, y: p.y, t: 0, dur: 1.8, r: 78, color: '#2ce8f5', real: true });
+        this.burst(p.x, p.y - 8, 24, ['#f77622', '#fee761', '#e43b44'], 120, 0.9, -60);
+        break;
       case 'whirl': st.slow = 1; st.dur = 5; break;
       case 'arrowrain': st.slow = 0.35; st.dur = 1.6; break;
       case 'cavalry': st.slow = 0.4; st.dur = 1.3; this.spawnUltCavalry(); break;
@@ -1565,6 +1578,7 @@ export class Battle {
         p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.3);
         this.frenzy = true;
         this.recalc();
+        this.fx.push({ kind: 'pillar', x: p.x, y: p.y, t: 0, dur: 0.7, w: 30, len: 200, color: '#e43b44', real: true });
         this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.5, r: 60, color: '#e43b44' });
         this.fx.push({ kind: 'text', x: p.x, y: p.y - 40, t: 0, dur: 0.8, text: '主公快走，典韦在此！', color: '#ff8a80' });
         break;
@@ -1609,6 +1623,9 @@ export class Battle {
       this.damage(e, dmg, dx * 0.6 - dy * side * 0.8, dy * 0.6 + dx * side * 0.8, 120, { force: true });
     }
     this.fx.push({ kind: 'beam', x: u.x0, y: u.y0 - 8, t: 0, dur: 0.45, a: Math.atan2(dy, dx), len, w: width });
+    // 白龙：沿冲刺路线留下一条蜿蜒的发光龙身
+    this.fx.push({ kind: 'dragon', x: u.x0, y: u.y0 - 8, t: 0, dur: 0.6, a: Math.atan2(dy, dx), len, w: 24, color: '#2ce8f5' });
+    this.burst(u.x1, u.y1 - 8, 10, ['#ffffff', '#2ce8f5', '#8be9ff'], 140, 0.5);
     this.hooks.shake(3);
     this.hooks.sfx('thrust');
     this.hooks.sfx('horse');
@@ -1634,6 +1651,11 @@ export class Battle {
         this.shots.length = 0;
         this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: R, color: '#fee761' });
         this.fx.push({ kind: 'explo', x: p.x, y: p.y, t: 0, dur: 0.5 });
+        // 七进七出收尾：金色巨浪 + 光柱 + 放射光
+        this.fx.push({ kind: 'shock', x: p.x, y: p.y - 8, t: 0, dur: 0.7, r: R * 0.9, w: 22, color: '#fee761', real: true });
+        this.fx.push({ kind: 'pillar', x: p.x, y: p.y, t: 0, dur: 0.8, w: 34, len: 240, color: '#feae34', real: true });
+        this.fx.push({ kind: 'rays', x: p.x, y: p.y - 8, t: 0, dur: 0.9, r: 220, color: '#fee761', real: true });
+        this.burst(p.x, p.y - 8, 44, ['#fee761', '#ffffff', '#2ce8f5'], 260, 0.9);
         this.hooks.shake(9);
         this.hooks.vibrate(true);
         this.hooks.sfx('explode');
@@ -1673,6 +1695,8 @@ export class Battle {
         while (u.spawned < 3 && u.t >= u.spawned * 0.35) {
           u.rings.push({ r: 0, hit: new Set() });
           u.spawned++;
+          this.fx.push({ kind: 'shock', x: p.x, y: p.y - 6, t: 0, dur: 0.5, r: 150, w: 16, color: '#63c74d', real: true });
+          this.burst(p.x, p.y - 6, 18, ['#63c74d', '#e8ffd8', '#3e8948'], 220, 0.6);
           this.hooks.shake(5);
           this.hooks.sfx('thrust');
           this.hooks.sfx('explode');
@@ -1711,6 +1735,12 @@ export class Battle {
           }
           this.hitBreakables(p.x, p.y, R);
           this.hooks.sfx('thrust');
+          // 吕布旋风：周身腾起赤紫色火焰
+          if (this.fx.length < 400) for (let i = 0; i < 6; i++) {
+            const a = rand(TAU), rr = rand(20, 64);
+            this.fx.push({ kind: 'particle', x: p.x + Math.cos(a) * rr, y: p.y - 6 + Math.sin(a) * rr * 0.8, t: 0, dur: 0.55, vx: -Math.sin(a) * 110, vy: Math.cos(a) * 80 - 60, color: ['#e43b44', '#b55088', '#fee761', '#ff7a6b', '#ffffff', '#dc9be9'][i], r: 4, real: true });
+          }
+          if (Math.floor(u.t / 0.8) !== Math.floor((u.t - dt) / 0.8)) this.fx.push({ kind: 'shock', x: p.x, y: p.y - 6, t: 0, dur: 0.45, r: 90, w: 10, color: '#b55088', real: true });
         }
         if (u.t >= u.dur) this.ultEnd(u);
         return 1;
@@ -1723,6 +1753,7 @@ export class Battle {
           for (const e of this.enemies) {
             if (e.dead || !this.inView(e.x, e.y)) continue;
             if (shown++ < 50) this.fx.push({ kind: 'volley', x: e.x + rand(-4, 4), y: e.y - 4, t: 0, dur: 0.35 });
+            if (shown < 14) this.fx.push({ kind: 'particle', x: e.x, y: e.y - 4, t: -0.3, dur: 0.6, vx: rand(-30, 30), vy: rand(-60, -20), color: '#fee761', r: 2.5, g: 120 });
             this.damage(e, atk * 4, 0, 1, 30, { force: true });
           }
           this.hooks.sfx('shoot');
@@ -1736,6 +1767,11 @@ export class Battle {
             this.fx.push({ kind: 'beam', x: p.x, y: p.y - 8, t: 0, dur: 0.4, a, len, w: 14 });
             this.damage(best, atk * (best.boss ? 40 : 15), Math.cos(a), Math.sin(a), 150, { force: true });
             this.fx.push({ kind: 'explo', x: best.x, y: best.y, t: 0, dur: 0.4 });
+            // 定军神箭：金色光柱 + 冲击波
+            this.fx.push({ kind: 'pillar', x: best.x, y: best.y, t: 0, dur: 0.7, w: 26, len: 220, color: '#feae34', real: true });
+            this.fx.push({ kind: 'shock', x: best.x, y: best.y - 6, t: 0, dur: 0.5, r: 90, w: 14, color: '#fee761', real: true });
+            this.fx.push({ kind: 'rays', x: best.x, y: best.y - 6, t: 0, dur: 0.6, r: 110, color: '#fee761', real: true });
+            this.burst(best.x, best.y - 6, 26, ['#fee761', '#ffffff', '#f77622'], 200, 0.7);
             this.hooks.shake(5);
             this.hooks.sfx('explode');
           }
@@ -1744,6 +1780,12 @@ export class Battle {
         return u.slow;
       }
       case 'cavalry':
+        // 西凉铁骑：马蹄扬起尘土和蓝色光尘
+        u.tickT -= dt;
+        if (u.tickT <= 0 && this.fx.length < 400) {
+          u.tickT = 0.04;
+          for (const pr of this.projs) if (pr.kind === 'horse') this.fx.push({ kind: 'particle', x: pr.x - Math.sign(pr.vx) * 14, y: pr.y + 6, t: 0, dur: 0.45, vx: -Math.sign(pr.vx) * rand(20, 60), vy: rand(-40, -10), color: Math.random() < 0.5 ? '#e8b796' : '#8be9ff', r: 3, real: true });
+        }
         if (u.t >= u.dur) this.ultEnd(u);
         return u.slow;
       case 'arrowstorm': {
@@ -1762,6 +1804,9 @@ export class Battle {
             pr.sprite = 'bolt_evo'; pr.scale = 2;
             this.projs.push(pr);
           }
+          // 弓腰姬：每轮齐射脚下一圈粉色光环和花瓣
+          this.fx.push({ kind: 'shock', x: p.x, y: p.y - 8, t: 0, dur: 0.35, r: 60, w: 8, color: '#f6757a', real: true });
+          this.burst(p.x, p.y - 8, 8, ['#f6757a', '#ffffff', '#b55088'], 120, 0.6, 40);
           this.hooks.sfx('shoot');
         }
         if (u.t >= u.dur) this.ultEnd(u);
@@ -1770,7 +1815,13 @@ export class Battle {
       case 'frenzy':
         // 典韦：狂战，期间伤害和攻速提升（recalc 里按 frenzy 计算），周身红光
         u.tickT -= dt;
-        if (u.tickT <= 0) { u.tickT = 0.5; this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.4, r: 34, color: '#e43b44' }); }
+        if (u.tickT <= 0) {
+          u.tickT = 0.25;
+          this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.4, r: 34, color: '#e43b44' });
+          // 恶来狂战：脚下燃起血色战意
+          if (this.fx.length < 400) for (let i = 0; i < 8; i++) this.fx.push({ kind: 'particle', x: p.x + rand(-18, 18), y: p.y + rand(-2, 4), t: 0, dur: 0.7, vx: rand(-12, 12), vy: rand(-110, -60), color: ['#e43b44', '#f77622', '#fee761', '#ff7a6b'][i % 4], r: 4, real: true });
+          this.fx.push({ kind: 'ghost', x: p.x + rand(-3, 3), y: p.y, t: 0, dur: 0.25, sprite: `${this.heroSprite}_${Math.floor(p.anim) % 4}${p.left ? '_L' : ''}` });
+        }
         if (u.t >= u.dur) this.ultEnd(u);
         return 1;
       case 'starfall': {
@@ -1781,9 +1832,15 @@ export class Battle {
           for (let k = 0; k < 6; k++) {
             const e = this.randomVisibleEnemy();
             const x = e ? e.x + rand(-6, 6) : p.x + rand(-90, 90), y = e ? e.y + rand(-5, 5) : p.y + rand(-120, 120);
-            this.impact(x, y, 40, atk * 7, 80, 0);
-            this.fx.push({ kind: 'explo', x, y: y + 6, t: 0, dur: 0.35 });
-            this.fx.push({ kind: 'ring', x, y, t: 0, dur: 0.3, r: 46, color: '#8fb8ff' });
+            // 星落五丈原：流星从高空坠下，落地再结算
+            this.fx.push({ kind: 'meteor', x, y, t: 0, dur: 0.22, color: '#8fb8ff' });
+            this.later(0.22, () => {
+              this.impact(x, y, 40, atk * 7, 80, 0);
+              this.fx.push({ kind: 'explo', x, y: y + 6, t: 0, dur: 0.35 });
+              this.fx.push({ kind: 'shock', x, y, t: 0, dur: 0.35, r: 50, w: 8, color: '#8fb8ff', real: true });
+              this.fx.push({ kind: 'pillar', x, y, t: 0, dur: 0.4, w: 12, len: 120, color: '#8fb8ff', real: true });
+              this.burst(x, y - 4, 6, ['#ffffff', '#8fb8ff', '#2ce8f5'], 120, 0.5);
+            });
           }
           this.hooks.sfx('explode');
         }
@@ -1813,6 +1870,7 @@ export class Battle {
       pr.sprite = 'u_baima';
       this.projs.push(pr);
     }
+    this.fx.push({ kind: 'rays', x: p.x, y: p.y - 8, t: 0, dur: 0.7, r: 180, color: '#2ce8f5', real: true });
     this.hooks.shake(4);
     this.hooks.sfx('horse');
   }
@@ -1833,6 +1891,10 @@ export class Battle {
     }
     this.shots.length = 0;
     for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.1 + i * 0.05, r: Math.max(this.viewW, this.viewH) * (0.5 + i * 0.15), color: '#ffffff' });
+    // 当阳桥断喝：三道音浪 + 血色放射 + 漫天尘土
+    for (let i = 0; i < 3; i++) this.fx.push({ kind: 'shock', x: p.x, y: p.y - 8, t: -i * 0.12, dur: 0.6, r: Math.max(this.viewW, this.viewH) * 0.65, w: 20, color: i === 1 ? '#e43b44' : '#ffffff', real: true });
+    this.fx.push({ kind: 'rays', x: p.x, y: p.y - 8, t: 0, dur: 0.8, r: 240, color: '#e43b44', real: true });
+    this.burst(p.x, p.y, 40, ['#c28569', '#e8b796', '#ffffff'], 260, 0.8);
     this.fx.push({ kind: 'text', x: p.x, y: p.y - 40, t: 0, dur: 0.5, text: '燕人张翼德在此！', color: '#ff8a80' });
     this.hooks.shake(10);
     this.hooks.sfx('boss');
@@ -1857,6 +1919,15 @@ export class Battle {
     }
     this.hooks.shake(4);
     this.hooks.sfx('fire');
+  }
+
+  /** 大招特效：一圈向外飞散的发光粒子（特效太多时不再加） */
+  private burst(x: number, y: number, n: number, colors: string[], speed = 80, life = 0.6, g = 0) {
+    if (this.fx.length > 420) return;
+    for (let i = 0; i < n; i++) {
+      const a = rand(TAU), s = speed * rand(0.35, 1);
+      this.fx.push({ kind: 'particle', x, y, t: 0, dur: life * rand(0.6, 1), vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.8, color: colors[i % colors.length], r: rand(1.5, 3.5), g, real: true });
+    }
   }
 
   /** 金疮药：回复生命，进入冷却 */
@@ -1888,12 +1959,12 @@ export class Battle {
     this.fx.push({ kind: 'num', x, y, t: 0, dur: 0.6, text: String(v), color, big });
   }
 
-  private updateFx(dt: number) {
+  private updateFx(dt: number, rawDt = dt) {
     // 原地压缩数组（几百个特效时逐个 splice 很慢）
     let n = 0, nums = 0;
     for (let i = 0; i < this.fx.length; i++) {
       const f = this.fx[i];
-      f.t += dt;
+      f.t += f.real ? rawDt : dt;
       if (f.t < f.dur) { this.fx[n++] = f; if (f.kind === 'num') nums++; }
     }
     this.fx.length = n;
