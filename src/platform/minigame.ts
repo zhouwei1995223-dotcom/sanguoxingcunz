@@ -87,6 +87,8 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
   const adCfg = kind === 'wx' ? AD_CONFIG.wx : AD_CONFIG.tt;
   /** 推荐组件的 PageManager：提前加载，点按钮时直接展示 */
   let recommendPM: any = null;
+  let recommendLoad: Promise<any> | null = null;
+  let recommendReady = false;
   // 启动时就创建激励视频实例，让平台提前加载，第一次点「看视频」不用等
   if (!NO_ADS) getRewarded(adCfg.rewarded);
   let interstitial: any = null;
@@ -251,26 +253,42 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
       // 官方最佳实践：进游戏场景时先 load，需要时再 show
       if (recommendPM || kind !== 'wx' || typeof api.createPageManager !== 'function') return;
       try {
-        recommendPM = api.createPageManager();
-        Promise.resolve(recommendPM.load({ openlink: RECOMMEND_OPENLINK })).catch(() => { recommendPM = null; });
-      } catch (e) { recommendPM = null; }
+        const pm = api.createPageManager();
+        recommendPM = pm;
+        recommendReady = false;
+        recommendLoad = Promise.resolve(pm.load({ openlink: RECOMMEND_OPENLINK }))
+          .then(() => { if (recommendPM === pm) recommendReady = true; })
+          .catch(() => { if (recommendPM === pm) { recommendPM = null; recommendLoad = null; } });
+      } catch (e) { recommendPM = null; recommendLoad = null; }
     },
     showRecommend() {
       return new Promise<boolean | null | string>((resolve) => {
         const errText = (r: any) => `${(r && (r.errCode ?? '')) || ''} ${(r && r.errMsg) || (typeof r === 'string' ? r : '')}`.trim() || 'unknown';
-        try {
-          if (!recommendPM) recommendPM = api.createPageManager();
-          const pm = recommendPM;
-          let done = false;
-          const finish = (v: boolean | null | string) => { if (!done) { done = true; resolve(v); } };
-          // 基础库 3.8.6 起 destroy 回调带 isRecommended；低版本拿不到，按 null 处理
+        let done = false;
+        const finish = (v: boolean | null | string) => { if (!done) { done = true; resolve(v); } };
+        // 真机上第一次点偶尔报错、再点就好（预加载还没完成或实例失效）：出错时换一个新实例自动重试一次，还不行才提示
+        const attempt = (retry: boolean) => {
+          let failed = false;
+          const fail = (res: any) => {
+            if (failed || done) return;
+            failed = true;
+            recommendPM = null; recommendLoad = null; recommendReady = false;
+            if (retry) setTimeout(() => attempt(false), 300);
+            else finish(errText(res));
+          };
           try {
-            pm.on('destroy', (res: any) => { finish(res && typeof res.isRecommended === 'boolean' ? res.isRecommended : null); recommendPM = null; });
-            pm.on('error', (res: any) => { finish(errText(res)); recommendPM = null; });
-          } catch (e) {}
-          // 点击事件里同步调用 show（没预加载时 show 会自己先加载）
-          Promise.resolve(pm.show({ openlink: RECOMMEND_OPENLINK })).catch((res: any) => { finish(errText(res)); recommendPM = null; });
-        } catch (e) { resolve(errText(e && (e as any).message)); }
+            // 预加载完成了就用它；还没完成（或失败）就换一个新实例，在点击里直接 show（show 会自己加载，第二次点能成功就是这种情况）
+            if (!recommendPM || !recommendReady) { recommendPM = api.createPageManager(); recommendLoad = null; recommendReady = false; }
+            const pm = recommendPM;
+            // 基础库 3.8.6 起 destroy 回调带 isRecommended；低版本拿不到，按 null 处理
+            try {
+              pm.on('destroy', (res: any) => { if (!failed) { finish(res && typeof res.isRecommended === 'boolean' ? res.isRecommended : null); if (recommendPM === pm) { recommendPM = null; recommendLoad = null; recommendReady = false; } } });
+              pm.on('error', fail);
+            } catch (e) {}
+            Promise.resolve(pm.show({ openlink: RECOMMEND_OPENLINK })).catch(fail);
+          } catch (e) { fail(e && (e as any).message); }
+        };
+        attempt(true);
       });
     },
     supportsUpdateNotice() { return kind === 'wx' && typeof api.requestSubscribeSystemMessage === 'function'; },
