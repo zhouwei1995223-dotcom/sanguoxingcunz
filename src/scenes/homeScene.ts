@@ -72,7 +72,7 @@ export class HomeScene implements Scene {
     if (save.guide !== this.lastGuide) { if (this.lastGuide >= 0) getPlatform().report('guide_step', { step: String(save.guide) }); this.lastGuide = save.guide; }
     tickStamina();
     rolloverDaily();
-    if (this.tab === 'battle') this.bg.draw(ui.ctx, dt, this.battleLayout(ui).cy - 2 * ui.u, this.contentTop(ui) + 250 * ui.u, 120 * ui.u);
+    if (this.tab === 'battle') this.bg.draw(ui.ctx, dt, this.battleLayout(ui).cy - 74 * ui.u, this.contentTop(ui) + 250 * ui.u, 120 * ui.u); // 脚底留在「征战 / 守城」页签上方
     else this.drawPlainBg(ui);
     const power = combatPower();
     if (power !== this.lastPower) { this.flashPower = 1.2; this.lastPower = power; }
