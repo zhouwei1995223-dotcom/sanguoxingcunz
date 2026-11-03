@@ -17,7 +17,8 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
-import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
+import { NO_ADS, NO_ADS_PRICE, IS_H5, IS_XHS, SHARE_CONFIG } from '../data/platformConfig';
+import { captureXhsShot, peekXhsPublishCaps, refreshXhsPublishCaps, takeXhsPublishReward, xhsPostRunComment, xhsPostRunNote, xhsPublishClaimedToday, XhsPublishCaps, XhsRunCard } from '../platform/xhsPublish';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 import { ORDERS, LINKS } from '../data/defense';
@@ -584,6 +585,8 @@ export class ResultDialog implements Dialog {
   private shared = false;
   private doubled = false;
   private busy = false;
+  private pub: XhsPublishCaps = { note: false, comment: false };
+  private pubBusy = false;
   t?: number;
   constructor(private scene: BattleScene, private win: boolean) {
     const b = scene.battle;
@@ -609,6 +612,11 @@ export class ResultDialog implements Dialog {
         : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec));
     }
     if (scene.videoPath) scene.videoPath.then((p) => { this.video = p; });
+    if (IS_XHS) {
+      const known = peekXhsPublishCaps();
+      if (known) this.pub = known;
+      refreshXhsPublishCaps().then((c) => { this.pub = c; });
+    }
     if (save.guide === 0) save.guide = 1;
     markDirty();
     flushSave(true);
@@ -619,7 +627,8 @@ export class ResultDialog implements Dialog {
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
     const showStars = this.res.stars !== undefined && this.win && !this.scene.weekly;
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0);
+    const showPublish = IS_XHS && (this.pub.note || this.pub.comment);
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0) + (showPublish ? 120 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
@@ -712,8 +721,48 @@ export class ResultDialog implements Dialog {
       game.setScene(new HomeScene());
       return false;
     }
+    if (showPublish) this.drawPublish(ui, bx, y + 112 * u, bw);
     // 打赢了是推荐的好时机（官方建议在高光时刻拉起推荐组件；不发奖励）
     if (this.canRecommend) ui.button('res_recommend', ui.W / 2 - 170 * u, y + 116 * u, 340 * u, 64 * u, '觉得好玩？推荐给好友', C.btnGreen, { size: 22, icon: 'thumb', tap: () => openRecommend('result') });
+  }
+  private runCard(): XhsRunCard {
+    const b = this.scene.battle;
+    return {
+      hero: b.hero.name, label: this.scene.label, win: this.win, seconds: Math.round(b.t),
+      kills: b.kills, bosses: b.bossKills, mode: this.scene.modeName, chapter: this.scene.chapter.id,
+    };
+  }
+  /** 发笔记 / 发评论必须在这次点击里发起。成功只表示发布页打开了。 */
+  private drawPublish(ui: UI, x: number, y: number, w: number) {
+    const u = ui.u;
+    const two = this.pub.note && this.pub.comment;
+    const gap = 16 * u;
+    const pw = two ? (w - gap) / 2 : w;
+    let px = x;
+    const card = this.runCard();
+    const go = (kind: 'note' | 'comment') => {
+      if (this.pubBusy) return;
+      this.pubBusy = true;
+      const shot = captureXhsShot();
+      if (!shot) { this.pubBusy = false; ui.toast('战绩图没有生成'); return; }
+      const task = kind === 'note' ? xhsPostRunNote(shot, card) : xhsPostRunComment(shot, card);
+      task.then((r) => {
+        this.pubBusy = false;
+        if (!r.ok) {
+          ui.toast(r.message);
+          getPlatform().report(kind === 'note' ? 'xhs_note' : 'xhs_comment', { ok: 0, yuanbao: 0 });
+          return;
+        }
+        const reward = takeXhsPublishReward(kind);
+        ui.toast(reward.message);
+        getPlatform().report(kind === 'note' ? 'xhs_note' : 'xhs_comment', { ok: 1, yuanbao: reward.yuanbao });
+      });
+    };
+    if (this.pub.note) {
+      ui.button('res_note', px, y, pw, 80 * u, '发笔记', C.btnBlue, { size: 24, disabled: this.pubBusy, sub: xhsPublishClaimedToday('note') ? '今日已领' : '3000元宝', tap: () => go('note') });
+      px += pw + gap;
+    }
+    if (this.pub.comment) ui.button('res_comment', px, y, pw, 80 * u, '发评论', C.btnGreen, { size: 24, disabled: this.pubBusy, sub: xhsPublishClaimedToday('comment') ? '今日已领' : '1000元宝', tap: () => go('comment') });
   }
   private get canRecommend() {
     return this.win && !this.res.endless && getPlatform().supportsRecommend();
