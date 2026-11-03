@@ -33,6 +33,7 @@ import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
 import { GAME_INFO, IS_H5, IS_XHS, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 import { refreshXhsFollow } from '../platform/xhsFollow';
+import { refreshXhsPublishCaps } from '../platform/xhsPublish';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 
 /** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
@@ -68,8 +69,8 @@ export class HomeScene implements Scene {
     if (save.stats.runs >= 1) funnel('home_first');
     reportDailyLogin();
     flushSave(true);
-    // 小红书：进主界面就查一次关注状态，打开弹窗时再查一次
-    if (IS_XHS) refreshXhsFollow();
+    // 小红书：进主界面就查一次关注状态，并确认能不能发笔记 / 发评论
+    if (IS_XHS) { refreshXhsFollow(); refreshXhsPublishCaps(); }
   }
 
   private lastGuide = -1;

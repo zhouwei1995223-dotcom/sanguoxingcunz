@@ -22,6 +22,7 @@ import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
 import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_XHS, XHS_FOLLOW } from '../data/platformConfig';
 import { refreshXhsFollow, xhsFollowAuthor, xhsFollowEligible, xhsFollowLabel, xhsGetFollowStatus, XhsFollowStatus, XhsFollowSupport } from '../platform/xhsFollow';
+import { captureXhsShot, peekXhsPublishCaps, refreshXhsPublishCaps, xhsPostRunComment, xhsPostRunNote, XhsPublishCaps } from '../platform/xhsPublish';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -768,15 +769,48 @@ export class ChapterListDialog implements Dialog {
 /** 战力碾压的结算：直接展示胜利奖励 */
 export class SweepDialog implements Dialog {
   t?: number;
-  constructor(private title: string, private res: RunResult) {}
+  private pub: XhsPublishCaps = { note: false, comment: false };
+  private pubBusy = false;
+  constructor(private title: string, private res: RunResult) {
+    if (IS_XHS) {
+      const known = peekXhsPublishCaps();
+      if (known) this.pub = known;
+      refreshXhsPublishCaps().then((c) => { this.pub = c; });
+    }
+  }
   draw(ui: UI) {
     const u = ui.u;
-    const w = ui.W - 80 * u, h = 640 * u + (this.res.items.length > 2 ? 160 * u : 0);
+    const showPublish = IS_XHS && (this.pub.note || this.pub.comment);
+    const w = ui.W - 80 * u, h = 640 * u + (this.res.items.length > 2 ? 160 * u : 0) + (showPublish ? 120 * u : 0);
     const f = dialogFrame(ui, w, h, '战力碾压', this.t);
     ui.text(this.title, ui.W / 2, f.y + 96 * u, 28, '#fff4d6');
     ui.text(this.res.firstClear ? '兵锋所指，一战而定！（首次通关）' : '兵锋所指，一战而定！', ui.W / 2, f.y + 140 * u, 24, C.gold);
     const r = this.res;
     rewardRow(ui, rewardEntries({ gold: r.gold, iron: r.iron, yuanbao: r.yuanbao, hero: r.heroReward, shards: r.shardReward }, r.items), ui.W / 2, f.y + 230 * u, 110 * u, this.t || 1);
+    if (showPublish) {
+      const bw = w - 140 * u;
+      const bx = ui.W / 2 - bw / 2;
+      const py = f.y + h - 250 * u;
+      const two = this.pub.note && this.pub.comment;
+      const gap = 16 * u;
+      const pw = two ? (bw - gap) / 2 : bw;
+      const hero = (HERO_BY_ID[save.hero] && HERO_BY_ID[save.hero].name) || '武将';
+      const card = { hero, label: this.title, win: true, seconds: 0, kills: 0, bosses: 0, mode: 'sweep', chapter: 0 };
+      const go = (kind: 'note' | 'comment') => {
+        if (this.pubBusy) return;
+        this.pubBusy = true;
+        const shot = captureXhsShot();
+        if (!shot) { this.pubBusy = false; ui.toast('战绩图没有生成'); return; }
+        const task = kind === 'note' ? xhsPostRunNote(shot, card) : xhsPostRunComment(shot, card);
+        task.then((res) => { this.pubBusy = false; ui.toast(res.message); });
+      };
+      let px = bx;
+      if (this.pub.note) {
+        ui.button('sweep_note', px, py, pw, 80 * u, '发笔记', C.btnBlue, { size: 24, disabled: this.pubBusy, tap: () => go('note') });
+        px += pw + gap;
+      }
+      if (this.pub.comment) ui.button('sweep_comment', px, py, pw, 80 * u, '发评论', C.btnGreen, { size: 24, disabled: this.pubBusy, tap: () => go('comment') });
+    }
     if (ui.button('sweep_ok', ui.W / 2 - 150 * u, f.y + h - 140 * u, 300 * u, 90 * u, '收下', C.btnGold, { size: 30 })) return false;
   }
 }
