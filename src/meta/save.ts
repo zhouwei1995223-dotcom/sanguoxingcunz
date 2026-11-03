@@ -38,6 +38,10 @@ export interface DailyState {
   club?: boolean;
   /** 今天每个广告点位看了几次（上报用） */
   adCount?: Record<string, number>;
+  /** 小红书：今天发笔记成功已经领过元宝。跨天跟 daily 一起清掉 */
+  xhsNoteReward?: boolean;
+  /** 小红书：今天发评论成功已经领过元宝 */
+  xhsCommentReward?: boolean;
   patrolQuick: number;
   levelupAds: number;
   adShards: number;
@@ -121,6 +125,7 @@ function freshDaily(): DailyState {
   return {
     day: dayKey(), progress: {}, claimed: {}, boxes: {}, adYuanbao: 0, adGold: 0, adStamina: 0,
     chestAd: {}, freeGift: false, sidebar: false, patrolQuick: 0, levelupAds: 0, adShards: 0,
+    xhsNoteReward: false, xhsCommentReward: false,
   };
 }
 

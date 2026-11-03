@@ -22,7 +22,7 @@ import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
 import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_XHS, XHS_FOLLOW } from '../data/platformConfig';
 import { refreshXhsFollow, xhsFollowAuthor, xhsFollowEligible, xhsFollowLabel, xhsGetFollowStatus, XhsFollowStatus, XhsFollowSupport } from '../platform/xhsFollow';
-import { captureXhsShot, peekXhsPublishCaps, refreshXhsPublishCaps, xhsPostRunComment, xhsPostRunNote, XhsPublishCaps } from '../platform/xhsPublish';
+import { captureXhsShot, peekXhsPublishCaps, refreshXhsPublishCaps, takeXhsPublishReward, xhsPostRunComment, xhsPostRunNote, xhsPublishClaimedToday, XhsPublishCaps } from '../platform/xhsPublish';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -802,14 +802,18 @@ export class SweepDialog implements Dialog {
         const shot = captureXhsShot();
         if (!shot) { this.pubBusy = false; ui.toast('战绩图没有生成'); return; }
         const task = kind === 'note' ? xhsPostRunNote(shot, card) : xhsPostRunComment(shot, card);
-        task.then((res) => { this.pubBusy = false; ui.toast(res.message); });
+        task.then((res) => {
+          this.pubBusy = false;
+          if (!res.ok) { ui.toast(res.message); return; }
+          ui.toast(takeXhsPublishReward(kind).message);
+        });
       };
       let px = bx;
       if (this.pub.note) {
-        ui.button('sweep_note', px, py, pw, 80 * u, '发笔记', C.btnBlue, { size: 24, disabled: this.pubBusy, tap: () => go('note') });
+        ui.button('sweep_note', px, py, pw, 80 * u, '发笔记', C.btnBlue, { size: 24, disabled: this.pubBusy, sub: xhsPublishClaimedToday('note') ? '今日已领' : '3000元宝', tap: () => go('note') });
         px += pw + gap;
       }
-      if (this.pub.comment) ui.button('sweep_comment', px, py, pw, 80 * u, '发评论', C.btnGreen, { size: 24, disabled: this.pubBusy, tap: () => go('comment') });
+      if (this.pub.comment) ui.button('sweep_comment', px, py, pw, 80 * u, '发评论', C.btnGreen, { size: 24, disabled: this.pubBusy, sub: xhsPublishClaimedToday('comment') ? '今日已领' : '1000元宝', tap: () => go('comment') });
     }
     if (ui.button('sweep_ok', ui.W / 2 - 150 * u, f.y + h - 140 * u, 300 * u, 90 * u, '收下', C.btnGold, { size: 30 })) return false;
   }

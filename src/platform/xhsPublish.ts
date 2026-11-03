@@ -3,12 +3,18 @@
 
 import { getXhsBuildVersion, xhsClientAtLeast } from './xhsFollow';
 import { getPlatform } from '../platform';
+import { IS_XHS } from '../data/platformConfig';
+import { save, markDirty, flushSave, rolloverDaily } from '../meta/save';
 import { fmtTime } from '../core/math';
 
 /** pageType photo_publish 需要客户端 9.43+ */
 export const XHS_NOTE_MIN_CLIENT = 9430;
 /** 发布评论需要客户端 9.49+ */
 export const XHS_COMMENT_MIN_CLIENT = 9490;
+/** 同一局结算里，发笔记成功一次送这么多元宝 */
+export const XHS_NOTE_YUANBAO = 3000;
+/** 同一局结算里，发评论成功一次送这么多元宝 */
+export const XHS_COMMENT_YUANBAO = 1000;
 
 export interface XhsPublishCaps {
   note: boolean;
@@ -152,7 +158,7 @@ export async function xhsPostRunNote(dataUrl: string, card: XhsRunCard): Promise
       pageType: 'photo_publish',
       mediaInfo: { image_resources: [{ url: filePath }] },
     });
-    return { ok: true, message: '已提交笔记，审核通过后才会展示' };
+    return { ok: true, message: '' };
   } catch (err) {
     return { ok: false, message: failMessage(err as XhsErr, '笔记没有发出去，请稍后再试') };
   }
@@ -177,8 +183,40 @@ export async function xhsPostRunComment(dataUrl: string, card: XhsRunCard): Prom
     if (info) payload.miniToolSnapshotInfo = info;
     const result = await api.interactionOpenApi({ payload, saveToAlbum: false });
     if (result && result.routed === false) return { ok: false, message: '评论页没有打开，请稍后再试' };
-    return { ok: true, message: '已打开评论页' };
+    return { ok: true, message: '' };
   } catch (err) {
     return { ok: false, message: failMessage(err as XhsErr, '评论没有发出去，请稍后再试') };
   }
+}
+
+/** 今天这种发布的元宝领过没有。日期用 save.daily.day，跨天由 rolloverDaily 清掉。 */
+export function xhsPublishClaimedToday(kind: 'note' | 'comment'): boolean {
+  if (!IS_XHS) return false;
+  rolloverDaily();
+  return kind === 'note' ? !!save.daily.xhsNoteReward : !!save.daily.xhsCommentReward;
+}
+
+/**
+ * 发笔记、发评论的元宝各自一天一次。
+ * 只在小红书、并且这一次提交成功之后调用。今天领过就不再加元宝。
+ */
+export function takeXhsPublishReward(kind: 'note' | 'comment'): { yuanbao: number; message: string } {
+  const note = kind === 'note';
+  if (!IS_XHS) return { yuanbao: 0, message: note ? '已提交笔记' : '已打开评论页' };
+  if (xhsPublishClaimedToday(kind)) {
+    return {
+      yuanbao: 0,
+      message: note ? '已提交笔记。今日已领过' : '已打开评论页。今日已领过',
+    };
+  }
+  if (note) save.daily.xhsNoteReward = true;
+  else save.daily.xhsCommentReward = true;
+  const yuanbao = note ? XHS_NOTE_YUANBAO : XHS_COMMENT_YUANBAO;
+  save.yuanbao += yuanbao;
+  markDirty();
+  flushSave(true);
+  return {
+    yuanbao,
+    message: note ? `已提交笔记，元宝+${yuanbao}。审核通过后才会展示` : `已打开评论页，元宝+${yuanbao}`,
+  };
 }

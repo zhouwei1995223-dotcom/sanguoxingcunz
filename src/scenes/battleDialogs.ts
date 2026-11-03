@@ -18,7 +18,7 @@ import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
 import { NO_ADS, NO_ADS_PRICE, IS_H5, IS_XHS, SHARE_CONFIG } from '../data/platformConfig';
-import { captureXhsShot, peekXhsPublishCaps, refreshXhsPublishCaps, xhsPostRunComment, xhsPostRunNote, XhsPublishCaps, XhsRunCard } from '../platform/xhsPublish';
+import { captureXhsShot, peekXhsPublishCaps, refreshXhsPublishCaps, takeXhsPublishReward, xhsPostRunComment, xhsPostRunNote, xhsPublishClaimedToday, XhsPublishCaps, XhsRunCard } from '../platform/xhsPublish';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 import { ORDERS, LINKS } from '../data/defense';
@@ -748,15 +748,21 @@ export class ResultDialog implements Dialog {
       const task = kind === 'note' ? xhsPostRunNote(shot, card) : xhsPostRunComment(shot, card);
       task.then((r) => {
         this.pubBusy = false;
-        ui.toast(r.message);
-        getPlatform().report(kind === 'note' ? 'xhs_note' : 'xhs_comment', { ok: r.ok ? 1 : 0 });
+        if (!r.ok) {
+          ui.toast(r.message);
+          getPlatform().report(kind === 'note' ? 'xhs_note' : 'xhs_comment', { ok: 0, yuanbao: 0 });
+          return;
+        }
+        const reward = takeXhsPublishReward(kind);
+        ui.toast(reward.message);
+        getPlatform().report(kind === 'note' ? 'xhs_note' : 'xhs_comment', { ok: 1, yuanbao: reward.yuanbao });
       });
     };
     if (this.pub.note) {
-      ui.button('res_note', px, y, pw, 80 * u, '发笔记', C.btnBlue, { size: 24, disabled: this.pubBusy, tap: () => go('note') });
+      ui.button('res_note', px, y, pw, 80 * u, '发笔记', C.btnBlue, { size: 24, disabled: this.pubBusy, sub: xhsPublishClaimedToday('note') ? '今日已领' : '3000元宝', tap: () => go('note') });
       px += pw + gap;
     }
-    if (this.pub.comment) ui.button('res_comment', px, y, pw, 80 * u, '发评论', C.btnGreen, { size: 24, disabled: this.pubBusy, tap: () => go('comment') });
+    if (this.pub.comment) ui.button('res_comment', px, y, pw, 80 * u, '发评论', C.btnGreen, { size: 24, disabled: this.pubBusy, sub: xhsPublishClaimedToday('comment') ? '今日已领' : '1000元宝', tap: () => go('comment') });
   }
   private get canRecommend() {
     return this.win && !this.res.endless && getPlatform().supportsRecommend();
