@@ -1,6 +1,6 @@
 import { DEBUG } from '../debug';
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { IS_H5 } from '../data/platformConfig';
+import { IS_H5, IS_XHS } from '../data/platformConfig';
 
 // 浏览器实现：用于开发调试与验收。广告用 2 秒模拟弹窗代替。
 
@@ -61,8 +61,10 @@ export function createWebPlatform(): Platform {
     safeArea.bottom = (parseFloat(cs.paddingBottom) || 0) * dpr;
     probe.remove();
   } catch (e) {}
-  // 小红书容器可能在顶部叠加按钮，至少留出一点空隙
-  if (IS_H5) safeArea.top = Math.max(safeArea.top, 20 * dpr);
+  // 小红书容器经常不注入 env(safe-area-inset-top)，真机状态栏（刘海 / 灵动岛约 59pt）会盖住右上角的暂停和加速。
+  // 已读到更大的 inset 时以 inset 为准。只加在小红书版，TapTap 仍保持原来的 20。
+  if (IS_XHS) safeArea.top = Math.max(safeArea.top, 59 * dpr);
+  else if (IS_H5) safeArea.top = Math.max(safeArea.top, 20 * dpr);
 
   const listeners: ((k: TouchKind, t: TouchPoint[]) => void)[] = [];
   const emit = (k: TouchKind, t: TouchPoint[]) => listeners.forEach((l) => l(k, t));
