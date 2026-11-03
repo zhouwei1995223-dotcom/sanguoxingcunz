@@ -1,5 +1,6 @@
 import type { WeaponId } from './skills';
 import type { HeroId } from '../gfx/art/heroes';
+import { IS_XHS } from './platformConfig';
 
 // 武将：基础属性、专属武器、大招、天赋、获取方式
 
@@ -87,7 +88,7 @@ export const HEROES: HeroDef[] = [
     passive: '枭姬：技能冷却-8%，拾取范围+30%',
     baseAtk: 21, baseHp: 105, atkPerLv: 2.1, hpPerLv: 9, moveSpeed: 80, pickup: 40,
     weapon: 'chakram', ult: 'arrowstorm', ultName: '弓腰姬', ultDesc: '2.5秒内向四面八方连珠齐射，期间无敌',
-    unlockText: '收集50个碎片解锁（宝箱、商店、活跃度）', unlockShards: 50, color: '#f5a3c7',
+    unlockText: IS_XHS ? '关注作者小红书可领，或收集50碎片解锁' : '收集50个碎片解锁（宝箱、商店、活跃度）', unlockShards: 50, color: '#f5a3c7',
   },
   {
     id: 'dianwei', name: '典韦', title: '古之恶来典韦', quote: '主公快走，典韦在此！', role: '狂战坦克',

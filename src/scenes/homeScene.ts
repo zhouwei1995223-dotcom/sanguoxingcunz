@@ -7,7 +7,7 @@ import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDa
 import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
 import { WEAPONS, PASSIVES, heroLinks } from '../data/skills';
 import {
-  heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, peakUpHero, randomShardHero, grantShards,
+  heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, peakUpHero, randomShardHero, grantShards, xhsFollowPending,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
   canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE, chestOddsText,
 } from '../meta/ops';
@@ -24,13 +24,14 @@ import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
   SidebarDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
+  XhsFollowDialog,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
-import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { GAME_INFO, IS_H5, IS_XHS, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 
 /** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
@@ -169,7 +170,7 @@ export class HomeScene implements Scene {
       const isz = (big ? 78 : 60) * u * (active ? 1.1 : 1);
       ui.icon(t.icon, x + tw / 2, y + (big ? 52 : 56) * u - (active ? 6 * u : 0), isz);
       ui.text(t.name, x + tw / 2, y + h - 26 * u, active ? 28 : 24, active ? C.gold : C.textDim);
-      const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && anyHeroRedDot());
+      const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && (anyHeroRedDot() || (xhsFollowPending() && !save.heroes.sunshangxiang.owned)));
       if (dot) ui.redDot(x + tw - 22 * u, y + 18 * u);
       if (ui.clicked('nav_' + t.id, x, y, tw, h)) {
         this.tab = t.id;
@@ -225,6 +226,7 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
+      ...(xhsFollowPending() ? [{ id: 'xhs', icon: 'hero_sunshangxiang_0', label: '关注', dot: true, on: () => game.openDialog(new XhsFollowDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();
@@ -551,7 +553,7 @@ export class HomeScene implements Scene {
       ui.text(h.name, x + cw / 2, y + sz + 18 * u, 22, sel ? C.gold : st.owned ? '#fff4d6' : '#888');
       if (st.owned) for (let k = 0; k < st.star; k++) ui.icon('star', x + cw / 2 - (st.star - 1) * 8 * u + k * 16 * u, y + sz - 12 * u, 16 * u);
       if (save.hero === h.id) { ui.pixRect(x + 6 * u, y, 56 * u, 26 * u, '#a22633'); ui.text('出战', x + 34 * u, y + 13 * u, 16, '#fff', 'center', null); }
-      if (heroRedDot(h.id)) ui.redDot(x + cw - 10 * u, y + 6 * u);
+      if (heroRedDot(h.id) || (h.id === 'sunshangxiang' && xhsFollowPending() && !st.owned)) ui.redDot(x + cw - 10 * u, y + 6 * u);
       if (ui.clicked('hero_pick_' + h.id, x, y, cw, sz + 30 * u)) this.viewHero = h.id;
     });
     const h = HERO_BY_ID[this.viewHero];
@@ -559,7 +561,8 @@ export class HomeScene implements Scene {
     const py = top + Math.ceil(HEROES.length / cols) * rowH + 8 * u;
     const ph = this.contentBottom(ui) - py - 10 * u;
     ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
-    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1470 + 108 * heroLinks(this.viewHero || save.hero).length) * u);
+    const followExtra = IS_XHS && this.viewHero === 'sunshangxiang' && !st.owned && !save.xhsFollowClaimed ? 110 : 0;
+    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1470 + followExtra + 108 * heroLinks(this.viewHero || save.hero).length) * u);
     let y = py + 20 * u + off;
     // 立绘区
     ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -571,6 +574,11 @@ export class HomeScene implements Scene {
     ui.text(h.role, 130 * u, y + 34 * u, 20, h.color, 'center', null);
     if (st.owned) for (let k = 0; k < 5; k++) ui.icon('star', ui.W - 90 * u - (4 - k) * 30 * u, y + 34 * u, 26 * u, k < st.star ? 1 : 0.2);
     y += 370 * u;
+    // 小红书领孙尚香：放在立绘下面，不用把技能列表划到底
+    if (!st.owned && h.id === 'sunshangxiang' && IS_XHS && !save.xhsFollowClaimed) {
+      if (ui.button('hero_xhs', 50 * u, y, ui.W - 100 * u, 86 * u, '关注作者小红书领孙尚香', C.btnGold, { size: 26 })) game.openDialog(new XhsFollowDialog());
+      y += 106 * u;
+    }
     const hb = heroBase(h.id);
     const lx = 50 * u;
     ui.text(`等级 ${st.lv}/${HERO.maxLevel}`, lx, y, 26, C.gold, 'left');

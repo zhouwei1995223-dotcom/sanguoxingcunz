@@ -9,7 +9,7 @@ import { dayKey, weighted, pick } from '../core/math';
 import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
 import { setBonuses, skinOn } from './goals';
 import { SKIN_DMG_BONUS } from '../data/goals';
-import { NO_ADS } from '../data/platformConfig';
+import { NO_ADS, IS_XHS } from '../data/platformConfig';
 
 // 局外养成的所有操作（纯逻辑，UI 调用）
 
@@ -226,6 +226,21 @@ export function upgradeTalent(id: string): string | null {
 export function grantShards(hero: string, n: number) {
   save.heroes[hero].shards += n;
   markDirty();
+}
+
+/** 小红书关注作者领孙尚香：只发一次。已拥有则走 grantHero，转成 20 碎片。 */
+export function claimXhsFollow(): 'new' | 'shards' | 'claimed' | 'off' {
+  if (!IS_XHS) return 'off';
+  if (save.xhsFollowClaimed) return 'claimed';
+  save.xhsFollowClaimed = true;
+  const got = grantHero('sunshangxiang');
+  getPlatform().report('xhs_follow', { step: 'claim', got: got === 'new' ? 1 : 2 });
+  markDirty();
+  return got;
+}
+
+export function xhsFollowPending(): boolean {
+  return IS_XHS && !save.xhsFollowClaimed;
 }
 
 /** 获得武将：已拥有则转为 20 碎片 */

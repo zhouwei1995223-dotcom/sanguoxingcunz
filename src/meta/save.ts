@@ -106,6 +106,8 @@ export interface SaveData {
   weekly: { week: string; best: number; claimed: Record<number, boolean> };
   skins: Record<string, { owned: boolean; ads: number; on: boolean }>;
   redeemed: Record<string, boolean>;
+  /** 小红书：关注作者领取孙尚香，领过一次就不再发 */
+  xhsFollowClaimed?: boolean;
   subscribed: boolean;
   videoShareDay: string;
   agreedPrivacy: boolean;
@@ -179,6 +181,7 @@ function freshSave(): SaveData {
     weekly: { week: '', best: 0, claimed: {} },
     skins: {},
     redeemed: {},
+    xhsFollowClaimed: false,
     subscribed: false,
     videoShareDay: '',
     agreedPrivacy: false,

@@ -7,6 +7,7 @@ import type { EquipItem } from '../meta/save';
 import {
   canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, patrolPending, patrolReward,
   collectPatrol, itemStats, isEquipped, equip, unequip, upgradeItem, mergeCandidates, mergeItem, grantReward, progressTask,
+  claimXhsFollow,
 } from '../meta/ops';
 import {
   SIGNIN, DAILY_TASKS, ACTIVITY_REWARDS, PATROL, EQUIP_BY_ID, QUALITY_NAMES, QUALITY_COLORS, QUALITY_MAX_LV, STAT_NAMES,
@@ -19,7 +20,7 @@ import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
-import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5 } from '../data/platformConfig';
+import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_XHS, XHS_FOLLOW } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -430,6 +431,9 @@ export class SettingsDialog implements Dialog {
     }
     y += 100 * u;
     // 兑换码 / 提醒
+    if (IS_XHS && ui.button('st_xhs', f.x + 100 * u + bw, y, bw, 80 * u, save.xhsFollowClaimed ? '作者小红书' : '关注领孙尚香', C.btnGold, { size: 22, redDot: !save.xhsFollowClaimed })) {
+      game.openDialog(new XhsFollowDialog());
+    }
     if (ui.button('st_redeem', f.x + 40 * u, y, bw, 80 * u, '兑换码', C.btnGold, { size: 24 })) {
       getPlatform().inputText('请输入兑换码').then((code) => {
         if (code === null) return;
@@ -537,6 +541,71 @@ export class RankDialog implements Dialog {
         y += 94 * u;
       }
       ui.text('好友排行榜在微信 / 抖音小游戏中可用', ui.W / 2, y + 30 * u, 20, C.textDim);
+    }
+  }
+}
+
+/** 小红书：关注作者领取孙尚香。只在 IS_XHS 构建里打开。 */
+export class XhsFollowDialog implements Dialog {
+  t?: number;
+  draw(ui: UI) {
+    if (!IS_XHS) return false;
+    const u = ui.u;
+    const w = ui.W - 80 * u, h = 980 * u;
+    const f = dialogFrame(ui, w, h, '关注领孙尚香', this.t, 'xhs_close');
+    if (f.close) return false;
+    let y = f.y + 78 * u;
+    y += ui.wrapText('关注作者的小红书，回到这里点「我已关注，领取孙尚香」，就能获得孙尚香。每位玩家只能领一次。已经拥有时，会换成孙尚香碎片 ×20。', f.x + 50 * u, y, w - 100 * u, 24, '#fff4d6');
+    y += 28 * u;
+    ui.text('小红书号', ui.W / 2, y, 22, C.gold);
+    y += 48 * u;
+    ui.text(XHS_FOLLOW.id, ui.W / 2, y, 48, '#fff4d6');
+    y += 40 * u;
+    y += ui.wrapText('点「去关注作者」会尝试打开作者主页。没有跳转的话，在小红书搜索上面这个号就能找到。', f.x + 50 * u, y, w - 100 * u, 22, C.textDim);
+    const bw = w - 140 * u;
+    const bh = 88 * u;
+    y += 18 * u;
+    ui.button('xhs_go', ui.W / 2 - bw / 2, y, bw, bh, '去关注作者', C.btnBlue, {
+      size: 28,
+      tap: () => {
+        const p = getPlatform();
+        // 先试主页深链，再试网页主页，最后按小红书号搜用户。要在这次点击里同步调用。
+        const ok = p.openLink(XHS_FOLLOW.scheme) || p.openLink(XHS_FOLLOW.webUrl) || p.openLink(XHS_FOLLOW.searchScheme);
+        p.report('xhs_follow', { step: 'open', ok: ok ? 1 : 0 });
+        ui.toast(ok ? '正在打开。若没有跳转，请搜索小红书号 ' + XHS_FOLLOW.id : '请在小红书搜索：' + XHS_FOLLOW.id);
+      },
+    });
+    y += bh + 14 * u;
+    ui.button('xhs_copy', ui.W / 2 - bw / 2, y, bw, bh, '复制小红书号', C.btnGray, {
+      size: 26,
+      tap: () => {
+        const id = XHS_FOLLOW.id;
+        const done = (ok: boolean) => ui.toast(ok ? '已复制小红书号 ' + id : '请记下小红书号 ' + id);
+        try {
+          const clip = navigator.clipboard;
+          if (clip && clip.writeText) clip.writeText(id).then(() => done(true), () => done(false));
+          else done(false);
+        } catch (e) { done(false); }
+      },
+    });
+    y += bh + 16 * u;
+    if (save.xhsFollowClaimed) ui.text('孙尚香已经领取过了', ui.W / 2, y + bh / 2, 26, '#9be37a');
+    else if (ui.button('xhs_claim', ui.W / 2 - bw / 2, y, bw, bh, '我已关注，领取孙尚香', C.btnGold, { size: 24 })) {
+      const r = claimXhsFollow();
+      if (r === 'new') {
+        save.hero = 'sunshangxiang';
+        playSfx('victory');
+        flushSave(true);
+        ui.toast('获得武将：孙尚香！');
+        return false;
+      }
+      if (r === 'shards') {
+        playSfx('chest');
+        flushSave(true);
+        ui.toast('转化为孙尚香碎片 ×20');
+        return false;
+      }
+      ui.toast(r === 'claimed' ? '已经领取过了' : '当前版本不能领取');
     }
   }
 }
