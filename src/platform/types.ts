@@ -49,11 +49,6 @@ export interface Platform {
   showInterstitialAd(): void;
 
   share(title: string, query?: string, imageUrl?: string): void;
-  /**
-   * 尝试打开链接（小红书作者主页等）。要在点击回调里调用。
-   * 打不开时返回 false，调用方自己把号码显示出来让玩家搜索。
-   */
-  openLink(url: string): boolean;
   onShow(cb: () => void): void;
   onHide(cb: () => void): void;
 

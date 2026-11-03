@@ -243,7 +243,6 @@ export function createMiniGamePlatform(kind: 'wx' | 'tt'): Platform {
     share(title, query, imageUrl) {
       try { api.shareAppMessage({ title, query: query || '', imageUrl: imageUrl || SHARE_CONFIG.imageUrl || undefined }); } catch (e) {}
     },
-    openLink() { return false; },
     onShow(cb) { showListeners.push(cb); },
     onHide(cb) { hideListeners.push(cb); },
     supportsSidebar() { return kind === 'tt' && sidebarSupported; },

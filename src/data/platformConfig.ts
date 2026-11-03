@@ -67,21 +67,17 @@ export const SUBSCRIBE_CONFIG = {
 };
 
 /**
- * 兑换码：键为兑换码（不区分大小写），值为奖励。上线后可在这里增删，重新构建发布即可。
- * 每个码每位玩家只能用一次。
- */
-/**
- * 小红书关注领将（只在 TARGET=xhs 里使用）。
- * id 是作者小红书号。主页深链官方要的是内部用户 id，这里只有小红书号，先按这个号试开主页；
- * 打不开时界面会把 id 显示出来，玩家可以自己搜索。searchScheme 是按号搜索用户的官方深链。
+ * 小红书号，只在界面上展示。关注谁由小工具平台绑定「当前作者」，
+ * followAuthor 没有用户 id 参数，不能拿这个号去跳主页或搜索。
  */
 export const XHS_FOLLOW = {
   id: '1063289953',
-  scheme: 'xhsdiscover://user/1063289953',
-  webUrl: 'https://www.xiaohongshu.com/user/profile/1063289953',
-  searchScheme: 'xhsdiscover://search/result?keyword=1063289953&target_search=users',
 };
 
+/**
+ * 兑换码：键为兑换码（不区分大小写），值为奖励。上线后可在这里增删，重新构建发布即可。
+ * 每个码每位玩家只能用一次。
+ */
 export const REDEEM_CODES: Record<string, { gold?: number; yuanbao?: number; iron?: number; stamina?: number; shards?: { hero: string; n: number } }> = {
   YIQIDANGQIAN: { yuanbao: 200, gold: 2000 },
   ZILONG666: { yuanbao: 100, stamina: 30 },

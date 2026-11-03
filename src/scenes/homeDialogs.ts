@@ -21,6 +21,7 @@ import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
 import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_XHS, XHS_FOLLOW } from '../data/platformConfig';
+import { refreshXhsFollow, xhsFollowAuthor, xhsFollowEligible, xhsFollowLabel, xhsGetFollowStatus, XhsFollowStatus, XhsFollowSupport } from '../platform/xhsFollow';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -545,68 +546,126 @@ export class RankDialog implements Dialog {
   }
 }
 
-/** 小红书：关注作者领取孙尚香。只在 IS_XHS 构建里打开。 */
+/** 小红书：用容器的关注接口领孙尚香。只在 IS_XHS 构建里打开。 */
 export class XhsFollowDialog implements Dialog {
   t?: number;
+  private booted = false;
+  private phase: 'load' | 'ready' = 'load';
+  private support: XhsFollowSupport = 'missing';
+  private status: XhsFollowStatus = -1;
+  private busy = false;
+  private notice = '';
+  private done = false;
+
+  /** 打开时查一次关注状态。查询失败显示「暂时无法获取」，不发奖。 */
+  private load() {
+    this.phase = 'load';
+    this.notice = '';
+    refreshXhsFollow().then((v) => {
+      if (this.done) return;
+      this.support = v.support;
+      this.status = v.status;
+      this.phase = 'ready';
+    });
+  }
+
+  private applyGrant(ui: UI): boolean {
+    const r = claimXhsFollow(this.status);
+    if (r === 'denied' || r === 'off') {
+      ui.toast(r === 'off' ? '当前版本不能领取' : '还没有关注作者');
+      return false;
+    }
+    if (r === 'new') {
+      save.hero = 'sunshangxiang';
+      playSfx('victory');
+      flushSave(true);
+      ui.toast('获得武将：孙尚香！');
+      return true;
+    }
+    if (r === 'shards') {
+      playSfx('chest');
+      flushSave(true);
+      ui.toast('转化为孙尚香碎片 ×20');
+      return true;
+    }
+    ui.toast('已经领取过了');
+    return true;
+  }
+
   draw(ui: UI) {
     if (!IS_XHS) return false;
+    if (this.done) return false;
+    if (!this.booted) { this.booted = true; this.load(); }
     const u = ui.u;
-    const w = ui.W - 80 * u, h = 980 * u;
+    const w = ui.W - 80 * u, h = 780 * u;
     const f = dialogFrame(ui, w, h, '关注领孙尚香', this.t, 'xhs_close');
     if (f.close) return false;
-    let y = f.y + 78 * u;
-    y += ui.wrapText('关注作者的小红书，回到这里点「我已关注，领取孙尚香」，就能获得孙尚香。每位玩家只能领一次。已经拥有时，会换成孙尚香碎片 ×20。', f.x + 50 * u, y, w - 100 * u, 24, '#fff4d6');
-    y += 28 * u;
-    ui.text('小红书号', ui.W / 2, y, 22, C.gold);
-    y += 48 * u;
-    ui.text(XHS_FOLLOW.id, ui.W / 2, y, 48, '#fff4d6');
-    y += 40 * u;
-    y += ui.wrapText('点「去关注作者」会尝试打开作者主页。没有跳转的话，在小红书搜索上面这个号就能找到。', f.x + 50 * u, y, w - 100 * u, 22, C.textDim);
-    const bw = w - 140 * u;
-    const bh = 88 * u;
-    y += 18 * u;
-    ui.button('xhs_go', ui.W / 2 - bw / 2, y, bw, bh, '去关注作者', C.btnBlue, {
-      size: 28,
-      tap: () => {
-        const p = getPlatform();
-        // 先试主页深链，再试网页主页，最后按小红书号搜用户。要在这次点击里同步调用。
-        const ok = p.openLink(XHS_FOLLOW.scheme) || p.openLink(XHS_FOLLOW.webUrl) || p.openLink(XHS_FOLLOW.searchScheme);
-        p.report('xhs_follow', { step: 'open', ok: ok ? 1 : 0 });
-        ui.toast(ok ? '正在打开。若没有跳转，请搜索小红书号 ' + XHS_FOLLOW.id : '请在小红书搜索：' + XHS_FOLLOW.id);
-      },
-    });
-    y += bh + 14 * u;
-    ui.button('xhs_copy', ui.W / 2 - bw / 2, y, bw, bh, '复制小红书号', C.btnGray, {
-      size: 26,
-      tap: () => {
-        const id = XHS_FOLLOW.id;
-        const done = (ok: boolean) => ui.toast(ok ? '已复制小红书号 ' + id : '请记下小红书号 ' + id);
-        try {
-          const clip = navigator.clipboard;
-          if (clip && clip.writeText) clip.writeText(id).then(() => done(true), () => done(false));
-          else done(false);
-        } catch (e) { done(false); }
-      },
-    });
-    y += bh + 16 * u;
-    if (save.xhsFollowClaimed) ui.text('孙尚香已经领取过了', ui.W / 2, y + bh / 2, 26, '#9be37a');
-    else if (ui.button('xhs_claim', ui.W / 2 - bw / 2, y, bw, bh, '我已关注，领取孙尚香', C.btnGold, { size: 24 })) {
-      const r = claimXhsFollow();
-      if (r === 'new') {
-        save.hero = 'sunshangxiang';
-        playSfx('victory');
-        flushSave(true);
-        ui.toast('获得武将：孙尚香！');
-        return false;
-      }
-      if (r === 'shards') {
-        playSfx('chest');
-        flushSave(true);
-        ui.toast('转化为孙尚香碎片 ×20');
-        return false;
-      }
-      ui.toast(r === 'claimed' ? '已经领取过了' : '当前版本不能领取');
+    let y = f.y + 86 * u;
+    y += ui.wrapText('在小工具里关注作者，就能领取孙尚香。关注确认由小红书弹出，每位玩家只能领一次。已经拥有时，会换成孙尚香碎片 ×20。', f.x + 50 * u, y, w - 100 * u, 24, '#fff4d6');
+    y += 22 * u;
+    ui.text('小红书号 ' + XHS_FOLLOW.id, ui.W / 2, y, 20, C.textDim);
+    y += 46 * u;
+    const statusText = this.phase === 'load' || this.busy ? '正在查询关注状态…' : this.support === 'ok' ? xhsFollowLabel(this.status) : '暂时无法获取';
+    ui.text('关注状态：' + statusText, ui.W / 2, y, 28, this.support === 'ok' && xhsFollowEligible(this.status) ? '#9be37a' : '#fee761');
+    y += 36 * u;
+    if (this.notice) {
+      y += ui.wrapText(this.notice, ui.W / 2, y, w - 120 * u, 22, '#ff8a80', 1.35, 'center');
+      y += 8 * u;
     }
+    const bw = w - 140 * u;
+    const bh = 92 * u;
+    y += 16 * u;
+    if (save.xhsFollowClaimed) {
+      ui.text('孙尚香已经领取过了', ui.W / 2, y + 40 * u, 26, '#9be37a');
+      return;
+    }
+    if (this.phase === 'load' || this.busy) return;
+    if (this.support !== 'ok') {
+      ui.wrapText('请更新小红书 App 后再领取孙尚香。当前版本没有关注作者的能力。', ui.W / 2, y, w - 120 * u, 24, '#ff8a80', 1.4, 'center');
+      return;
+    }
+    if (this.status === 0) {
+      // 必须在这次点击里调用 followAuthor，确认成功且 follow_status 为 1 或 2 才发奖。
+      ui.button('xhs_follow', ui.W / 2 - bw / 2, y, bw, bh, '关注作者并领取', C.btnGold, {
+        size: 28,
+        tap: () => {
+          if (this.busy || save.xhsFollowClaimed) return;
+          this.busy = true;
+          this.notice = '';
+          xhsFollowAuthor().then((r) => {
+            this.busy = false;
+            if (this.done) return;
+            if (!r.ok) { this.notice = r.message; return; }
+            this.status = r.status;
+            if (!xhsFollowEligible(r.status)) {
+              this.notice = r.status === -1 ? '关注没有成功，请稍后再试' : '还没有关注作者';
+              return;
+            }
+            this.done = this.applyGrant(ui);
+          });
+        },
+      });
+      return;
+    }
+    if (xhsFollowEligible(this.status)) {
+      if (ui.button('xhs_claim', ui.W / 2 - bw / 2, y, bw, bh, '领取孙尚香', C.btnGold, { size: 28 })) {
+        if (this.busy) return;
+        this.busy = true;
+        this.notice = '';
+        xhsGetFollowStatus().then((s) => {
+          this.busy = false;
+          if (this.done) return;
+          this.status = s;
+          if (!xhsFollowEligible(s)) {
+            this.notice = s === 0 ? '还没有关注作者' : '暂时无法获取关注状态';
+            return;
+          }
+          this.done = this.applyGrant(ui);
+        });
+      }
+      return;
+    }
+    if (ui.button('xhs_retry', ui.W / 2 - bw / 2, y, bw, bh, '重新查询', C.btnBlue, { size: 28 })) this.load();
   }
 }
 

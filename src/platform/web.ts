@@ -148,16 +148,6 @@ export function createWebPlatform(): Platform {
     showRewardedAd: fakeAd,
     showInterstitialAd() {},
     share(title) { showToast('分享：' + title); },
-    // 小红书作者主页：必须在点击回调里调用。只走新窗口，打不开就返回 false，
-    // 调用方把小红书号留在界面上让玩家自己搜。不改当前页地址，否则领奖按钮会一起被带走。
-    openLink(url: string) {
-      try {
-        const w = window.open(url, '_blank');
-        return !!w;
-      } catch (e) {
-        return false;
-      }
-    },
     onShow(cb) { showListeners.push(cb); },
     onHide(cb) { hideListeners.push(cb); },
     supportsSidebar() { return /sidebar/.test(location.search); },
