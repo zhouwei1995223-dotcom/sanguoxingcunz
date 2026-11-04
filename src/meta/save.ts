@@ -69,7 +69,7 @@ export interface SaveData {
   selectedChapter: number;
   selectedDiff: number;
   /** 主界面选中的模式与守城关卡 */
-  homeMode?: 'chapter' | 'defense';
+  homeMode?: 'chapter' | 'defense' | 'lane';
   selectedDefense?: number;
   endlessBest: number;
   endlessRuns: number;
