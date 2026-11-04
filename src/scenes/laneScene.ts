@@ -198,7 +198,7 @@ export class LaneScene implements Scene {
       g.fillRect(px, py, 18 * u, 8 * u);
     }
     const pts = b.path.pts;
-    const road = Math.max(36, 108 * u);
+    const road = Math.max(24, 68 * u);
     g.save();
     g.lineJoin = 'miter';
     g.miterLimit = 2;
@@ -207,7 +207,7 @@ export class LaneScene implements Scene {
     g.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
     g.strokeStyle = '#5a3a28';
-    g.lineWidth = road + 10 * u;
+    g.lineWidth = road + 6 * u;
     g.stroke();
     g.strokeStyle = '#a56b3c';
     g.lineWidth = road;
