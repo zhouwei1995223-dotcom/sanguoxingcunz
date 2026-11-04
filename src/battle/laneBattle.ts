@@ -18,13 +18,17 @@ export function makePath(pts: LanePt[]): LanePath {
 
 /** 战场矩形里的一条来回弯的路：起点是我方兵营，终点是敌营 */
 export function buildLanePath(x: number, y: number, w: number, h: number): LanePath {
+  // 我军营在起点、敌营在终点。左右折返比初版密，贴合标注的红线，路程大约长一半。
   return makePath([
     { x: x + w * 0.50, y: y + h * 0.88 },
-    { x: x + w * 0.16, y: y + h * 0.76 },
-    { x: x + w * 0.84, y: y + h * 0.61 },
-    { x: x + w * 0.14, y: y + h * 0.45 },
-    { x: x + w * 0.83, y: y + h * 0.30 },
-    { x: x + w * 0.24, y: y + h * 0.16 },
+    { x: x + w * 0.86, y: y + h * 0.79 },
+    { x: x + w * 0.12, y: y + h * 0.70 },
+    { x: x + w * 0.88, y: y + h * 0.61 },
+    { x: x + w * 0.10, y: y + h * 0.52 },
+    { x: x + w * 0.88, y: y + h * 0.43 },
+    { x: x + w * 0.12, y: y + h * 0.34 },
+    { x: x + w * 0.86, y: y + h * 0.25 },
+    { x: x + w * 0.16, y: y + h * 0.17 },
     { x: x + w * 0.52, y: y + h * 0.11 },
   ]);
 }
