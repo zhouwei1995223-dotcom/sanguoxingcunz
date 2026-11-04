@@ -30,8 +30,9 @@ import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
-import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { GAME_INFO, IS_H5, IS_XHS, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
+import { LaneScene, drawLaneModeTabs, drawLaneEntry, laneFlag } from './laneScene';
 
 /** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
 const SWEEP_K = 2;
@@ -66,6 +67,7 @@ export class HomeScene implements Scene {
     if (save.stats.runs >= 1) funnel('home_first');
     reportDailyLogin();
     flushSave(true);
+    if (IS_XHS && laneFlag('lane')) this.startLane();
   }
 
   private lastGuide = -1;
@@ -269,9 +271,11 @@ export class HomeScene implements Scene {
     drawSide(side, 18 * u, false);
     drawSide(sideR, ui.W - bs - 18 * u, true);
 
-    // 模式切换：征战 / 守城（章节卡上方两个页签）
+    // 模式切换：征战 / 守城。小红书另加「塔防」，微信仍是原来的两个页签。
     const mode = save.homeMode || 'chapter';
-    {
+    if (IS_XHS) {
+      drawLaneModeTabs(ui, mode, L, (m) => { save.homeMode = m; markDirty(); });
+    } else {
       const mw = 200 * u, mh = 58 * u, my = L.cy - mh - 8 * u;
       const today = new Date().toISOString().slice(0, 10);
       (['chapter', 'defense'] as const).forEach((m, i) => {
@@ -285,6 +289,14 @@ export class HomeScene implements Scene {
       });
     }
     if (mode === 'defense') { this.drawDefenseCard(ui, L); return; }
+    if (IS_XHS && mode === 'lane') {
+      drawLaneEntry(ui, L, {
+        start: () => this.startLane(),
+        story: (title, body) => game.openDialog(new TextDialog('塔防 · ' + title, body)),
+      });
+      this.startRect = [ui.W / 2 - 200 * u, L.by, 400 * u, L.bh];
+      return;
+    }
 
     // 章节卡（含难度切换）
     const ch = CHAPTERS[Math.min(CHAPTERS.length, save.selectedChapter) - 1];
@@ -414,6 +426,13 @@ export class HomeScene implements Scene {
     flushSave(true);
     playSfx('victory');
     game.openDialog(new SweepDialog(title, res));
+  }
+
+  /** 小红书塔防试玩：不扣体力、不写战绩 */
+  private startLane() {
+    if (!IS_XHS) return;
+    playSfx('boss');
+    game.setScene(new LaneScene(() => { playBgm('bgm_home'); game.setScene(new HomeScene()); }));
   }
 
   private startBattle(id: number, diff = 0) {
