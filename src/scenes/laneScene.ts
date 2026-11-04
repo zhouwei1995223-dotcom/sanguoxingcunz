@@ -189,9 +189,9 @@ export class LaneScene implements Scene {
     const g = ui.ctx;
     const b = this.battle;
     const u = ui.u;
-    g.fillStyle = '#3e6b34';
+    g.fillStyle = '#c4a36a';
     g.fillRect(0, 0, ui.W, ui.H);
-    g.fillStyle = '#4e7d3e';
+    g.fillStyle = '#d8bc86';
     for (let i = 0; i < 18; i++) {
       const px = ((i * 97) % Math.max(1, ui.W));
       const py = 80 * u + ((i * 53) % Math.max(1, ui.H - 200 * u));
@@ -272,7 +272,7 @@ export class LaneScene implements Scene {
     const u = ui.u;
     const b = this.battle;
     const g = ui.ctx;
-    g.fillStyle = enemy ? 'rgba(160,40,40,0.35)' : 'rgba(80,140,60,0.35)';
+    g.fillStyle = enemy ? 'rgba(160,40,40,0.35)' : 'rgba(120,80,30,0.28)';
     g.beginPath();
     g.ellipse(x, y + 6 * u, 46 * u, 18 * u, 0, 0, Math.PI * 2);
     g.fill();
@@ -285,7 +285,7 @@ export class LaneScene implements Scene {
 
   private drawUnit(ui: UI, unit: LaneUnit) {
     const u = ui.u;
-    const h = (unit.hero ? 124 : 104) * u * unit.scale;
+    const h = (unit.hero ? 124 : 68) * u * unit.scale;
     if (unit.grain) {
       ui.ctx.strokeStyle = '#e6c15a';
       ui.ctx.lineWidth = 3 * u;

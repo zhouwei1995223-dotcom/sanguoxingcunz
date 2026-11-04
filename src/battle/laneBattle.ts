@@ -247,7 +247,6 @@ export class LaneBattle {
     const c = this.hand[index];
     if (!c) return null;
     if (this.food < c.cost) return '粮草不足';
-    if (this.count('ally') >= LANE_CAP.ally) return '兵线已满';
     this.food -= c.cost;
     this.spawnFromCard(c);
     this.hand[index] = this.drawCard();
@@ -295,9 +294,10 @@ export class LaneBattle {
     this.moveSide('enemy', dt);
     for (const u of this.units) if (u.alive) this.place(u);
     for (const u of this.units) {
-      if (!u.alive || !u.skill || u.side !== 'ally' || u.skillCd > 0) continue;
+      if (!u.alive || !u.skill || u.skillCd > 0) continue;
       this.castSkill(u);
-      u.skillCd = Math.max(4.2, SKILL_CD - this.skillCdCut);
+      const cut = u.side === 'ally' ? this.skillCdCut : 0;
+      u.skillCd = Math.max(4.2, SKILL_CD - cut);
     }
     const actors = this.units.filter((u) => u.alive);
     for (const u of actors) if (u.alive) this.strike(u);
@@ -438,7 +438,7 @@ export class LaneBattle {
   }
 
   private director(dt: number) {
-    this.enemyBudget = Math.min(110, this.enemyBudget + (this.level.enemyRate + this.t * this.level.enemyRamp) * dt);
+    this.enemyBudget = Math.min(220, this.enemyBudget + (this.level.enemyRate + this.t * this.level.enemyRamp) * dt);
     this.enemyCd -= dt;
     if (this.enemyCd > 0 || this.count('enemy') >= LANE_CAP.enemy) return;
     const pool = this.enemyPool().filter((p) => p.cost <= this.enemyBudget);
@@ -450,17 +450,18 @@ export class LaneBattle {
     for (const p of pool) { r -= p.w; if (r <= 0) { pick = p; break; } }
     this.enemyBudget -= pick.cost;
     this.spawnEnemy(pick.id);
-    this.enemyCd = 0.95;
+    this.enemyCd = 0.42;
   }
 
   private enemyPool(): { id: string; w: number; cost: number }[] {
     const t = this.t;
-    const list = [{ id: 'e_spear', w: 10 }];
-    if (t > 18) list.push({ id: 'e_shield', w: 6 });
-    if (t > 32) list.push({ id: 'e_archer', w: 6 });
-    if (t > 52) list.push({ id: 'e_cav', w: 4 });
-    if (t > 78) list.push({ id: 'e_heavy', w: 3 });
-    return list.map((p) => ({ ...p, cost: LANE_UNIT_BY_ID[p.id].cost }));
+    const list: { id: string; w: number; cost: number }[] = [{ id: 'e_spear', w: 10, cost: LANE_UNIT_BY_ID.e_spear.cost }];
+    if (t > 10) list.push({ id: 'e_shield', w: 6, cost: LANE_UNIT_BY_ID.e_shield.cost });
+    if (t > 16) list.push({ id: 'e_archer', w: 6, cost: LANE_UNIT_BY_ID.e_archer.cost });
+    if (t > 6) list.push({ id: 'hero', w: 5, cost: LANE_UNIT_BY_ID.e_spear.cost });
+    if (t > 28) list.push({ id: 'e_cav', w: 4, cost: LANE_UNIT_BY_ID.e_cav.cost });
+    if (t > 48) list.push({ id: 'e_heavy', w: 3, cost: LANE_UNIT_BY_ID.e_heavy.cost });
+    return list;
   }
 
   private drawCard(force?: string): LaneCard {
@@ -536,6 +537,11 @@ export class LaneBattle {
   }
 
   private spawnEnemy(id: string) {
+    if (id === 'hero') {
+      const h = HEROES[Math.floor(this.rng() * HEROES.length)];
+      this.spawnEnemyHero(h);
+      return;
+    }
     const d = LANE_UNIT_BY_ID[id];
     if (!d) return;
     // 拖久了敌军越来越厚，中期还没推到敌营就会被顶回来
@@ -550,6 +556,26 @@ export class LaneBattle {
     u.s = 0.94 - (u.id % 4) * 0.004;
     this.place(u);
     this.units.push(u);
+  }
+
+  /** 敌营出武将：用武将表的基础攻击、生命和默认骑马造型，技能同一套 */
+  private spawnEnemyHero(h: HeroDef) {
+    const growHp = 1 + Math.min(1.15, this.t * 0.006);
+    const growAtk = 1 + Math.min(0.75, this.t * 0.0042);
+    const ranged = LANE_RANGED_HEROES.has(h.id);
+    const u = this.makeUnit({
+      side: 'enemy', kind: h.id, name: h.name, lv: 1,
+      hp: Math.max(40, Math.round(h.baseHp * 1.5 * this.level.enemyHpMul * growHp)),
+      atk: Math.max(8, Math.round(h.baseAtk * 1.22 * this.level.enemyAtkMul * growAtk)),
+      speed: h.moveSpeed * 0.8, range: ranged ? 172 : 64, interval: 0.78,
+      sprite: 'hero_' + h.id, frames: 4, scale: 1.05, grain: false, hero: true, color: h.color,
+      skill: LANE_SKILL_BY_HERO[h.id],
+    });
+    u.s = 0.93 - (u.id % 3) * 0.004;
+    u.skillCd = 0.45;
+    this.place(u);
+    this.units.push(u);
+    this.float(u.x, u.y - 36, h.name, h.color);
   }
 
   private makeUnit(p: {
@@ -571,7 +597,7 @@ export class LaneBattle {
   private castSkill(u: LaneUnit) {
     const sk = u.skill;
     if (!sk || !u.alive) return;
-    const atk = this.effAtk(u) * this.skillMul;
+    const atk = this.effAtk(u) * (u.side === 'ally' ? this.skillMul : 1);
     this.banner(`${u.name} · ${sk.name}`, u.color || '#fee761');
     this.pushEvent({ kind: 'skill', hero: true });
     this.ring(u.x, u.y, sk.kind === 'snipe' || sk.kind === 'volley' ? 18 : 34, u.color || '#fee761');
@@ -843,8 +869,6 @@ export function laneAiAction(b: LaneBattle, style: 'smart' | 'random' | 'idle', 
     });
     return { upgrade: best };
   }
-  const alliesNow = b.units.filter((u) => u.alive && u.side === 'ally').length;
-  if (alliesNow >= LANE_CAP.ally) return null;
   const afford: number[] = [];
   b.hand.forEach((c, i) => { if (c.cost <= b.food) afford.push(i); });
   if (!afford.length) return null;

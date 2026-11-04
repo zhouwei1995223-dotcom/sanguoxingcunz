@@ -24,7 +24,7 @@ export const LANE_LEVELS: LaneLevelDef[] = [
     id: 1, name: '长坂坡', subtitle: '兵线对冲',
     story: '曹军沿着长坂坡的小路压下来。点下手牌派出枪兵、弓手和武将，沿路对冲；粮卒留在营前产粮，击败敌军也会掉粮草。推掉坡顶的敌营就赢，自家兵营被攻破就输。这一关是试玩，没有奖励。',
     allyHp: 1620, enemyHp: 2400, startFood: 42, income: 3.6,
-    enemyBudget0: 16, enemyRate: 4.7, enemyRamp: 0.05, enemyHpMul: 1.08, enemyAtkMul: 1.05,
+    enemyBudget0: 36, enemyRate: 9.2, enemyRamp: 0.07, enemyHpMul: 1.08, enemyAtkMul: 1.05,
   },
   // 预留：主页不开放。数值只是占位，方便以后加关。
   {
@@ -97,8 +97,8 @@ export const GRAIN_PER_SEC = 2.15;
 /** 同侧单位沿路径的最小间距 */
 export const LANE_GAP_PX = 15;
 
-/** 场上人数上限 */
-export const LANE_CAP = { ally: 14, enemy: 18 };
+/** 敌军人数上限。己方出兵不设上限。 */
+export const LANE_CAP = { enemy: 42 };
 
 export interface LaneSkillDef {
   hero: string;
