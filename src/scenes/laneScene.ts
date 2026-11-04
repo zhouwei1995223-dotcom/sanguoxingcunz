@@ -199,13 +199,15 @@ export class LaneScene implements Scene {
     }
     const pts = b.path.pts;
     const road = Math.max(36, 108 * u);
-    g.lineJoin = 'round';
-    g.lineCap = 'round';
-    g.strokeStyle = '#5a3a28';
-    g.lineWidth = road + 10 * u;
+    g.save();
+    g.lineJoin = 'miter';
+    g.miterLimit = 2;
+    g.lineCap = 'butt';
     g.beginPath();
     g.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.strokeStyle = '#5a3a28';
+    g.lineWidth = road + 10 * u;
     g.stroke();
     g.strokeStyle = '#a56b3c';
     g.lineWidth = road;
@@ -213,6 +215,7 @@ export class LaneScene implements Scene {
     g.strokeStyle = '#c48a55';
     g.lineWidth = Math.max(4, road * 0.28);
     g.stroke();
+    g.restore();
     this.drawDecor(ui);
     this.drawCamp(ui, pts[0].x, pts[0].y, false);
     this.drawCamp(ui, pts[pts.length - 1].x, pts[pts.length - 1].y, true);

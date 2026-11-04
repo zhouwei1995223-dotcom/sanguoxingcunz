@@ -18,18 +18,20 @@ export function makePath(pts: LanePt[]): LanePath {
 
 /** 战场矩形里的一条来回弯的路：起点是我方兵营，终点是敌营 */
 export function buildLanePath(x: number, y: number, w: number, h: number): LanePath {
-  // 我军营在起点、敌营在终点。左右折返比初版密，贴合标注的红线，路程大约长一半。
+  // 我军营在起点、敌营在终点。只走横竖直线，拐角 90°，贴合标注的白线。相邻点必须共用 x 或 y。
+  const L = 0.12;
+  const R = 0.88;
   return makePath([
-    { x: x + w * 0.50, y: y + h * 0.88 },
-    { x: x + w * 0.86, y: y + h * 0.79 },
-    { x: x + w * 0.12, y: y + h * 0.70 },
-    { x: x + w * 0.88, y: y + h * 0.61 },
-    { x: x + w * 0.10, y: y + h * 0.52 },
-    { x: x + w * 0.88, y: y + h * 0.43 },
-    { x: x + w * 0.12, y: y + h * 0.34 },
-    { x: x + w * 0.86, y: y + h * 0.25 },
-    { x: x + w * 0.16, y: y + h * 0.17 },
-    { x: x + w * 0.52, y: y + h * 0.11 },
+    { x: x + w * 0.50, y: y + h * 0.86 },
+    { x: x + w * L, y: y + h * 0.86 },
+    { x: x + w * L, y: y + h * 0.68 },
+    { x: x + w * R, y: y + h * 0.68 },
+    { x: x + w * R, y: y + h * 0.48 },
+    { x: x + w * L, y: y + h * 0.48 },
+    { x: x + w * L, y: y + h * 0.28 },
+    { x: x + w * R, y: y + h * 0.28 },
+    { x: x + w * R, y: y + h * 0.12 },
+    { x: x + w * 0.50, y: y + h * 0.12 },
   ]);
 }
 
