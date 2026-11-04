@@ -241,7 +241,7 @@ export class LaneBattle {
     }
   }
 
-  /** 点第 i 张手牌。成功返回 null，否则是给玩家看的短句 */
+  /** 点第 i 张手牌。成功返回 null，否则是给玩家看的短句。己方没有人数上限，粮草够就一直能出。 */
   play(index: number): string | null {
     if (this.result || this.pending) return null;
     const c = this.hand[index];
@@ -877,7 +877,6 @@ export function laneAiAction(b: LaneBattle, style: 'smart' | 'random' | 'idle', 
     return { play: afford[Math.floor(rng() * afford.length)] };
   }
   const grains = b.grainCount();
-  const allies = b.units.filter((u) => u.alive && u.side === 'ally').length;
   let best = -1;
   let bestScore = -1e9;
   for (const i of afford) {
@@ -886,7 +885,6 @@ export function laneAiAction(b: LaneBattle, style: 'smart' | 'random' | 'idle', 
     let score = (b.cardAtk(c) * 1.3 + b.cardHp(c) * 0.15) / c.cost;
     if (c.grain) score = grains === 0 ? 8 : grains === 1 ? 3.2 : -1;
     if (c.kind === 'hero') score += 1.4;
-    if (allies >= 12 && !c.grain) score -= 2;
     if (score > bestScore) { bestScore = score; best = i; }
   }
   if (best < 0) return null;
