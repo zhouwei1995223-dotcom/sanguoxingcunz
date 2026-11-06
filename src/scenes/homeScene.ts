@@ -699,7 +699,7 @@ export class HomeScene implements Scene {
     const canSweep = unlocked && power >= (need ?? legacyChapterPower(ch, diff)) * SWEEP_K;
     if (canSweep) {
       if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
-      const sweepLabel = IS_WEB ? (chapterStars(d, ch.id) === THREE_STARS ? '仅领材料' : '三星领元宝') : '免挑战';
+      const sweepLabel = IS_WEB ? (chapterStars(d, ch.id) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
       if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) {
         this.sweep(() => settleRun(ch, diff, true, IS_WEB ? null : ch.duration, 150, 1500, 2, 2, THREE_STARS), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
       }
@@ -794,7 +794,7 @@ export class HomeScene implements Scene {
     const bw = 400 * u, bh = L.bh, by = L.by;
     if (open && power >= ch.power * SWEEP_K) {
       if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
-      const sweepLabel = IS_WEB ? (defenseStars(lv) === THREE_STARS ? '仅领材料' : '三星领元宝') : '免挑战';
+      const sweepLabel = IS_WEB ? (defenseStars(lv) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
       if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) this.sweep(() => settleDefense(lv, true, IS_WEB ? null : ch.duration, 120, 1200, 2, 1, 12, IS_WEB ? THREE_STARS : undefined), `守城 · ${ch.name}`, 'defense', lv, 0);
     } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
@@ -1183,23 +1183,26 @@ export class HomeScene implements Scene {
         ui.text('另送装备：' + qs.map((q) => QUALITY_NAMES[q]).join('/'), 270 * u, y + 74 * u, 20, '#d9c6a0', 'left');
         if (c.pity) ui.text(`再开${c.pity - save.goldChestCount}次必得武将`, 270 * u, y + 106 * u, 20, '#dc9be9', 'left');
       } else ui.text('可能获得：' + qs.map((q) => QUALITY_NAMES[q]).join('/') + '装备、武将碎片', 270 * u, y + 56 * u, 20, '#d9c6a0', 'left');
-      const used = save.daily.chestAd[c.id] || 0;
+      const claims = save.daily.chestAd;
+      const used = claims[c.id] || 0;
+      const freeClaims = c.freeDaily ?? 0;
+      const bonus = freeClaims > 0 && used >= freeClaims && used < c.adDaily
+        ? CHEST_AD_BONUS[Math.min(used - freeClaims, CHEST_AD_BONUS.length - 1)] : 0;
       const bw = 200 * u;
       const buttonH = (IS_WEB ? 74 : 110) * u;
-      if (used < (c.freeDaily || 0)) {
+      if (used < freeClaims) {
         // 每天第一次不用看广告
         if (ui.button('chest_free_' + c.id, 270 * u, y + 140 * u, bw, buttonH, '免费', C.btnGreen, { sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
-          save.daily.chestAd[c.id] = used + 1;
+          claims[c.id] = used + 1;
           markDirty();
           this.openChestNow(c);
         }
-      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, buttonH, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}${c.freeDaily && used < c.adDaily ? ` 送${CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)]}元宝` : ''}`, size: 28 })) {
+      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, buttonH, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}${bonus ? ` 送${bonus}元宝` : ''}`, size: 28 })) {
         getPlatform().showRewardedAd('chest_' + c.id).then((ok) => {
-          if (!ok) return;
-          save.daily.chestAd[c.id] = used + 1;
+          // 按开始观看时的日期计次，跨午夜完成的广告不会占用新一天的名额。
+          if (!ok || (claims[c.id] || 0) !== used) return;
+          claims[c.id] = used + 1;
           progressTask('ad', 1);
-          // 1.0.4：军资箱看广告开箱额外送元宝，一次比一次多
-          const bonus = c.freeDaily ? CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)] || 0 : 0;
           if (bonus) { save.yuanbao += bonus; ui.toast(`额外获得元宝×${bonus}`); }
           this.openChestNow(c);
         });
