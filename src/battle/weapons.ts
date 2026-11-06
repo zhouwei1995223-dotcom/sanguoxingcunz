@@ -1,4 +1,4 @@
-import { WEAPONS, WeaponLevel } from '../data/skills';
+import { WEAPONS, WeaponId, WeaponLevel } from '../data/skills';
 import { rand, TAU } from '../core/math';
 import type { Battle } from './battle';
 import { Enemy, WeaponState, newProjectile } from './entities';
@@ -85,7 +85,7 @@ function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       if (proj < -e.r || proj > len + e.r) continue;
       const perp = Math.abs(ex * -dy + ey * dx);
       if (perp > width / 2 + e.r) continue;
-      b.damage(e, dmg, dx, dy, L.knock || 0);
+      b.damage(e, dmg, dx, dy, L.knock || 0, { source: w.id });
       if (hits++ < 8) b.fx.push({ kind: 'spark', x: e.x, y: e.y - 5 * e.scale, t: 0, dur: 0.18 });
     }
     // 可破坏物：沿枪身取样
@@ -122,7 +122,7 @@ function sword(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       w.hits.set(e.uid, now + 0.45);
       const dx = e.x - p.x, dy = e.y - p.y;
       const d = Math.hypot(dx, dy) || 1;
-      b.damage(e, dmg, dx / d, dy / d, L.knock || 0);
+      b.damage(e, dmg, dx / d, dy / d, L.knock || 0, { source: w.id });
     }
     b.hitBreakables(sx, sy, hitR);
   }
@@ -141,7 +141,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     // 辕门射戟：一支巨箭贯穿一线
     const t = b.nearestEnemy(105);
     const a = t ? Math.atan2(t.y - 4 * t.scale - oy, t.x - ox) : Math.atan2(b.player.dirY, b.player.dirX);
-    const pr = newProjectile('bolt');
+    const pr = newProjectile('bolt', w.id);
     pr.x = ox; pr.y = oy;
     pr.vx = Math.cos(a) * (L.speed || 380); pr.vy = Math.sin(a) * (L.speed || 380);
     pr.rot = a; pr.dmg = dmg; pr.pierce = 9999; pr.knock = 60; pr.r = 9; pr.life = 1.4;
@@ -156,7 +156,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     const base = t ? Math.atan2(t.y - 4 * t.scale - oy, t.x - ox) : Math.atan2(b.player.dirY, b.player.dirX);
     for (let i = 0; i < L.count; i++) {
       const a = base + (i - (L.count - 1) / 2) * 0.11;
-      const pr = newProjectile('bolt');
+      const pr = newProjectile('bolt', w.id);
       pr.x = ox; pr.y = oy;
       pr.vx = Math.cos(a) * (L.speed || 320); pr.vy = Math.sin(a) * (L.speed || 320);
       pr.rot = a; pr.dmg = dmg; pr.pierce = L.pierce || 8; pr.knock = 10; pr.r = 3; pr.life = 1.4;
@@ -174,7 +174,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     for (let i = 0; i < L.count; i++) {
       const t = cands[i % cands.length];
       const a = Math.atan2(t.y - 4 * t.scale - oy, t.x - ox) + (i >= cands.length ? (i % 2 ? 0.1 : -0.1) : 0);
-      const pr = newProjectile('bolt');
+      const pr = newProjectile('bolt', w.id);
       pr.x = ox; pr.y = oy;
       pr.vx = Math.cos(a) * (L.speed || 400); pr.vy = Math.sin(a) * (L.speed || 400);
       pr.rot = a; pr.dmg = dmg; pr.pierce = L.pierce || 6; pr.knock = 20; pr.r = 4; pr.life = 1.4;
@@ -200,7 +200,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   targets.forEach((t, i) => {
     let a = Math.atan2(t.y - 4 * t.scale - oy, t.x - ox);
     if (i >= 1 && t === targets[0]) a += (i % 2 ? 1 : -1) * 0.12 * Math.ceil(i / 2);
-    const pr = newProjectile('bolt');
+    const pr = newProjectile('bolt', w.id);
     pr.x = ox; pr.y = oy;
     const sp = L.speed || 230;
     pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
@@ -226,7 +226,7 @@ function horse(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const dmg = L.dmg * b.base.atk;
   const sp = L.speed || 230;
   for (let i = 0; i < L.count; i++) {
-    const pr = newProjectile('horse');
+    const pr = newProjectile('horse', w.id);
     let dirX = i % 2 === 0 ? 1 : -1, dirY = 0;
     if (w.evo && i >= 4) {
       // 进化后增加斜向冲锋
@@ -261,7 +261,7 @@ function fire(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     const a = rand(TAU);
     const tx = t ? t.x + rand(-6, 6) : p.x + Math.cos(a) * rand(30, 80);
     const ty = t ? t.y + rand(-6, 6) : p.y + Math.sin(a) * rand(30, 80);
-    const pr = newProjectile('pot');
+    const pr = newProjectile('pot', w.id);
     pr.x = p.x; pr.y = p.y - 10;
     pr.tx = tx; pr.ty = ty;
     pr.dur = 0.45 + i * 0.06;
@@ -292,13 +292,13 @@ function aura(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     const d = Math.hypot(dx, dy);
     if (d > R + e.r) continue;
     if (L.slow) { e.slow = Math.max(e.slow, L.slow); e.slowT = 0.6; }
-    b.damage(e, dmg, dx / (d || 1), dy / (d || 1), L.knock || 0, { noCrit: true });
+    b.damage(e, dmg, dx / (d || 1), dy / (d || 1), L.knock || 0, { noCrit: true, source: w.id });
   }
   b.hitBreakables(p.x, p.y, R * 0.8);
 }
 
 /** 扇形 / 圆形范围内伤害，返回命中数 */
-function sweep(b: Battle, cx: number, cy: number, R: number, dir: number, arc: number, dmg: number, knock: number, stun = 0): number {
+function sweep(b: Battle, source: WeaponId, cx: number, cy: number, R: number, dir: number, arc: number, dmg: number, knock: number, stun = 0): number {
   let hits = 0;
   b.grid.query(cx, cy, R + 16, near);
   for (const e of near) {
@@ -312,7 +312,7 @@ function sweep(b: Battle, cx: number, cy: number, R: number, dir: number, arc: n
       while (da < -Math.PI) da += TAU;
       if (Math.abs(da) > arc + e.r / d) continue;
     }
-    b.damage(e, dmg, dx / d, dy / d, knock);
+    b.damage(e, dmg, dx / d, dy / d, knock, { source });
     if (stun) { e.slow = 1; e.slowT = Math.max(e.slowT, e.boss ? stun * 0.3 : stun); }
     if (hits++ < 8) b.fx.push({ kind: 'spark', x: e.x, y: e.y - 5 * e.scale, t: 0, dur: 0.18 });
   }
@@ -331,7 +331,7 @@ function hook(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   for (const e of targets.slice(0, L.count)) {
     const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
     b.fx.push({ kind: 'tether', x: p.x, y: p.y - 8, a: Math.atan2(dy, dx), len: d, t: 0, dur: 0.24, color: w.evo ? '#fee761' : '#c0cbdc' });
-    if (!b.damage(e, L.dmg * b.base.atk, -dx / d, -dy / d, L.knock)) {
+    if (!b.damage(e, L.dmg * b.base.atk, -dx / d, -dy / d, L.knock, { source: w.id })) {
       if (e.slow < 1) {
         e.slow = Math.max(e.slow, L.slow! * (e.boss ? 0.5 : 1));
         e.slowT = Math.max(e.slowT, L.duration! * b.durMul);
@@ -347,7 +347,7 @@ function warshield(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t = L.cd * b.cdMul;
   const p = b.player, y = p.y - 8, r = L.area * b.areaMul;
   const a = Math.atan2(p.dirY, p.dirX), arc = L.arc!;
-  sweep(b, p.x, y, r, a, arc, L.dmg * b.base.atk, L.knock!);
+  sweep(b, w.id, p.x, y, r, a, arc, L.dmg * b.base.atk, L.knock!);
   let blocked = 0;
   for (let i = b.shots.length - 1; i >= 0 && blocked < L.count; i--) {
     const shot = b.shots[i], dx = shot.x - p.x, dy = shot.y - y;
@@ -374,7 +374,7 @@ function blade(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   let hits = 0;
   for (let i = 0; i < L.count; i++) {
     const a = dir + i * Math.PI;
-    hits += sweep(b, p.x, p.y - 8, R, a, arc, L.dmg * b.base.atk, L.knock || 80);
+    hits += sweep(b, w.id, p.x, p.y - 8, R, a, arc, L.dmg * b.base.atk, L.knock || 80);
     b.fx.push({ kind: 'slash', x: p.x, y: p.y - 8, t: 0, dur: 0.25, a, r: R, w: arc, color: w.evo ? '#fee761' : '#63c74d' });
   }
   if (hits >= 3) b.addHitStop(0.04);
@@ -389,7 +389,7 @@ function snake(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const p = b.player;
   const R = L.area * b.areaMul;
   w.angle += 2.1;
-  const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 70, L.stun || 0);
+  const hits = sweep(b, w.id, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 70, L.stun || 0);
   b.fx.push({ kind: 'slash', x: p.x, y: p.y - 6, t: 0, dur: 0.28, a: w.angle, r: R, w: Math.PI, color: w.evo ? '#fee761' : '#ff8a80' });
   if (w.evo) b.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.35, r: R * 1.4, color: '#ffffff' });
   if (hits >= 3) b.addHitStop(0.04);
@@ -406,7 +406,7 @@ function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const base = t ? Math.atan2(t.y - (p.y - 10), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   for (let i = 0; i < L.count; i++) {
     const a = w.evo ? base + (i / L.count) * TAU : base + (i - (L.count - 1) / 2) * 0.35;
-    const pr = newProjectile('wind');
+    const pr = newProjectile('wind', w.id);
     pr.x = p.x; pr.y = p.y - 10;
     const sp = L.speed || 160;
     pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
@@ -438,7 +438,7 @@ function halberd(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (w.burst > 0) return;
   w.burst = L.tick || 0.2;
   const R = L.area * b.areaMul;
-  const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 40);
+  const hits = sweep(b, w.id, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 40);
   b.hooks.sfx('thrust');
 }
 
@@ -455,7 +455,7 @@ function knife(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const range = L.area * Math.sqrt(b.areaMul);
   for (let i = 0; i < L.count; i++) {
     const a = w.evo ? base + (i / L.count) * TAU : base + (i - (L.count - 1) / 2) * 0.32;
-    const pr = newProjectile('knife');
+    const pr = newProjectile('knife', w.id);
     pr.x = p.x; pr.y = p.y - 8;
     pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
     pr.dmg = L.dmg * b.base.atk;
@@ -487,7 +487,7 @@ function thunder(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     for (let c = 0; c <= (L.pierce || 3) && cur; c++) {
       hit.add(cur.uid);
       pts.push(cur.x, cur.y - 6 * cur.scale);
-      b.damage(cur, dmg, 0, 0, 0);
+      b.damage(cur, dmg, 0, 0, 0, { source: w.id });
       if (L.stun && !cur.dead) { cur.slow = 1; cur.slowT = Math.max(cur.slowT, cur.boss ? L.stun * 0.3 : L.stun); }
       b.grid.query(cur.x, cur.y, jump, near);
       let next: Enemy | null = null, bd = jump * jump;
@@ -512,7 +512,7 @@ function rock(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   for (let i = 0; i < L.count; i++) {
     const t = b.randomVisibleEnemy();
     const a = rand(TAU);
-    const pr = newProjectile('rock');
+    const pr = newProjectile('rock', w.id);
     pr.tx = t ? t.x + rand(-8, 8) : p.x + Math.cos(a) * rand(30, 90);
     pr.ty = t ? t.y + rand(-6, 6) : p.y + Math.sin(a) * rand(30, 90);
     pr.x = pr.tx; pr.y = pr.ty;
@@ -539,7 +539,7 @@ function catapult(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   for (let i = 0; i < L.count; i++) {
     const t = vis.length ? vis[Math.floor(Math.random() * Math.min(vis.length, 12))] : null;
     const a = rand(TAU);
-    const pr = newProjectile('boulder');
+    const pr = newProjectile('boulder', w.id);
     pr.x = p.x; pr.y = p.y - 10;
     pr.tx = t ? t.x : p.x + Math.cos(a) * 90;
     pr.ty = t ? t.y : p.y + Math.sin(a) * 90;
@@ -566,14 +566,14 @@ function drum(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     w.burst--;
     w.active = 0.28;
     const R = L.area * b.areaMul;
-    const hits = sweep(b, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 120, L.stun || 0);
+    const hits = sweep(b, w.id, p.x, p.y - 6, R, 0, Math.PI, L.dmg * b.base.atk, L.knock || 120, L.stun || 0);
     b.fx.push({ kind: 'drum', x: p.x, y: p.y - 6, t: 0, dur: 0.4, r: R, color: w.link ? (b.hero.id === 'guanyu' ? '#63c74d' : '#ff8a80') : w.evo ? '#fee761' : '#feae34' });
     if (w.link && b.hero.id === 'guanyu') {
       // 温酒斩华雄：四道青龙刀气
       const R2 = R * 1.5;
       for (let i = 0; i < 4; i++) {
         const a = w.angle + (i * Math.PI) / 2;
-        sweep(b, p.x, p.y - 8, R2, a, 0.45, L.dmg * b.base.atk * 1.3, 90);
+        sweep(b, w.id, p.x, p.y - 8, R2, a, 0.45, L.dmg * b.base.atk * 1.3, 90);
         b.fx.push({ kind: 'slash', x: p.x, y: p.y - 8, t: 0, dur: 0.3, a, r: R2, w: 0.45, color: '#63c74d' });
       }
       w.angle += Math.PI / 4;
@@ -600,6 +600,7 @@ function caltrop(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const mine = b.pools.filter((f) => f.kind === 'caltrop');
   if (mine.length >= max) b.pools.splice(b.pools.indexOf(mine[0]), 1);
   b.pools.push({
+    source: w.id,
     kind: 'caltrop', x: p.x - p.dirX * 10 + rand(-4, 4), y: p.y - p.dirY * 8 + rand(-3, 3), r: L.area * b.areaMul,
     dmg: L.dmg * b.base.atk, tick: L.tick || 0.4, tickT: 0, life, maxLife: life, slow: L.slow || 0.3,
   });
@@ -621,7 +622,7 @@ function bow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     const t = cands[i % cands.length];
     let a = Math.atan2(t.y - 4 * t.scale - oy, t.x - ox);
     if (i >= cands.length) a += (i % 2 ? 1 : -1) * 0.1;
-    const pr = newProjectile('bolt');
+    const pr = newProjectile('bolt', w.id);
     pr.x = ox; pr.y = oy;
     const sp = L.speed || 360;
     pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
@@ -658,7 +659,7 @@ function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       const proj = ex * dx + ey * dy;
       if (proj < -e.r || proj > len + e.r) continue;
       if (Math.abs(ex * -dy + ey * dx) > width / 2 + e.r) continue;
-      b.damage(e, dmg, dx, dy, L.knock || 0);
+      b.damage(e, dmg, dx, dy, L.knock || 0, { source: w.id });
       if (hits++ < 8) b.fx.push({ kind: 'spark', x: e.x, y: e.y - 5 * e.scale, t: 0, dur: 0.18 });
     }
     for (let s = 0.3; s <= 1; s += 0.35) b.hitBreakables(ox + dx * len * s, oy + dy * len * s, width / 2);
@@ -688,7 +689,7 @@ function chakram(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
       pts.push(cur.x, cur.y - 6 * cur.scale);
       const dx = cur.x - pts[pts.length - 4], dy = cur.y - pts[pts.length - 3];
       const d = Math.hypot(dx, dy) || 1;
-      b.damage(cur, dmg, dx / d, dy / d, L.knock || 0);
+      b.damage(cur, dmg, dx / d, dy / d, L.knock || 0, { source: w.id });
       if (c < 4) b.fx.push({ kind: 'ring', x: cur.x, y: cur.y - 6 * cur.scale, t: 0, dur: 0.25, r: 10, color: w.evo ? '#f6757a' : '#fee761' });
       b.grid.query(cur.x, cur.y, jump, near);
       let next: Enemy | null = null, bd = jump * jump;
@@ -715,7 +716,7 @@ function ji(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   for (let i = 0; i < L.count; i++) {
     const t = vis.length ? vis[Math.floor(Math.random() * Math.min(vis.length, 10))] : null;
     const a = rand(TAU);
-    const pr = newProjectile('boulder');
+    const pr = newProjectile('boulder', w.id);
     pr.x = p.x; pr.y = p.y - 10;
     pr.tx = t ? t.x : p.x + Math.cos(a) * 70;
     pr.ty = t ? t.y : p.y + Math.sin(a) * 70;
@@ -743,7 +744,7 @@ function meteor(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   for (let i = 0; i < L.count; i++) {
     const t = b.randomVisibleEnemy();
     const a = rand(TAU);
-    const pr = newProjectile('rock');
+    const pr = newProjectile('rock', w.id);
     pr.tx = t ? t.x + rand(-6, 6) : p.x + Math.cos(a) * rand(30, 90);
     pr.ty = t ? t.y + rand(-5, 5) : p.y + Math.sin(a) * rand(30, 90);
     pr.x = pr.tx; pr.y = pr.ty;

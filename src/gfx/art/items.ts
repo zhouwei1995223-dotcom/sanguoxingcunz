@@ -118,6 +118,28 @@ export const cart = () => art([
   '.kkk..kkk.',
 ]);
 
+/** 护送事件用的双轮辎车。青色军旗与普通可打破的小车区分。 */
+export function supplyWagon(alternate: boolean): PixelImage {
+  const p = new PixelImage(35, 28);
+  p.rect(7, 1, 2, 16, 'U');
+  p.rect(9, 2, 12, 7, 't');
+  p.rect(9, 2, 10, 1, 'c'); p.rect(9, 7, 8, 1, 'G');
+  p.rect(10, 3, 2, 4, 'Y'); p.rect(12, 4, 3, 1, 'Y');
+  for (const [x, y] of [[10, 13], [18, 12], [25, 14]]) {
+    p.disc(x, y, 4, 'u'); p.rect(x - 3, y - 2, 6, 5, 'p');
+    p.line(x, y - 2, x + 1, y + 2, 'q');
+    p.rect(x - 1, y - 4, 2, 2, 'U');
+  }
+  p.rect(5, 17, 26, 5, 'U'); p.rect(5, 17, 26, 2, 'q');
+  p.rect(7, 16, 2, 6, 'u'); p.rect(27, 16, 2, 6, 'u');
+  p.line(26, 20, 34, 16, 'U'); p.line(25, 19, 34, 15, 'u');
+  for (const x of [10, 25]) {
+    p.disc(x, 23, 3, 'z'); p.ring(x, 23, 3, 'N'); p.set(x, 23, 'Y');
+    p.line(x - 1, alternate ? 22 : 23, x + 1, alternate ? 24 : 23, 'p');
+  }
+  return p.outline();
+}
+
 // —— 投射物 ——
 export const arrow = () => art(['UUUUUS', '.....'], false).outline('k');
 export const bolt = () => PixelImage.fromRows(['UUUUSw']);

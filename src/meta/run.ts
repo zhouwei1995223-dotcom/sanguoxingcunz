@@ -28,6 +28,11 @@ const MAX_DROP_QUALITY = DROP_WEIGHTS[0].length - 1;
 export const firstClearQuality = (chapter: number, difficulty: number) =>
   Math.min(MAX_DROP_QUALITY, FIRST_CLEAR_Q[chapter - 1] + difficulty);
 
+/** 每辆粮车的军饷与元宝。截获暂记在战斗内，通关时一起发放。 */
+export function convoyReward(ch: ChapterDef, diff: DifficultyDef) {
+  return { gold: Math.round(ch.goldBase * 0.18 * diff.reward), yuanbao: Math.round(2 * ch.id * diff.reward) };
+}
+
 export const ck = (d: number, c: number) => `${d}-${c}`;
 export const isCleared = (d: number, c: number) => !!save.clears[ck(d, c)];
 export const getBest = (d: number, c: number) => save.bests[ck(d, c)] || 0;
@@ -78,6 +83,7 @@ export interface RunResult {
   starBonus?: number;
   /** 长局实际打过的波次给基础军饷和玄铁带来的倍率。 */
   materialMultiplier?: number;
+  convoyLoot?: { count: number; gold: number; yuanbao: number };
 }
 
 /** 三星评价：通关 / 不复活 / 限时击败最终敌将 */
@@ -111,15 +117,23 @@ export function settleTutorial(win: boolean, coins: number, kills: number): RunR
 }
 
 /** t 为 null 表示免战碾压，发完整通关奖励，不计入手动坚守时长。 */
-export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0, skippedSeconds = 0): RunResult {
+export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0, skippedSeconds = 0, captured = 0): RunResult {
   const d = diff.id;
   const progress = t === null ? 1 : Math.min(1, t / ch.duration);
   // 前五分钟按标准发放。后五分钟的材料加成只累计实际战斗波次，不计跳过的波次或主将加时。
   const waveSeconds = Math.min(t ?? 0, ch.duration) - skippedSeconds;
   const materialMultiplier = ch.campaignMinutes === 10 ? 1 + 0.8 * Math.max(0, Math.min(1, (waveSeconds - 300) / 300)) : 1;
-  const gold = Math.round(ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1) * diff.reward * materialMultiplier + coins * 2);
+  let gold = Math.round(ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1) * diff.reward * materialMultiplier + coins * 2);
   const iron = Math.round((ch.id * 2 + progress * 6 * ch.id + (win ? 4 * ch.id : 0)) * diff.reward * materialMultiplier);
   let yuanbao = win ? Math.round(20 * ch.id * diff.reward) : 0;
+  let convoyLoot: RunResult['convoyLoot'];
+  if (IS_WEB && ch.campaignMinutes && t !== null && captured > 0) {
+    const count = Math.min(3, Math.floor(captured));
+    const unit = convoyReward(ch, diff);
+    convoyLoot = { count, gold: win ? unit.gold * count : 0, yuanbao: win ? unit.yuanbao * count : 0 };
+    gold += convoyLoot.gold;
+    yuanbao += convoyLoot.yuanbao;
+  }
   const items: EquipItem[] = [];
   for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(ch.id, diff.qShift)));
   let firstClear = false;
@@ -173,7 +187,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   if (bossKills) progressTask('boss', bossKills);
   getPlatform().submitScore('score', bestScore());
   markDirty();
-  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus, materialMultiplier };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus, materialMultiplier, convoyLoot };
 }
 
 /** 守城关卡是否开放：第 1 关直接开放，之后要守住前一关 */

@@ -30,6 +30,7 @@ export default async function ({ page, wait, shot }) {
   await page.evaluate(() => window.__game.closeAll());
   await wait(180);
   const legacy = (await presets()).slots[0];
+  assert.deepEqual((await presets()).coreWeapons, [null, null, null], '旧预设没有标记核心武器');
   assert.deepEqual(legacy, ['catapult', 'thunder', 'sword', 'fire', 'horse', 'spear', 'tiger', 'armor', 'book', 'flag', 'wine', 'horn']);
   await click('side_prepare');
   await page.waitForFunction(() => window.__game.dialogs.at(-1)?.constructor.name === 'PreparationDialog');
@@ -42,13 +43,17 @@ export default async function ({ page, wait, shot }) {
   await click('prep_passives');
   for (const id of ['tiger', 'armor', 'book', 'flag', 'horseshoe', 'lingzhi', 'pouch']) await click('prep_skill_' + id);
   await shot('prep_six_slots');
+  await click('prep_core'); await click('prep_core_knife');
+  await shot('prep_core');
   await click('prep_save');
   const custom = ['sword', 'horse', 'crossbow', 'fire', 'knife', 'spear', 'tiger', 'armor', 'book', 'flag', 'horseshoe', 'lingzhi'];
-  assert.deepEqual(await presets(), { active: 1, slots: [legacy, custom, []] });
+  const savedPlan = { active: 1, slots: [legacy, custom, []], coreWeapons: [null, 'knife', null] };
+  assert.deepEqual(await presets(), savedPlan);
+  assert.deepEqual(await page.evaluate(() => window.__saveMod.activePreparationFor('guanyu')), { skills: [], core: null }, '其他武将独立保存');
   await page.reload(); await gameReady(); await wait(300); await page.evaluate(() => window.__game.closeAll()); await wait(180);
   assert.deepEqual((await presets()).slots[1], custom);
   await click('ch_prev'); await click('ch_prev');
-  assert.ok(await page.evaluate(() => window.__game.ui.toasts.some(x => x.text.includes('预设有变动'))));
+  assert.ok(await page.evaluate(() => window.__game.ui.toasts.some(x => x.text.includes('暂缓核心武器'))));
   await click('side_prepare');
   assert.equal((await pool()).weapons.length, 6); assert.equal((await pool()).passives.length, 9);
   await wait(1800);
@@ -71,27 +76,62 @@ export default async function ({ page, wait, shot }) {
   assert.deepEqual(await page.evaluate(() => window.__game.dialogs.at(-1).presets.slots[1]), edited);
   assert.deepEqual((await presets()).slots[1], custom, '仅查看进化表不应保存预设');
   await click('prep_slot_2'); await click('prep_skill_aura'); await click('prep_close');
-  assert.deepEqual(await presets(), { active: 1, slots: [legacy, custom, []] }, '取消编辑不应修改预设');
+  assert.deepEqual(await presets(), savedPlan, '取消编辑不应修改预设');
   await click('start_battle'); await click('duration_5');
   await page.waitForFunction(() => window.__game.dialogs.at(-1)?.constructor.name === 'QiyuDialog');
   const run = await page.evaluate(() => {
     const s = window.__game.scene, b = s.battle;
     return { pool: b.skillPool, ids: s.preparedSkills, skipped: s.unavailablePreparedNames,
-      drops: b.availableLevelChoices().map(c => c.id) };
+      core: b.coreWeapon, drops: b.availableLevelChoices().map(c => c.id) };
   });
   assert.equal(run.pool.weapons.length, 6); assert.equal(run.pool.passives.length, 9);
   assert.deepEqual(run.ids, custom.filter(id => id !== 'knife'));
-  assert.deepEqual(run.skipped, ['回旋飞刀']); assert.ok(!run.drops.includes('knife'));
-  assert.deepEqual((await presets()).slots[1], custom, '换章只过滤本局，不覆盖原预设');
+  assert.deepEqual(run.skipped, ['核心武器回旋飞刀']); assert.ok(!run.drops.includes('knife'));
+  assert.equal(run.core, null);
+  assert.deepEqual(await presets(), savedPlan, '换章只过滤本局，不覆盖原预设');
   await page.reload(); await gameReady(); await wait(300); await page.evaluate(() => window.__game.closeAll()); await wait(180);
   await click('ch_next'); await click('ch_next'); await click('side_prepare');
   assert.ok((await pool()).weapons.includes('knife'));
   await click('prep_slot_0'); await click('prep_save');
-  assert.deepEqual(await presets(), { active: 0, slots: [legacy, custom, []] }, '恢复旧预设时其他槽位应保留');
+  assert.deepEqual(await presets(), { ...savedPlan, active: 0 }, '恢复旧预设时其他槽位应保留');
   await click('mode_defense'); await click('side_prepare');
   assert.deepEqual(await pool(), { weapons: ['spear', 'sword', 'horse'], passives: [] });
   assert.ok(!await page.evaluate(() => window.__game.ui.prevRegions.some(r => r.id === 'prep_passives')));
   await click('prep_evo');
   assert.equal((await evo()).view.defense, true);
   assert.deepEqual((await evo()).ids, ['spear', 'sword', 'horse']);
+  await click('evo_close'); await click('prep_slot_2'); await click('prep_core'); await click('prep_core_sword');
+  await click('prep_save'); await click('start_defense');
+  await page.waitForFunction(() => window.__game.dialogs.at(-1)?.constructor.name === 'QiyuDialog');
+  const defense = await page.evaluate(() => {
+    const scene = window.__game.scene, b = scene.battle;
+    b.weapon('spear').lv = 5;
+    b.addWeapon('sword'); b.weapon('sword').lv = 5;
+    const regular = b.rollChest(false), boss = b.rollChest(true);
+    return { core: b.coreWeapon, auto: scene.autoPick, regular, boss, status: b.coreProgressText() };
+  });
+  assert.equal(defense.core, 'sword'); assert.equal(defense.auto, false, '单独标记核心仍可手选');
+  for (const chest of [defense.regular, defense.boss]) {
+    assert.deepEqual(chest[0], { kind: 'evo', id: 'sword' });
+    assert.equal(chest.filter(c => c.kind === 'evo' && c.id === 'sword').length, 1);
+  }
+  assert.equal(defense.boss.length, 3); assert.match(defense.status, /下一箱进化/);
+  await page.reload(); await gameReady(); await wait(300); await page.evaluate(() => window.__game.closeAll()); await wait(180);
+  await click('mode_chapter'); await click('start_battle'); await click('duration_5');
+  await page.waitForFunction(() => window.__game.dialogs.at(-1)?.constructor.name === 'QiyuDialog');
+  const campaign = await page.evaluate(() => {
+    const b = window.__game.scene.battle;
+    b.weapon('spear').lv = 5; b.addWeapon('sword'); b.weapon('sword').lv = 5;
+    b.applyChoice({ kind: 'passive', id: 'tiger', lv: 1, isNew: true });
+    const missing = b.coreProgressText(), early = b.rollChest(false)[0];
+    b.applyChoice({ kind: 'passive', id: 'flag', lv: 1, isNew: true });
+    const ready = b.coreProgressText(), regular = b.rollChest(false), boss = b.rollChest(true);
+    b.applyChoice(regular[0]);
+    return { missing, early, ready, regular, boss, finished: b.coreProgressText(), later: b.rollChest(true)[0] };
+  });
+  assert.match(campaign.missing, /待取令旗/); assert.equal(campaign.early.id, 'spear');
+  assert.match(campaign.ready, /下一箱进化/);
+  assert.deepEqual(campaign.regular[0], { kind: 'evo', id: 'sword' });
+  assert.deepEqual(campaign.boss[0], campaign.regular[0]);
+  assert.match(campaign.finished, /已进化/); assert.equal(campaign.later.id, 'spear');
 }

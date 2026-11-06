@@ -6,6 +6,7 @@ import { C, UI } from '../ui/ui';
 import { dialogFrame } from '../ui/widgets';
 
 interface PreparationView extends Pick<Battle, 'hero' | 'skillPool'> {
+  coreWeapon: WeaponId | null;
   selected: readonly SkillId[];
   defense: boolean;
   preset: number;
@@ -19,7 +20,7 @@ export class EvoTableDialog implements Dialog {
   constructor(private source: Battle | PreparationView) {
     const { hero, skillPool } = source;
     this.ids = IS_WEB || 'selected' in source ? skillPool.weapons.slice() : weaponsForHero(hero.id, source.cleared);
-    const rank = (id: WeaponId) => WEAPONS[id].hero ? 0 : weaponLink(id, hero.id) ? 1 : 2;
+    const rank = (id: WeaponId) => id === source.coreWeapon ? -1 : WEAPONS[id].hero ? 0 : weaponLink(id, hero.id) ? 1 : 2;
     this.ids.sort((a, b) => rank(a) - rank(b));
     game.ui.resetScroll('evo_table');
   }
@@ -73,7 +74,7 @@ export class EvoTableDialog implements Dialog {
       const tx = x + 20 * u;
       ui.text(link ? link.name : d.evoName, tx, iy + 20 * u, 28, link ? '#fee761' : '#fff4d6', 'left');
       const missing = IS_WEB && !defense && !source.skillPool.passives.includes(d.evoPassive);
-      const trait = link ? '★' + source.hero.name + '专属联动' : d.hero ? '★专属武器' : '';
+      const trait = id === source.coreWeapon ? '★核心武器' : link ? '★' + source.hero.name + '专属联动' : d.hero ? '★专属武器' : '';
       const detail = !planning && missing ? '本章缺少' + PASSIVES[d.evoPassive].name
         : trait || (own?.evo ? '已进化' : own ? `已拥有 Lv.${own.lv}` : '');
       ui.text(detail, tx, iy + 60 * u, 20, link || d.hero ? '#feae34' : '#9be37a', 'left');

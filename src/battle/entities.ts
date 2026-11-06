@@ -34,6 +34,8 @@ export interface Enemy {
   touching: boolean;
   shootT: number;
   troopSkillAt?: number;
+  /** 护粮阵位偏移及警戒状态。 */
+  convoyGuard?: { ox: number; oy: number; engaged: boolean };
   dead: boolean;
   /** 冲锋类（骑兵冲阵）：固定方向移动 */
   fixedDir: boolean;
@@ -104,7 +106,10 @@ export interface PassiveState {
 
 export type ProjKind = 'bolt' | 'pot' | 'horse' | 'sword' | 'wind' | 'tornado' | 'knife' | 'rock' | 'boulder';
 
+export type DamageSource = WeaponId | 'ultimate' | 'strategy' | 'allies' | 'bomb' | 'other';
+
 export interface Projectile {
+  source: DamageSource;
   kind: ProjKind;
   x: number;
   y: number;
@@ -139,6 +144,7 @@ export interface Projectile {
 }
 
 export interface FirePool {
+  source: DamageSource;
   kind?: 'fire' | 'caltrop';
   x: number;
   y: number;
@@ -254,9 +260,9 @@ export function newEnemy(): Enemy {
   };
 }
 
-export function newProjectile(kind: ProjKind): Projectile {
+export function newProjectile(kind: ProjKind, source: DamageSource = 'other'): Projectile {
   return {
-    kind, x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 0, pierce: 1, knock: 0, life: 2, hitSet: new Set(),
+    kind, source, x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 0, pierce: 1, knock: 0, life: 2, hitSet: new Set(),
     tx: 0, ty: 0, t: 0, dur: 0, area: 0, burn: 0, tick: 0.3, slow: 0, sprite: 'bolt', rot: 0, left: false, back: false, stun: 0, scale: 1, second: false,
   };
 }

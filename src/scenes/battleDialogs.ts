@@ -3,6 +3,7 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries } from '../ui/widgets';
 import { EvoTableDialog } from './evoTableDialog';
+import { DamageReportDialog } from './damageReportDialog';
 import type { BattleScene } from './battleScene';
 import { choiceInfo } from './battleScene';
 import { Battle } from '../battle/battle';
@@ -236,13 +237,15 @@ function ownedSkillGroups(b: Battle) {
   return groups;
 }
 
-function drawOwnedSkills(ui: UI, groups: ReturnType<typeof ownedSkillGroups>, x: number, y: number, w: number) {
+function drawOwnedSkills(ui: UI, b: Battle, x: number, y: number, w: number) {
+  const groups = ownedSkillGroups(b);
   const u = ui.u, rowH = 42 * u;
   const rows = groups.reduce((n, group) => n + Math.max(1, Math.ceil(group.items.length / 3)), 0);
   const bodyH = Math.min(5, rows) * rowH;
   const h = 66 * u + bodyH;
   ui.panel(x, y, w, h, 'wood');
   ui.text('本局已获得', x + 20 * u, y + 29 * u, 26, C.gold, 'left', null);
+  if (b.coreWeapon) ui.text('★ ' + b.coreProgressText(), x + w - 20 * u, y + 29 * u, 20, '#86431b', 'right', null);
   const listY = y + 52 * u;
   const offset = ui.beginScroll('lv_owned', x, listY, w, bodyH, rows * rowH);
   let lineY = listY + offset + rowH / 2;
@@ -383,7 +386,7 @@ export class LevelUpDialog implements Dialog {
       }
     }
     y += ch + 20 * u;
-    if (IS_WEB) y += drawOwnedSkills(ui, ownedSkillGroups(b), (ui.W - panelW) / 2, y, panelW) + 10 * u;
+    if (IS_WEB) y += drawOwnedSkills(ui, b, (ui.W - panelW) / 2, y, panelW) + 10 * u;
     // 刷新 / 封禁
     const bh = 92 * u;
     y += 10 * u;
@@ -765,7 +768,8 @@ export class RushConfirmDialog implements Dialog {
     ui.text(`直接迎战「${b.nextBossName()}」`, ui.W / 2, y, 32, C.gold);
     y += 60 * u;
     ui.text('跳过的部分只补一半经验，锦囊照常发放', ui.W / 2, y, 22, C.textDim);
-    if (b.chapter.campaignMinutes === 10) ui.text('长战材料加成只累计实际打过的波次', ui.W / 2, y + 34 * u, 21, C.textDim);
+    if (b.chapter.campaignMinutes === 10) ui.text('跳过的波次放弃截粮，也不计长战材料加成', ui.W / 2, y + 34 * u, 21, C.textDim);
+    else if (b.chapter.campaignMinutes === 5) ui.text('路上的运粮车也将一并跳过', ui.W / 2, y + 34 * u, 21, C.textDim);
     y += 80 * u;
     const bw = (w - 140 * u) / 2;
     if (ui.button('rush_no', f.x + 50 * u, y, bw, 96 * u, '再等等', C.btnGray)) return false;
@@ -811,6 +815,7 @@ export class BossIntroDialog implements Dialog {
 
 export class ResultDialog implements Dialog {
   private res: RunResult;
+  private report?: DamageReportDialog;
   private weeklyBest = 0;
   private tierCount = 0;
   private video: string | null = null;
@@ -820,6 +825,7 @@ export class ResultDialog implements Dialog {
   t?: number;
   constructor(private scene: BattleScene, private win: boolean) {
     const b = scene.battle;
+    if (IS_WEB) this.report = new DamageReportDialog(b);
     if (scene.weekly) {
       this.res = settleWeeklyRun(b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
       const w = settleWeekly(b.kills);
@@ -839,7 +845,7 @@ export class ResultDialog implements Dialog {
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless
         ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
-        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec), b.skippedSeconds);
+        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec), b.skippedSeconds, b.convoysCaptured);
     }
     if (scene.videoPath) scene.videoPath.then((p) => { this.video = p; });
     if (save.guide === 0) save.guide = 1;
@@ -859,7 +865,7 @@ export class ResultDialog implements Dialog {
     else if (this.res.defense) ui.text(this.win ? (this.res.firstClear ? `首次守住${b.chapter.name}！${b.chapter.id < 10 ? '下一关已解锁' : ''}` : this.res.defense.dailyFirst ? '城池守住了！今日首胜碎片翻倍' : '城池守住了！') : `城池失守 · 守到第 ${this.res.defense.waves} 波${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 30, this.win ? C.gold : '#fff4d6');
     else if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
     else if (this.res.endless) ui.text(this.res.newBest ? `新纪录！坚持 ${fmtTime(b.t)}` : `最佳纪录 ${fmtTime(this.res.best || 0)}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
-    else if (b.bossTimedOut) ui.text(`斩将超时 · ${FINAL_BOSS_LIMIT_SEC}秒内未击败主将`, ui.W / 2, y, 30, '#ff8a80');
+    else if (b.bossTimedOut) ui.text(`斩将超时 · ${this.report?.bossStatus ?? FINAL_BOSS_LIMIT_SEC + '秒内未击败主将'}`, ui.W / 2, y, 30, '#ff8a80');
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');
     y += 60 * u;
     ui.text(this.scene.label, ui.W / 2, y, 26, this.scene.diff.id ? this.scene.diff.color : C.textDim);
@@ -885,9 +891,20 @@ export class ResultDialog implements Dialog {
     rows.forEach((r, i) => {
       const sx = f.x + 60 * u + (i % 2) * (w / 2 - 30 * u);
       const sy = y + Math.floor(i / 2) * 50 * u;
+      if (i === 3 && this.report) {
+        if (ui.button('res_dps', sx - 12 * u, sy - 23 * u, w / 2 - 69 * u, 48 * u,
+          `DPS ${fmtNum(Math.round(this.report.dps))} · 战报 ›`, C.btnBlue, { size: 22 })) this.report.open();
+        return;
+      }
       ui.text(r[0], sx, sy, 24, C.textDim, 'left');
       ui.text(r[1], sx + 140 * u, sy, 26, '#fff', 'left');
     });
+    if (this.res.convoyLoot) {
+      const loot = this.res.convoyLoot;
+      const detail = this.win ? `含截粮 ${loot.count} 车 · 军饷 +${loot.gold * (this.doubled ? 2 : 1)} · 元宝 +${loot.yuanbao}`
+        : `截获 ${loot.count} 车 · 本局未通关，截粮奖励未发放`;
+      ui.text(detail, ui.W / 2, y + 94 * u, 21, this.win ? C.gold : C.textDim);
+    }
     y += 120 * u;
     ui.ctx.fillStyle = C.borderDark;
     ui.ctx.fillRect(f.x + 40 * u, y, w - 80 * u, 3 * u);

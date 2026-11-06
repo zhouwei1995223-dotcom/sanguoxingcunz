@@ -2,7 +2,7 @@ import { getPlatform } from '../platform';
 import { dayKey } from '../core/math';
 import { DEBUG } from '../debug';
 import { NEW_PLAYER, STAMINA, SLOTS, Slot } from '../data/meta';
-import { SkillId, skillPoolFor, fitPreparation } from '../data/skills';
+import { SkillId, WeaponId, skillPoolFor, fitPreparation } from '../data/skills';
 import { HERO_BY_ID } from '../data/heroes';
 import { IS_WEB } from '../data/platformConfig';
 
@@ -199,14 +199,18 @@ export let save: SaveData = freshSave();
 let dirty = false;
 
 export const PRESET_COUNT = 3;
-export interface PreparationPresets { active: number; slots: SkillId[][] }
+export interface PreparationPresets { active: number; slots: SkillId[][]; coreWeapons?: (WeaponId | null)[] }
 
-export function preparationPresetsFor(hero: string): PreparationPresets {
+export function preparationPresetsFor(hero: string) {
   const saved = save.preparationPresets?.[hero];
   const active = saved?.active ?? 0;
   const pool = skillPoolFor(HERO_BY_ID[hero], Infinity, null, false);
   return {
     active: Number.isInteger(active) && active >= 0 && active < PRESET_COUNT ? active : 0,
+    coreWeapons: Array.from({ length: PRESET_COUNT }, (_, i) => {
+      const id = saved?.coreWeapons?.[i];
+      return id && pool.weapons.includes(id) ? id : null;
+    }),
     slots: Array.from({ length: PRESET_COUNT }, (_, i) => {
       const ids = saved?.slots?.[i] ?? (i === 0 ? save.preparedSkills?.[hero] : []);
       return fitPreparation(Array.isArray(ids) ? ids : [], pool, [HERO_BY_ID[hero].weapon]);
@@ -214,9 +218,13 @@ export function preparationPresetsFor(hero: string): PreparationPresets {
   };
 }
 
-export function preparedSkillsFor(hero: string): SkillId[] {
+export function activePreparationFor(hero: string) {
   const presets = preparationPresetsFor(hero);
-  return presets.slots[presets.active];
+  return { skills: presets.slots[presets.active], core: presets.coreWeapons[presets.active] };
+}
+
+export function preparedSkillsFor(hero: string): SkillId[] {
+  return activePreparationFor(hero).skills;
 }
 
 export function selectedPreparationStage() {

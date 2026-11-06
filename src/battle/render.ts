@@ -338,6 +338,15 @@ export class WorldRenderer {
     }
 
     // 敌人
+    const wagon = b.convoy;
+    if (wagon) {
+      const frame = Math.floor(b.t * 5) % 2;
+      const s = sprite('supply_wagon' + frame + (wagon.vx < 0 ? '_L' : ''));
+      this.list.push({ y: wagon.y, draw: () => {
+        this.blit(sprite('shadow_l'), wagon.x, wagon.y + 1);
+        this.blit(s, wagon.x, wagon.y);
+      } });
+    }
     for (const e of b.enemies) {
       if (e.dead) continue;
       if (e.x < cx - 40 || e.x > cx + this.w + 40 || e.y < cy - 20 || e.y > cy + this.h + 70) continue;
@@ -503,7 +512,7 @@ export class WorldRenderer {
     if (!this.crowded || e.boss || e.elite) this.blitScaled(sprite(sc > 1 || e.boss ? 'shadow_l' : e.r > 8 ? 'shadow_m' : 'shadow_s'), e.x, e.y + 1, sc > 1 && !e.boss ? 1 : sc > 1 ? 2 : 1);
     if (e.elite || e.boss) {
       g.globalAlpha = (e.enraged ? 0.45 : 0.25) + 0.15 * Math.sin(b.t * (e.enraged ? 14 : 6));
-      g.fillStyle = e.boss ? '#e43b44' : '#feae34';
+      g.fillStyle = e.convoyGuard && !e.convoyGuard.engaged ? '#42d6ba' : e.boss ? '#e43b44' : '#feae34';
       this.ellipse(e.x, e.y, e.r * (e.enraged ? 1.7 : 1.3), e.r * (e.enraged ? 0.8 : 0.6));
       g.globalAlpha = 1;
     }

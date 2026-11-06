@@ -3,9 +3,9 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
 import { HomeCamp } from './homeCamp';
-import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily, preparedSkillsFor, selectedPreparationStage } from '../meta/save';
+import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily, activePreparationFor, selectedPreparationStage } from '../meta/save';
 import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
-import { WEAPONS, PASSIVES, heroLinks, skillPoolFor, fitPreparation } from '../data/skills';
+import { WEAPONS, PASSIVES, heroLinks, skillPoolFor, fitPreparation, coreWeaponFits } from '../data/skills';
 import {
   heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, peakUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
@@ -386,10 +386,11 @@ export class HomeScene implements Scene {
       const { defense, chapter } = selectedPreparationStage();
       const key = `${save.hero}:${defense}:${chapter}`;
       if (this.lastPreparationStage && key !== this.lastPreparationStage) {
-        const hero = HERO_BY_ID[save.hero], plan = preparedSkillsFor(hero.id);
+        const hero = HERO_BY_ID[save.hero], plan = activePreparationFor(hero.id);
         const pool = skillPoolFor(hero, save.maxCleared, chapter, defense);
-        const skipped = plan.length - fitPreparation(plan, pool, [hero.weapon]).length;
-        if (skipped) ui.toast(`备战预设有变动，本关暂缓${skipped}项`);
+        const skipped = plan.skills.length - fitPreparation(plan.skills, pool, [hero.weapon]).length;
+        if (plan.core && !coreWeaponFits(plan.core, pool, defense)) ui.toast('本关暂缓核心武器：' + WEAPONS[plan.core].name);
+        else if (skipped) ui.toast(`备战预设有变动，本关暂缓${skipped}项`);
       }
       this.lastPreparationStage = key;
     }

@@ -6,18 +6,19 @@ import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
-  WEAPONS, WeaponId, PassiveId, SkillPool, skillPoolFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
+  WEAPONS, PASSIVES, WeaponId, PassiveId, SkillPool, skillPoolFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
 import { QiyuId, QIYUS } from '../data/qiyu';
 import { STRATS, STRAT_TIMES, STRAT_TIMES_ENDLESS, STRAT_TIMES_DEFENSE, STRAT_TIER_WEIGHTS, STRAT_HP_STEP, StratId, StratTier, STRAT_BY_ID } from '../data/strategies';
 import {
-  Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
+  DamageSource, Enemy, Player, WeaponState, PassiveState, Projectile, FirePool, EnemyShot, Pickup, Breakable, Fx, Warning, newEnemy, newProjectile,
 } from './entities';
 import { updateWeapons } from './weapons';
 import { skipHordesBefore, updateSpawner } from './spawner';
 import { updateBoss } from './boss';
+import { Convoy, convoySchedule, updateConvoy, escortGuard, withdrawConvoy, guardDefeated } from './convoy';
 import {
   DefenseState, updateDefense, reviveCity, enemyTarget, enemyContact, heroDown, shotHitsCity, shotHitsAlly, hurtCity, hurtAlly, orderChoices, readyLinks, applyOrder, applyLink, orderLv,
   buildChoices, applyBuild, heroCanSummon, summonHero, repairCity,
@@ -70,6 +71,7 @@ export interface BattleHooks {
   bossAppear(def: BossDef): void;
   /** 放大招（场景播放立绘切入） */
   ultCast?(): void;
+  convoyCaptured?(): void;
 }
 
 const noopHooks: BattleHooks = { sfx() {}, shake() {}, banner() {}, vibrate() {}, bossAppear() {} };
@@ -143,6 +145,9 @@ export class Battle {
   viewH: number;
 
   t = 0;
+  convoy: Convoy | null = null;
+  convoyTimes: number[];
+  convoysCaptured = 0;
   player: Player;
   enemies: Enemy[] = [];
   projs: Projectile[] = [];
@@ -178,6 +183,19 @@ export class Battle {
   /** 平衡统计：护盾 [打破次数, 狂暴次数]；敌将战总秒数 */
   statShield = [0, 0];
   statBossSec = 0;
+  /** 来源按基础武器归并；扣掉的敌方生命和护盾均计入有效伤害。 */
+  readonly damageBySource = new Map<DamageSource, { total: number; boss: number }>();
+
+  private recordDamage(source: DamageSource, enemy: Enemy, amount: number) {
+    if (!IS_WEB || amount <= 0 || this.won || this.dead) return;
+    let row = this.damageBySource.get(source);
+    if (!row) {
+      row = { total: 0, boss: 0 };
+      this.damageBySource.set(source, row);
+    }
+    row.total += amount;
+    if (enemy === this.finalBoss) row.boss += amount;
+  }
   /** 旧版征战的敌将血量系数输入；网页版征战按关卡定血量。 */
   powerRatio = 1;
   /** 当前这场敌将战打了多久（spawner 用：前 50 秒不刷小怪） */
@@ -300,6 +318,7 @@ export class Battle {
   /** 已通关章节数：决定技能池 */
   cleared = 99;
   readonly skillPool: SkillPool;
+  coreWeapon: WeaponId | null = null;
   /** 本局封禁的选项（kind:id） */
   banned = new Set<string>();
   banishes = 2;
@@ -313,6 +332,8 @@ export class Battle {
 
   constructor(chapter: ChapterDef, base: HeroStats, viewW: number, viewH: number) {
     this.chapter = chapter;
+    this.convoyTimes = IS_WEB && chapter.campaignMinutes && !chapter.defense && !chapter.endless && !chapter.tutorial
+      ? convoySchedule(chapter.duration) : [];
     this.stratTimes = chapter.defense ? STRAT_TIMES_DEFENSE : chapter.endless ? STRAT_TIMES_ENDLESS
       : chapter.campaignMinutes ? STRAT_TIMES.map(t => Math.round(t * chapter.duration / 360)) : STRAT_TIMES;
     this.base = base;
@@ -554,7 +575,7 @@ export class Battle {
         if (e.dead) continue;
         const dx = e.x - c.x, dy = e.y - c.y;
         const d = Math.hypot(dx, dy) || 1;
-        if (d < 30 + e.r) this.damage(e, atk * 1.8, dx / d, dy / d, 50, { noCrit: true });
+        if (d < 30 + e.r) this.damage(e, atk * 1.8, dx / d, dy / d, 50, { source: 'strategy', noCrit: true });
       }
       if (this.fx.length < 300) this.fx.push({ kind: 'explo', x: c.x, y: c.y + 6, t: 0, dur: 0.3 });
     }
@@ -572,7 +593,7 @@ export class Battle {
           if (n > bn) { bn = n; best = e; }
         }
         if (best) {
-          this.pools.push({ x: best.x, y: best.y, r: 50 * this.areaMul, dmg: atk * 0.9, tick: 0.4, tickT: 0, life: 5 * this.durMul, maxLife: 5 * this.durMul, slow: 0 });
+          this.pools.push({ source: 'strategy', x: best.x, y: best.y, r: 50 * this.areaMul, dmg: atk * 0.9, tick: 0.4, tickT: 0, life: 5 * this.durMul, maxLife: 5 * this.durMul, slow: 0 });
           this.fx.push({ kind: 'explo', x: best.x, y: best.y + 6, t: 0, dur: 0.4 });
           this.hooks.sfx('fire');
         }
@@ -588,7 +609,7 @@ export class Battle {
           if (e.dead) continue;
           const dx = e.x - p.x, dy = e.y - p.y;
           const d = Math.hypot(dx, dy) || 1;
-          if (d < R + e.r) this.damage(e, atk * 5, dx / d, dy / d, 160);
+          if (d < R + e.r) this.damage(e, atk * 5, dx / d, dy / d, 160, { source: 'strategy' });
         }
         this.fx.push({ kind: 'drum', x: p.x, y: p.y - 4, t: 0, dur: 0.45, r: R, color: '#c0cbdc' });
         this.hooks.shake(2);
@@ -604,7 +625,7 @@ export class Battle {
         for (const e of targets) {
           const delay = 0.25 + Math.random() * 0.35;
           if (shown++ < 70) this.fx.push({ kind: 'volley', x: e.x + rand(-4, 4), y: e.y - 4, t: -delay + 0.35, dur: 0.35 });
-          this.later(delay, () => { if (!e.dead) this.damage(e, atk * 7, 0, 1, 30, { force: true }); });
+          this.later(delay, () => { if (!e.dead) this.damage(e, atk * 7, 0, 1, 30, { source: 'strategy', force: true }); });
         }
         this.later(0.3, () => { this.hooks.shake(3); this.hooks.sfx('explode'); });
         this.hooks.sfx('shoot');
@@ -621,7 +642,7 @@ export class Battle {
           if (e.dead) continue;
           if ((e.x - p.x) ** 2 + ((e.y - p.y) * 1.25) ** 2 > (R + e.r) ** 2) continue;
           if (!e.boss) { e.slow = Math.max(e.slow, 0.5); e.slowT = Math.max(e.slowT, 0.6); }
-          this.damage(e, atk * 1.6, 0, 0, 0, { noCrit: true });
+          this.damage(e, atk * 1.6, 0, 0, 0, { source: 'strategy', noCrit: true });
         }
       }
     }
@@ -653,7 +674,7 @@ export class Battle {
         if (f.hit.has(e.uid) || f.hit.size >= 3) continue;
         f.hit.add(e.uid);
         const vl = Math.hypot(f.vx!, 1) || 1;
-        this.damage(e, atk * 1.4, f.vx! / vl, 0, 60, { noCrit: true, force: true });
+        this.damage(e, atk * 1.4, f.vx! / vl, 0, 60, { source: 'strategy', noCrit: true, force: true });
       }
     }
   }
@@ -672,6 +693,7 @@ export class Battle {
     if (this.ult) dt = rawDt * this.updateUlt(rawDt);
     if (bossTimeLeft !== null) dt = Math.min(dt, bossTimeLeft);
     this.t += dt;
+    if (this.convoy || this.convoyTimes.length) updateConvoy(this, dt);
     // 每周挑战 / 新手试炼：坚持到时间即胜利
     if ((this.chapter.endless || (!IS_WEB && this.chapter.tutorial)) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
       for (const e of this.enemies) if (!e.dead) { e.dead = true; this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
@@ -822,6 +844,8 @@ export class Battle {
     const rate = Math.max(this.expRate, this.expTotal / Math.max(30, this.t));
     const bonus = rate * (to - this.t) * 0.5;
     this.skippedSeconds += to - this.t;
+    withdrawConvoy(this);
+    this.convoyTimes = this.convoyTimes.filter(t => t > to);
     this.t = to;
     if (bonus > 0) this.gainExp(bonus);
     this.dominantT = 0;
@@ -1033,13 +1057,14 @@ export class Battle {
       e.atkCd = Math.max(0, e.atkCd - dt);
       if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
       const spd = e.speed * (1 - e.slow);
+      if (e.convoyGuard && escortGuard(this, e, spd, dt)) continue;
       // 守城：敌人的目标可能是城池或我方士兵
       const tgt = this.def ? enemyTarget(this, e) : null;
       let dx = (tgt ? tgt.x : p.x) - e.x, dy = (tgt ? tgt.y : p.y) - e.y;
       const d = Math.hypot(dx, dy) || 1;
       dx /= d; dy /= d;
 
-      if (IS_WEB && !e.boss && !e.fixedDir && (e.state === 'troopWindup' ||
+      if (IS_WEB && !e.convoyGuard && !e.boss && !e.fixedDir && (e.state === 'troopWindup' ||
           (!tgt?.city && !tgt?.path && this.startTroopSkill(e, dx, dy, d, !!tgt?.ally)))) continue;
       if (e.boss) {
         updateBoss(this, e, dt, dx, dy, d);
@@ -1165,11 +1190,13 @@ export class Battle {
     if (e.dead) return false;
     let v = Math.max(1, Math.round(dmg * rand(0.92, 1.08)));
     if (e.boss || e.elite) v = Math.round(v * 0.6);
+    const effective = Math.min(v, Math.max(0, e.hp) + e.shield);
     if (e.shield > 0) {
       const a = Math.min(e.shield, v);
       e.shield -= a; v -= a;
       if (e.shield <= 0) this.breakShield(e);
     }
+    this.recordDamage('allies', e, effective);
     e.hp -= v;
     e.flash = 0.06;
     if (this.showDamage && v > 0 && Math.random() < 0.25) this.addNum(e.x + rand(-4, 4), e.y - 10 * e.scale, v, 'g');
@@ -1182,7 +1209,7 @@ export class Battle {
   }
 
   /** 对敌人造成伤害，返回是否击杀 */
-  damage(e: Enemy, base: number, kx = 0, ky = 0, knock = 0, opts: { noCrit?: boolean; force?: boolean } = {}): boolean {
+  damage(e: Enemy, base: number, kx = 0, ky = 0, knock = 0, opts: { noCrit?: boolean; force?: boolean; source?: DamageSource } = {}): boolean {
     if (e.dead) return false;
     // 屏幕外的敌人打不到：敌人一定会先出现在玩家眼前（大招除外）
     if (!opts.force && !e.boss && !this.canHit(e)) return false;
@@ -1214,11 +1241,13 @@ export class Battle {
       dmg -= toHp - cut;
       toHp = cut;
     }
+    this.recordDamage(opts.source ?? 'other', e, dmg - toHp + Math.min(toHp, Math.max(0, e.hp)));
     e.hp -= toHp;
     if (broke) this.breakShield(e);
     // 敌将战没有小怪攒怒气：打敌将本身也涨怒气（打掉一整条血约 80 点）
     if (e.boss && !this.ult && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + (dmg / e.maxHp) * 80 * this.rageMul);
     e.hits++;
+    if (e.convoyGuard) e.convoyGuard.engaged = true;
     e.flash = 0.08;
     if (kx || ky) { e.hx = kx; e.hy = ky; }
     if (knock && !e.boss) {
@@ -1300,6 +1329,10 @@ export class Battle {
     this.hooks.sfx('kill');
     this.spawnCorpse(e);
     // 掉落
+    if (e.convoyGuard) {
+      guardDefeated(this, e);
+      return;
+    }
     if (e.boss) {
       this.bossKills++;
       this.equipDrops++;
@@ -1315,6 +1348,7 @@ export class Battle {
       if (e === this.finalBoss) {
         this.finalBossSec = this.t - e.born;
         this.finalBoss = null;
+        withdrawConvoy(this);
         // 清场
         for (const o of this.enemies) if (!o.dead && o !== e) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.3 }); }
         this.won = true;
@@ -1326,14 +1360,14 @@ export class Battle {
         if (IS_WEB && this.def) return;
         // 击败先锋敌将时震溃场上残余精英与小兵，避免敌将已死而精英仍在场上缠斗
         for (const o of this.enemies) {
-          if (!o.dead && o !== e && !o.boss) {
+          if (!o.dead && o !== e && !o.boss && !o.convoyGuard) {
             o.dead = true;
             this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.35 });
             if (o.elite) { this.dropPickup('chest', o.x, o.y, 1, false); this.dropGem(o.x, o.y, o.exp); }
           }
         }
       } else if (!this.chapter.endless) {
-        for (const o of this.enemies) if (!o.dead && o !== e && o.elite) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.35 }); }
+        for (const o of this.enemies) if (!o.dead && o !== e && o.elite && !o.convoyGuard) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.35 }); }
       }
       return;
     }
@@ -1395,10 +1429,10 @@ export class Battle {
             if (e.dead) continue;
             const dx = e.x - pr.tx, dy = e.y - pr.ty;
             const d = Math.hypot(dx, dy) || 1;
-            if (d < pr.area + e.r) this.damage(e, pr.dmg * 4, dx / d, dy / d, 40);
+            if (d < pr.area + e.r) this.damage(e, pr.dmg * 4, dx / d, dy / d, 40, { source: pr.source });
           }
           this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.35 });
-          this.pools.push({ x: pr.tx, y: pr.ty, r: pr.area, dmg: pr.dmg, tick: pr.tick, tickT: 0, life: pr.burn, maxLife: pr.burn, slow: pr.slow });
+          this.pools.push({ source: pr.source, x: pr.tx, y: pr.ty, r: pr.area, dmg: pr.dmg, tick: pr.tick, tickT: 0, life: pr.burn, maxLife: pr.burn, slow: pr.slow });
           this.hooks.sfx('fire');
           this.projs.splice(i, 1);
         }
@@ -1408,14 +1442,14 @@ export class Battle {
         pr.t += dt;
         if (pr.kind === 'boulder') { pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.rot += dt * 6; }
         if (pr.t >= pr.dur) {
-          this.impact(pr.tx, pr.ty, pr.area, pr.dmg, pr.knock, pr.stun);
+          this.impact(pr.tx, pr.ty, pr.area, pr.dmg, pr.knock, pr.stun, pr.source);
           if (pr.kind === 'boulder') {
             this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.4 });
             this.fx.push({ kind: 'ring', x: pr.tx, y: pr.ty, t: 0, dur: 0.35, r: pr.area * 1.2, color: '#feae34' });
             this.hooks.sfx('explode');
             if (pr.second) {
               // 霹雳炮：碎石二次爆裂
-              const sec = newProjectile('rock');
+              const sec = newProjectile('rock', pr.source);
               sec.tx = sec.x = pr.tx; sec.ty = sec.y = pr.ty;
               sec.dur = 0.3; sec.area = pr.area * 0.8; sec.dmg = pr.dmg * 0.5; sec.knock = pr.knock * 0.6; sec.life = 1; sec.scale = 0;
               this.projs.push(sec);
@@ -1426,7 +1460,7 @@ export class Battle {
             const n = pr.second ? 8 : 4, a0 = rand(TAU);
             for (let k = 0; k < n; k++) {
               const a = a0 + (k / n) * TAU;
-              const sh = newProjectile('bolt');
+              const sh = newProjectile('bolt', pr.source);
               sh.x = pr.tx; sh.y = pr.ty - 4;
               sh.vx = Math.cos(a) * 200; sh.vy = Math.sin(a) * 200;
               sh.rot = a; sh.dmg = pr.dmg * 0.4; sh.pierce = 2; sh.knock = 10; sh.r = 3; sh.life = 0.4;
@@ -1494,7 +1528,7 @@ export class Battle {
         if ((e.x - pr.x) ** 2 + (e.y - 4 * e.scale - pr.y) ** 2 > rr * rr) continue;
         pr.hitSet.add(e.uid);
         const vl = Math.hypot(pr.vx, pr.vy) || 1;
-        this.damage(e, pr.dmg, pr.vx / vl, pr.vy / vl, pr.knock);
+        this.damage(e, pr.dmg, pr.vx / vl, pr.vy / vl, pr.knock, { source: pr.source });
         if (pr.kind === 'bolt') this.fx.push({ kind: 'spark', x: pr.x, y: pr.y, t: 0, dur: 0.18 });
         pr.pierce--;
         if (pr.pierce <= 0) { this.projs.splice(i, 1); removed = true; break; }
@@ -1504,7 +1538,7 @@ export class Battle {
   }
 
   /** 落点范围伤害（礌石 / 巨石） */
-  private impact(x: number, y: number, R: number, dmg: number, knock: number, stun: number) {
+  private impact(x: number, y: number, R: number, dmg: number, knock: number, stun: number, source: DamageSource) {
     const near: Enemy[] = [];
     this.grid.query(x, y, R + 12, near);
     for (const e of near) {
@@ -1512,7 +1546,7 @@ export class Battle {
       const dx = e.x - x, dy = e.y - y;
       const d = Math.hypot(dx, dy) || 1;
       if (d > R + e.r || (!e.boss && !this.canHit(e))) continue;
-      this.damage(e, dmg, dx / d, dy / d, knock);
+      this.damage(e, dmg, dx / d, dy / d, knock, { source });
       if (stun && !e.dead) { e.slow = 1; e.slowT = Math.max(e.slowT, e.boss ? stun * 0.3 : stun); }
     }
     this.hitBreakables(x, y, R);
@@ -1537,7 +1571,7 @@ export class Battle {
       for (const e of near) {
         if (e.dead) continue;
         if ((e.x - pr.x) ** 2 + (e.y - pr.y) ** 2 > (pr.r + e.r) ** 2) continue;
-        this.damage(e, pr.dmg, 0, 0, 0, { noCrit: true, force: true });
+        this.damage(e, pr.dmg, 0, 0, 0, { source: pr.source, noCrit: true, force: true });
       }
       this.hitBreakables(pr.x, pr.y, pr.r);
     }
@@ -1557,7 +1591,7 @@ export class Battle {
           if (e.dead) continue;
           if ((e.x - f.x) ** 2 + ((e.y - f.y) * 1.4) ** 2 > (f.r + e.r) ** 2) continue;
           if (f.slow) { e.slow = Math.max(e.slow, f.slow); e.slowT = 0.5; }
-          this.damage(e, f.dmg, 0, 0, 0, { noCrit: true });
+          this.damage(e, f.dmg, 0, 0, 0, { source: f.source, noCrit: true });
         }
         this.hitBreakables(f.x, f.y, f.r);
       }
@@ -1590,7 +1624,7 @@ export class Battle {
     const a0 = rand(TAU);
     for (let i = 0; i < 8; i++) {
       const a = a0 + (i / 8) * TAU;
-      const pr = newProjectile('bolt');
+      const pr = newProjectile('bolt', 'strategy');
       pr.x = p.x; pr.y = p.y - 8;
       pr.vx = Math.cos(a) * 260; pr.vy = Math.sin(a) * 260;
       pr.rot = a; pr.dmg = this.base.atk * 2; pr.pierce = 2; pr.knock = 20; pr.r = 4; pr.life = 1.2;
@@ -1668,8 +1702,8 @@ export class Battle {
         for (const e of this.enemies) {
           if (e.dead) continue;
           if (Math.abs(e.x - p.x) < this.viewW / 2 + 10 && Math.abs(e.y - p.y) < this.viewH / 2 + 10) {
-            if (e.boss || e.elite) this.damage(e, this.base.atk * 8, 0, 0, 0);
-            else this.killEnemy(e);
+            if (e.boss || e.elite) this.damage(e, this.base.atk * 8, 0, 0, 0, { source: 'bomb' });
+            else { this.recordDamage('bomb', e, e.hp); this.killEnemy(e); }
           }
         }
         break;
@@ -1844,7 +1878,7 @@ export class Battle {
       if (proj < -e.r || proj > len + e.r) continue;
       if (Math.abs(ex * -dy + ey * dx) > width / 2 + e.r) continue;
       const side = ex * -dy + ey * dx >= 0 ? 1 : -1;
-      this.damage(e, dmg, dx * 0.6 - dy * side * 0.8, dy * 0.6 + dx * side * 0.8, 120, { force: true });
+      this.damage(e, dmg, dx * 0.6 - dy * side * 0.8, dy * 0.6 + dx * side * 0.8, 120, { source: 'ultimate', force: true });
     }
     this.fx.push({ kind: 'beam', x: u.x0, y: u.y0 - 8, t: 0, dur: 0.45, a: Math.atan2(dy, dx), len, w: width });
     // 白龙：沿冲刺路线留下一条蜿蜒的发光龙身
@@ -1870,7 +1904,7 @@ export class Battle {
           if (e.dead) continue;
           const dx = e.x - p.x, dy = e.y - p.y;
           const d = Math.hypot(dx, dy) || 1;
-          if (d < R) this.damage(e, this.base.atk * 10, dx / d, dy / d, 150, { force: true });
+          if (d < R) this.damage(e, this.base.atk * 10, dx / d, dy / d, 150, { source: 'ultimate', force: true });
         }
         this.shots.length = 0;
         this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: R, color: '#fee761' });
@@ -1932,7 +1966,7 @@ export class Battle {
             if (e.dead || ring.hit.has(e.uid)) continue;
             const dx = e.x - p.x, dy = e.y - p.y;
             const d = Math.hypot(dx, dy) || 1;
-            if (d <= ring.r + e.r) { ring.hit.add(e.uid); this.damage(e, atk * 9, dx / d, dy / d, 140, { force: true }); }
+            if (d <= ring.r + e.r) { ring.hit.add(e.uid); this.damage(e, atk * 9, dx / d, dy / d, 140, { source: 'ultimate', force: true }); }
           }
         }
         if (u.t >= u.dur) this.ultEnd(u);
@@ -1955,7 +1989,7 @@ export class Battle {
             if (e.dead) continue;
             const dx = e.x - p.x, dy = e.y - p.y;
             const d = Math.hypot(dx, dy) || 1;
-            if (d < R + e.r) this.damage(e, atk * 2.6, dx / d, dy / d, 90, { force: true });
+            if (d < R + e.r) this.damage(e, atk * 2.6, dx / d, dy / d, 90, { source: 'ultimate', force: true });
           }
           this.hitBreakables(p.x, p.y, R);
           this.hooks.sfx('thrust');
@@ -1978,7 +2012,7 @@ export class Battle {
             if (e.dead || !this.inView(e.x, e.y)) continue;
             if (shown++ < 50) this.fx.push({ kind: 'volley', x: e.x + rand(-4, 4), y: e.y - 4, t: 0, dur: 0.35 });
             if (shown < 14) this.fx.push({ kind: 'particle', x: e.x, y: e.y - 4, t: -0.3, dur: 0.6, vx: rand(-30, 30), vy: rand(-60, -20), color: '#fee761', r: 2.5, g: 120 });
-            this.damage(e, atk * 4, 0, 1, 30, { force: true });
+            this.damage(e, atk * 4, 0, 1, 30, { source: 'ultimate', force: true });
           }
           this.hooks.sfx('shoot');
         }
@@ -1989,7 +2023,7 @@ export class Battle {
           if (best) {
             const a = Math.atan2(best.y - p.y, best.x - p.x), len = Math.hypot(best.x - p.x, best.y - p.y);
             this.fx.push({ kind: 'beam', x: p.x, y: p.y - 8, t: 0, dur: 0.4, a, len, w: 14 });
-            this.damage(best, atk * (best.boss ? 40 : 15), Math.cos(a), Math.sin(a), 150, { force: true });
+            this.damage(best, atk * (best.boss ? 40 : 15), Math.cos(a), Math.sin(a), 150, { source: 'ultimate', force: true });
             this.fx.push({ kind: 'explo', x: best.x, y: best.y, t: 0, dur: 0.4 });
             // 定军神箭：金色光柱 + 冲击波
             this.fx.push({ kind: 'pillar', x: best.x, y: best.y, t: 0, dur: 0.7, w: 26, len: 220, color: '#feae34', real: true });
@@ -2021,7 +2055,7 @@ export class Battle {
           const off = u.spawned * 0.13;
           for (let k = 0; k < 14; k++) {
             const a = off + (k / 14) * TAU;
-            const pr = newProjectile('bolt');
+            const pr = newProjectile('bolt', 'ultimate');
             pr.x = p.x; pr.y = p.y - 10;
             pr.vx = Math.cos(a) * 300; pr.vy = Math.sin(a) * 300;
             pr.rot = a; pr.dmg = atk * 3; pr.pierce = 3; pr.knock = 20; pr.r = 4; pr.life = 0.9;
@@ -2059,7 +2093,7 @@ export class Battle {
             // 星落五丈原：流星从高空坠下，落地再结算
             this.fx.push({ kind: 'meteor', x, y, t: 0, dur: 0.22, color: '#8fb8ff' });
             this.later(0.22, () => {
-              this.impact(x, y, 40, atk * 7, 80, 0);
+              this.impact(x, y, 40, atk * 7, 80, 0, 'ultimate');
               this.fx.push({ kind: 'explo', x, y: y + 6, t: 0, dur: 0.35 });
               this.fx.push({ kind: 'shock', x, y, t: 0, dur: 0.35, r: 50, w: 8, color: '#8fb8ff', real: true });
               this.fx.push({ kind: 'pillar', x, y, t: 0, dur: 0.4, w: 12, len: 120, color: '#8fb8ff', real: true });
@@ -2080,7 +2114,7 @@ export class Battle {
     const p = this.player;
     const sp = 330;
     for (let i = 0; i < 8; i++) {
-      const pr = newProjectile('horse');
+      const pr = newProjectile('horse', 'ultimate');
       const dirX = i % 2 === 0 ? 1 : -1;
       const lane = -this.viewH * 0.42 + (this.viewH * 0.84 * (i + 0.5)) / 8;
       pr.x = p.x - dirX * (this.viewW / 2 + 24); pr.y = p.y + lane;
@@ -2110,8 +2144,11 @@ export class Battle {
       e.slow = 1;
       e.slowT = e.boss ? 1.5 : 4;
       // 敌将：断喝震碎护盾并重创
-      if (e.boss && e.shield > 0) this.breakShield(e);
-      this.damage(e, this.base.atk * (e.boss ? 30 : 6), dx / d, dy / d, 220, { force: true });
+      if (e.boss && e.shield > 0) {
+        this.recordDamage('ultimate', e, e.shield);
+        this.breakShield(e);
+      }
+      this.damage(e, this.base.atk * (e.boss ? 30 : 6), dx / d, dy / d, 220, { source: 'ultimate', force: true });
     }
     this.shots.length = 0;
     for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.1 + i * 0.05, r: Math.max(this.viewW, this.viewH) * (0.5 + i * 0.15), color: '#ffffff' });
@@ -2129,7 +2166,7 @@ export class Battle {
     const p = this.player;
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * TAU + rand(-0.3, 0.3);
-      const pr = newProjectile('tornado');
+      const pr = newProjectile('tornado', 'ultimate');
       pr.x = p.x + Math.cos(a) * 30;
       pr.y = p.y + Math.sin(a) * 30;
       pr.vx = Math.cos(a) * 40;
@@ -2423,16 +2460,43 @@ export class Battle {
     return this.weapons.filter((w) => !w.evo && w.lv >= MAX_WEAPON_LV && (this.def || this.passiveLv(WEAPONS[w.id].evoPassive) > 0)).map((w) => w.id);
   }
 
+  coreProgressText(): string {
+    const id = this.coreWeapon;
+    if (!id) return '';
+    const w = this.weapon(id), data = WEAPONS[id];
+    if (w?.evo) return '已进化 · ' + (weaponLink(id, this.hero.id)?.name || data.evoName);
+    if (!w && this.banned.has('weapon:' + id)) return data.name + ' · 本局已封禁';
+    if (!w && this.weapons.length >= WEAPON_SLOTS) return data.name + ' · 武器位已满';
+    const level = w?.lv ?? 0;
+    const progress = data.name + ' ' + level + '/' + MAX_WEAPON_LV;
+    const partner = data.evoPassive;
+    if (!this.def && !this.passiveLv(partner)) {
+      if (this.banned.has('passive:' + partner)) return progress + ' · ' + PASSIVES[partner].name + '已封禁';
+      if (this.passives.length >= PASSIVE_SLOTS) return progress + ' · 兵法位已满';
+      return progress + ' · 待取' + PASSIVES[partner].name;
+    }
+    if (level >= MAX_WEAPON_LV) return data.name + ' · 下一箱进化';
+    return this.def ? progress : progress + ' · 已有' + PASSIVES[partner].name;
+  }
+
   /**
    * 开宝箱：优先进化，其次升级已有技能。
    * 敌将宝箱保底：没有能进化的武器时，满级武器缺进化兵法就直接送这本兵法并当场进化；
    * 还是进化不了就给 5 个升级，并优先升最接近满级的武器（下一个宝箱更容易进化）。
    */
   rollChest(boss: boolean): Choice[] {
+    const evo = this.evolvable();
+    const coreReady = this.coreWeapon && evo.includes(this.coreWeapon) ? this.coreWeapon : null;
     // 守城：宝箱直接给守城的升级项（不重复）
-    if (this.def) return this.rollChoices(boss ? 3 : Math.random() < 0.3 ? 2 : 1).filter((c) => c.kind !== 'heal' && c.kind !== 'gold');
+    if (this.def) {
+      const count = boss ? 3 : Math.random() < 0.3 ? 2 : 1;
+      if (!coreReady) return this.rollChoices(count).filter(c => c.kind !== 'heal' && c.kind !== 'gold');
+      const other = this.defenseChoicePool().filter(({ c }) => !(c.kind === 'evo' && c.id === coreReady));
+      const more = count > 1 ? this.pickChoices(other, count - 1).filter(c => c.kind !== 'heal' && c.kind !== 'gold') : [];
+      return [{ kind: 'evo', id: coreReady }, ...more];
+    }
     const out: Choice[] = [];
-    let evo = this.evolvable();
+    let firstEvo = coreReady ?? evo[0];
     let count = boss ? 3 : Math.random() < 0.08 ? 5 : Math.random() < 0.3 ? 3 : 1;
     if (boss && !evo.length && this.passives.length < PASSIVE_SLOTS) {
       const w = this.weapons.find(x => {
@@ -2440,9 +2504,9 @@ export class Battle {
         return !x.evo && x.lv >= MAX_WEAPON_LV && !this.passiveLv(needed)
           && (!IS_WEB || (this.skillPool.passives.includes(needed) && !this.banned.has('passive:' + needed)));
       });
-      if (w) { out.push({ kind: 'passive', id: WEAPONS[w.id].evoPassive, lv: 1, isNew: true }); evo = [w.id]; count--; }
+      if (w) { out.push({ kind: 'passive', id: WEAPONS[w.id].evoPassive, lv: 1, isNew: true }); firstEvo = w.id; count--; }
     }
-    if (evo.length) { out.push({ kind: 'evo', id: evo[0] }); count--; }
+    if (firstEvo) { out.push({ kind: 'evo', id: firstEvo }); count--; }
     else if (boss) count = 5;
     for (let i = 0; i < count; i++) {
       const pool: Choice[] = [];

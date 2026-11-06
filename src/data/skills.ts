@@ -469,6 +469,10 @@ export function passivesFor(cleared = 99): PassiveId[] {
 
 export interface SkillPool { weapons: WeaponId[]; passives: PassiveId[] }
 
+export function coreWeaponFits(id: WeaponId, pool: SkillPool, defense: boolean): boolean {
+  return pool.weapons.includes(id) && (defense || pool.passives.includes(WEAPONS[id].evoPassive));
+}
+
 /** 第 N 章只能抽到进章前已解锁的技能。无尽和每周没有章节，按账号进度。 */
 export function skillPoolFor(hero: HeroDef, progress: number, chapter: number | null, defense: boolean): SkillPool {
   const cleared = IS_WEB && chapter !== null ? Math.max(0, chapter - 1) : progress;

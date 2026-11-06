@@ -6,17 +6,17 @@ import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
-import { endlessHpMul, endlessDmgMul, legacyChapterPower } from '../meta/run';
+import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../meta/goals';
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
 import type { SkillId, WeaponId } from '../data/skills';
-import { WEAPONS, PASSIVES, SKILLS_BY_ID, MAX_WEAPON_LV, passiveMax, weaponLink, fitPreparation } from '../data/skills';
+import { WEAPONS, PASSIVES, SKILLS_BY_ID, MAX_WEAPON_LV, passiveMax, weaponLink, fitPreparation, coreWeaponFits } from '../data/skills';
 import type { QiyuId } from '../data/qiyu';
 import { BossDef } from '../data/enemies';
 import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
 import { computeStats, combatPower } from '../meta/ops';
-import { save, markDirty, flushSave, preparedSkillsFor } from '../meta/save';
+import { save, markDirty, flushSave, activePreparationFor } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
@@ -161,7 +161,16 @@ export class BattleScene implements Scene {
     }
     this.battle.showDamage = save.settings.dmgNum;
     if (IS_WEB && !this.chapter.tutorial) {
-      this.unavailablePreparedNames = this.fitRunPreparation(preparedSkillsFor(this.battle.hero.id));
+      const b = this.battle, plan = activePreparationFor(b.hero.id);
+      this.unavailablePreparedNames = this.fitRunPreparation(plan.skills);
+      if (plan.core) {
+        if (coreWeaponFits(plan.core, b.skillPool, !!b.def)) b.coreWeapon = plan.core;
+        else {
+          const name = WEAPONS[plan.core].name;
+          this.unavailablePreparedNames = this.unavailablePreparedNames.filter(n => n !== name);
+          this.unavailablePreparedNames.push('核心武器' + name);
+        }
+      }
       this.runAutoPick = this.hasPreparation;
     }
     this.battle.hooks = {
@@ -170,6 +179,13 @@ export class BattleScene implements Scene {
       banner: (text, color) => this.banners.push({ text, color: color || C.gold, t: 0 }),
       vibrate: (l) => vibrate(l),
       bossAppear: (d: BossDef) => this.onBoss(d),
+      convoyCaptured: () => {
+        const reward = convoyReward(this.chapter, this.diff);
+        this.floatLines([
+          { text: '粮车已截获 · 通关可领', color: '#fee761' },
+          { text: `军饷 ${reward.gold} · 元宝 ${reward.yuanbao}`, color: '#fee761' },
+        ]);
+      },
       ultCast: () => { this.cutIn = 0; },
     };
     playBgm('bgm_battle');
@@ -340,14 +356,14 @@ export class BattleScene implements Scene {
     if (this.tipCheckT > 0) return;
     this.tipCheckT = 0.5;
     const near = (x: number, y: number) => b.inView(x, y, -30);
-    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', '打破灯笼和粮车，会掉出包子、磁石、震天雷');
+    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', IS_WEB ? '打破路边的灯笼和小推车，可获得补给' : '打破灯笼和粮车，会掉出包子、磁石、震天雷');
     for (const k of b.pickups) {
       if (!near(k.x, k.y)) continue;
       if (k.kind === 'bun') this.tip('pk_bun', '肉包子：拾取后回复30%生命');
       else if (k.kind === 'magnet') this.tip('pk_magnet', '磁石：拾取后吸走全场的经验宝石');
       else if (k.kind === 'bomb') this.tip('pk_bomb', '震天雷：拾取后消灭屏幕内的敌人');
     }
-    if (b.enemies.some((e) => e.elite && !e.dead && near(e.x, e.y))) this.tip('elite', '精英敌人体型更大、更耐打，击败必掉宝箱');
+    if (b.enemies.some((e) => e.elite && !e.convoyGuard && !e.dead && near(e.x, e.y))) this.tip('elite', '精英敌人体型更大、更耐打，击败必掉宝箱');
     if (b.evolvable().length) this.tip('evo', '武器已满级且有对应兵法，打开宝箱就能进化神兵！');
   }
 
@@ -606,10 +622,16 @@ export class BattleScene implements Scene {
       ix += isz * 0.8 + 4 * u;
     }
 
+    if (b.coreWeapon && this.chestAlertT <= 0) {
+      const text = '★ ' + b.coreProgressText();
+      const y = iy + 103 * u;
+      ui.pixRect(18 * u, y - 14 * u, ui.measure(text, 18) + 16 * u, 28 * u, 'rgba(10,6,8,0.65)');
+      ui.text(text, 26 * u, y, 18, '#ffe9a8', 'left');
+    }
     // 首领血条
     const boss = b.finalBoss || b.midBoss;
     if (boss && this.bossBar) {
-      const y = top + 250 * u;
+      const y = top + (b.coreWeapon ? 287 : 250) * u;
       const w = ui.W * 0.8;
       ui.text(`${boss.boss!.title} · ${boss.boss!.name}${boss.enraged ? ' · 狂暴' : ''}`, ui.W / 2, y - 22 * u, 26, boss.enraged ? '#ff8a80' : '#ffd0d0');
       ui.bar(ui.W / 2 - w / 2, y, w, 26 * u, boss.hp / boss.maxHp, '#e43b44', '#3a0d12');
@@ -648,6 +670,7 @@ export class BattleScene implements Scene {
     }
 
     this.drawOffscreenArrows();
+    if (b.convoy) this.drawConvoyMarker();
     if (this.chestAlertT > 0) {
       this.chestAlertT -= dt;
       ui.ctx.globalAlpha = clamp(this.chestAlertT / 0.4, 0, 1);
@@ -942,6 +965,25 @@ export class BattleScene implements Scene {
   /** 屏幕外的磁石 / 宝箱 / 包子：在屏幕边缘画箭头 */
   private seenChests = new WeakSet<object>();
   private chestAlertT = 0;
+
+  private drawConvoyMarker() {
+    const b = this.battle, cart = b.convoy!, ui = game.ui, u = ui.u;
+    const [sx, sy] = this.renderer.worldToScreen(cart.x, cart.y);
+    const offscreen = sx < 0 || sx > ui.W || sy < 0 || sy > ui.H;
+    const a = Math.atan2(sy - ui.H / 2, sx - ui.W / 2);
+    const arrow = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'][(Math.round(a * 4 / Math.PI) + 8) % 8];
+    const seconds = Math.min(30, Math.ceil(cart.expiresAt - b.t));
+    const text = `${offscreen ? arrow + ' ' : ''}运粮车 · 护卫剩${3 - cart.defeated}/3 · ${seconds}秒`;
+    const width = ui.measure(text, 23) + 20 * u;
+    const x = clamp(sx, width / 2 + 8 * u, ui.W - width / 2 - 8 * u);
+    const top = ui.safeTop + (((b.midBoss || b.finalBoss) ? 364 : 250) + (b.coreWeapon ? 37 : 0)) * u;
+    const bottom = Math.max(top, ui.H - ui.safeBottom - 280 * u);
+    let y = clamp(this.renderer.worldToScreen(cart.x, cart.y - 70)[1], top, bottom);
+    const bannerY = ui.H * 0.3;
+    if (this.banners.length && Math.abs(y - bannerY) < 60 * u) y = Math.min(bottom, bannerY + 60 * u);
+    ui.pixRect(x - width / 2, y - 19 * u, width, 38 * u, 'rgba(20,40,35,0.88)', 4 * u);
+    ui.text(text, x, y, 23, '#fff3c4');
+  }
 
   private drawOffscreenArrows() {
     const ui = game.ui;
