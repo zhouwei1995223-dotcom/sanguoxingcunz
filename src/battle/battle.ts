@@ -326,8 +326,8 @@ export class Battle {
     const b = this.base;
     const auraEvo = this.weapon('aura')?.evo;
     this.dmgMul = 1 + b.dmg / 100 + 0.1 * P('tiger');
-    this.cdMul = Math.max(0.35, (1 - b.cd / 100) * (1 - 0.06 * P('book')));
-    this.areaMul = 1 + b.area / 100 + 0.1 * P('flag');
+    this.cdMul = Math.max(0.58, (1 - b.cd / 100) * (1 - 0.045 * P('book')));
+    this.areaMul = 1 + b.area / 100 + 0.06 * P('flag');
     this.durMul = 1 + 0.12 * P('pouch');
     const hid = this.hero.id;
     // 武将天赋
@@ -372,7 +372,7 @@ export class Battle {
     if (S('shengou')) this.dmgTakenMul *= 0.88;
     if (S('shensu')) { this.speed *= 1.12; this.cdMul *= 0.92; }
     if (S('wolong')) { this.cdMul *= 0.85; this.areaMul += 0.15; this.durMul += 0.15; }
-    this.cdMul = Math.max(0.3, this.cdMul);
+    this.cdMul = Math.max(0.58, this.cdMul);
     if (S('jiliang')) { this.goldMul += 0.4; this.expMul *= 1.1; }
     if (S('qinwang')) this.eliteDmg += 0.3;
     this.potionHeal = this.potionBase.heal + (S('yangjing') ? 0.1 : 0);
@@ -387,8 +387,9 @@ export class Battle {
     if (Q('huatuo')) { this.potionHeal += 0.1; this.potionCdMax = Math.round(this.potionCdMax * 0.7); this.potionCd = Math.min(this.potionCd, this.potionCdMax); }
     if (Q('tengjia')) this.dmgTakenMul *= 0.85;
     if (Q('shuijing')) this.expMul *= 1.25;
-    if (Q('dunjia')) this.cdMul = Math.max(0.3, this.cdMul * 0.9);
-    if (Q('sunzi')) { this.areaMul += 0.15; this.durMul += 0.15; }
+    if (Q('dunjia')) this.cdMul = Math.max(0.55, this.cdMul * 0.9);
+    if (Q('sunzi')) { this.areaMul += 0.12; this.durMul += 0.15; }
+    this.areaMul = Math.min(1.38, this.areaMul);
     if (Q('tongque')) this.goldMul += 0.5;
     if (Q('zhanjiang')) this.eliteDmg += 0.3;
   }
@@ -771,7 +772,7 @@ export class Battle {
     this.expRate += (this.expRaw - this.expRate) * 0.1;
     this.expRaw = 0;
     this.dominantT = this.screenFill < 0.08 && this.recentDmg < this.player.maxHp * 0.04 ? this.dominantT + 1 : 0;
-    if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(3, this.director + 0.04);
+    if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(1.35, this.director + 0.02);
     else if (this.screenFill > 0.06) this.director = Math.max(1, this.director - 0.02);
   }
 
@@ -802,14 +803,27 @@ export class Battle {
     const endlessQ = ch.endless && ch.duration >= 1e8 ? 0.22 : 0.05;
     const grow = ch.endless ? 1 + ch.growth * minute + endlessQ * minute * minute : 1 + ch.growth * minute + 0.05 * late * late;
     // 后期敌人更多，同时血量再略微提高
-    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * (1 + 0.3 * this.crowdRamp()) * this.director * this.stratHpMul * (ch.endless || ch.tutorial || ch.defense ? 1 : tension(this.ct, ch.id));
+    const rawTen = ch.endless || ch.tutorial || ch.defense ? 1 : tension(this.ct, ch.id);
+    const hpScale = ch.hpMul * grow * this.enemyHpMul * (opts.hpMul || 1) * this.stratHpMul * (opts.elite ? Math.min(1.25, rawTen) : (1 + 0.3 * this.crowdRamp()) * this.director * rawTen);
     e.uid = this.uidSeq++;
     e.def = d;
     e.x = x;
     e.y = y;
     e.r = d.radius;
-    e.maxHp = e.hp = Math.round(d.hp * hpScale * (opts.elite ? 14 : 1));
-    e.speed = d.speed * rand(0.92, 1.08) * (opts.elite ? 0.9 : 1);
+    e.maxHp = e.hp = Math.round(d.hp * hpScale * (opts.elite ? 6.5 : 1));
+    if (opts.elite) {
+      const bossId = ch.endless ? 'xiahouen' : (this.midBossDown ? ch.boss : (ch.midBoss || ch.boss));
+      const bDef = bossId ? BOSSES[bossId] : undefined;
+      if (bDef) {
+        const normal = !ch.tutorial && !ch.endless && !ch.defense;
+        const over = normal ? Math.pow(Math.max(1, this.powerRatio), ch.id > 1 ? BOSS_POWER_EXP : 0.4) : 1;
+        const bScale = ch.endless ? ch.hpMul * grow * (0.75 + minute * 0.08) : 1;
+        const bossHp = Math.round(bDef.hp * this.enemyHpMul * bScale * this.stratHpMul * (ch.tutorial ? 1 : BOSS_HP) * over);
+        const capRatio = ch.endless ? 0.32 : (this.midBossDown ? 0.22 : 0.30);
+        e.maxHp = e.hp = Math.min(e.maxHp, Math.max(80, Math.round(bossHp * capRatio)));
+      }
+    }
+    e.speed = d.speed * rand(0.96, 1.12) * (opts.elite ? 0.95 : 1.12);
     e.dmg = d.dmg * ch.dmgMul * (ch.endless ? 1 + 0.1 * minute + (endlessQ > 0.05 ? 0.06 : 0.012) * minute * minute : (1 + 0.04 * minute) * chapterDmgMul(ch)) * (opts.elite ? 1.5 : 1) * this.enemyDmgMul;
     e.mass = (d.mass || 1) * (opts.elite ? 8 : 1);
     // 敌人变多后单个经验相应减少，升级节奏不变（大军压境的弱兵经验减半）
@@ -1023,7 +1037,7 @@ export class Battle {
     }
     // 敌将保底战斗时长：血量比「按时间匀速掉」还低时，打到血条上的伤害只剩 1/4
     if (toHp > 0 && e.minTime > 0 && (e.hp - toHp) / e.maxHp < 1 - (this.t - e.born) / e.minTime) {
-      const cut = Math.max(1, Math.round(toHp * 0.25));
+      const cut = Math.max(1, Math.round(toHp * 0.45));
       dmg -= toHp - cut;
       toHp = cut;
     }
@@ -1036,8 +1050,8 @@ export class Battle {
     if (kx || ky) { e.hx = kx; e.hy = ky; }
     if (knock && !e.boss) {
       const k = knock / Math.sqrt(e.mass);
-      e.kx += kx * k * 3;
-      e.ky += ky * k * 3;
+      e.kx += kx * k * 1.45;
+      e.ky += ky * k * 1.45;
     }
     if (crit && knock >= 50) this.addHitStop(0.035);
     if (this.showDamage) this.addNum(e.x + rand(-4, 4), e.y - 10 * e.scale - rand(0, 6), dmg, crit ? 'y' : 'w', crit);
@@ -1128,7 +1142,20 @@ export class Battle {
         for (const o of this.enemies) if (!o.dead && o !== e) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.3 }); }
         this.won = true;
       }
-      if (e === this.midBoss) { this.midBoss = null; this.midBossDown = true; }
+      if (e === this.midBoss) {
+        this.midBoss = null;
+        this.midBossDown = true;
+        // 击败先锋敌将时震溃场上残余精英与小兵，避免敌将已死而精英仍在场上缠斗
+        for (const o of this.enemies) {
+          if (!o.dead && o !== e && !o.boss) {
+            o.dead = true;
+            this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.35 });
+            if (o.elite) { this.dropPickup('chest', o.x, o.y, 1, false); this.dropGem(o.x, o.y, o.exp); }
+          }
+        }
+      } else if (!this.chapter.endless) {
+        for (const o of this.enemies) if (!o.dead && o !== e && o.elite) { o.dead = true; this.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.35 }); }
+      }
       return;
     }
     if (e.elite) {
@@ -1401,7 +1428,7 @@ export class Battle {
       k.t += dt;
       const dx = p.x - k.x, dy = p.y - 6 - k.y;
       const d2 = dx * dx + dy * dy;
-      if (!k.pulled && (k.kind === 'gem' || k.kind === 'coin') && (d2 < pr2 || (k.t > 9 && d2 < 220 * 220) || (this.def && k.t > 0.6))) k.pulled = true;
+      if (!k.pulled && (k.kind === 'gem' || k.kind === 'coin') && (d2 < pr2 || (this.def && k.t > 0.6))) k.pulled = true;
       if (!k.pulled && k.kind !== 'gem' && k.kind !== 'coin' && d2 < 18 * 18) k.pulled = true;
       if (k.pulled) {
         const d = Math.sqrt(d2) || 1;
@@ -1539,9 +1566,9 @@ export class Battle {
     this.magnetCd = Math.max(0, this.magnetCd - dt);
     this.magnetT -= dt;
     if (this.magnetT <= 0) {
-      this.magnetT = rand(65, 85);
+      this.magnetT = rand(135, 165);
       if (!this.pickups.some((k) => k.kind === 'magnet')) {
-        const a = rand(TAU), d = rand(60, 100);
+        const a = rand(TAU), d = rand(85, 125);
         this.dropPickup('magnet', this.player.x + Math.cos(a) * d, this.player.y + Math.sin(a) * d, 1);
       }
     }
@@ -2264,7 +2291,7 @@ export class Battle {
   nearestEnemy(maxD = 9999, from = this.player): Enemy | null {
     let best: Enemy | null = null, bd = maxD * maxD;
     for (const e of this.enemies) {
-      if (e.dead || (!e.boss && !this.inView(e.x, e.y))) continue;
+      if (e.dead || (!e.boss && !this.inView(e.x, e.y, -22))) continue;
       const d = (e.x - from.x) ** 2 + (e.y - from.y) ** 2;
       if (d < bd) { bd = d; best = e; }
     }
@@ -2273,7 +2300,7 @@ export class Battle {
 
   /** 普通技能能否打到这个敌人（在屏幕内） */
   canHit(e: Enemy): boolean {
-    return this.inView(e.x, e.y - 6 * e.scale, 4);
+    return this.inView(e.x, e.y - 6 * e.scale, -22);
   }
 
   /** 是否在屏幕内（镜头以玩家为中心；margin 为负表示更靠里） */
@@ -2284,7 +2311,7 @@ export class Battle {
 
   /** 屏幕内侧的随机敌人：范围技能只瞄准看得见的敌人，不会在屏幕边缘守株待兔 */
   randomVisibleEnemy(): Enemy | null {
-    const vis = this.enemies.filter((e) => !e.dead && this.inView(e.x, e.y, -24));
+    const vis = this.enemies.filter((e) => !e.dead && this.inView(e.x, e.y, -36));
     return vis.length ? pick(vis) : null;
   }
 

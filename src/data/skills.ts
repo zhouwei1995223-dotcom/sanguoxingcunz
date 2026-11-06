@@ -377,6 +377,24 @@ for (const d of Object.values(WEAPONS)) {
   if (!d.hero) d.evo.dmg = +(d.evo.dmg * EVO_DMG).toFixed(2);
   for (const l of d.links || []) if (l.evo.dmg) l.evo.dmg = +(l.evo.dmg * EVO_DMG).toFixed(2);
 }
+export const AREA_SCALE = 0.65;
+export const CD_SCALE = 1.35;
+for (const [wid, d] of Object.entries(WEAPONS)) {
+  for (const lv of d.levels) {
+    lv.area = Math.min(56, Math.max(12, Math.round(lv.area * AREA_SCALE)));
+    if (lv.cd > 0) lv.cd = +(lv.cd * CD_SCALE).toFixed(2);
+    if (lv.tick) lv.tick = +(lv.tick * (wid === 'aura' ? 1.35 : 1.15)).toFixed(2);
+  }
+  d.evo.area = Math.min(72, Math.max(16, Math.round(d.evo.area * AREA_SCALE)));
+  if (d.evo.cd > 0) d.evo.cd = +(d.evo.cd * CD_SCALE).toFixed(2);
+  else if (wid === 'sword') { d.evo.cd = 2.2; d.evo.duration = 3.2; }
+  else if (wid === 'halberd') { d.evo.cd = 2.2; d.evo.duration = 1.5; }
+  if (d.evo.tick) d.evo.tick = +(d.evo.tick * (wid === 'aura' ? 1.35 : 1.15)).toFixed(2);
+  for (const l of d.links || []) {
+    if (l.evo.area) l.evo.area = Math.min(74, Math.max(16, Math.round(l.evo.area * AREA_SCALE)));
+    if (l.evo.cd && l.evo.cd > 0) l.evo.cd = +(l.evo.cd * CD_SCALE).toFixed(2);
+  }
+}
 
 /** 武将对某武器的专属联动 */
 export function weaponLink(id: WeaponId, hero: string): WeaponLink | undefined {

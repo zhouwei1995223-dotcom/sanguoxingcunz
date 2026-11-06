@@ -6,7 +6,7 @@ function param(name: string): string | null {
   try {
     if (typeof location === 'undefined' || !location.search) return null;
     // 小红书正式包：调试参数只在本机测试时生效
-    if (IS_H5 && location.hostname !== 'localhost') return null;
+    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return null;
     const m = new RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
     return m ? decodeURIComponent(m[1]) : null;
   } catch (e) {

@@ -130,6 +130,8 @@ function freshHeroes(): Record<string, HeroState> {
 
 function freshSave(): SaveData {
   const now = Date.now();
+  if (save && save.staminaTs > now) save.staminaTs = now;
+  if (save && save.patrolTs > now) save.patrolTs = now;
   const equipped = {} as Record<Slot, number>;
   SLOTS.forEach((s) => (equipped[s] = 0));
   return {
@@ -274,6 +276,8 @@ export function rolloverDaily() {
 /** 体力自然恢复 */
 export function tickStamina() {
   const now = Date.now();
+  if (save && save.staminaTs > now) save.staminaTs = now;
+  if (save && save.patrolTs > now) save.patrolTs = now;
   if (save.stamina >= STAMINA.max) {
     save.staminaTs = now;
     return;

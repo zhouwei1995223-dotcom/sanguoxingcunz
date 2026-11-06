@@ -2,6 +2,7 @@ import { game, Dialog } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries, itemSlot, RewardEntry } from '../ui/widgets';
+import { guidePointer } from '../ui/guide';
 import { save, markDirty, flushSave, staminaNextSeconds } from '../meta/save';
 import type { EquipItem } from '../meta/save';
 import {
@@ -82,7 +83,7 @@ export class SigninDialog implements Dialog {
       const e = rewardEntries(r)[0];
       ui.qualityFrame(x + cw / 2 - 45 * u, y + 52 * u, 90 * u, e.frame || '#8b9bb4');
       ui.icon(e.icon, x + cw / 2, y + 97 * u, 56 * u);
-      ui.text(e.count, x + cw / 2, y + 168 * u, 22, '#fff');
+      ui.text(r.hero && r.yuanbao ? `${e.count} +${r.yuanbao}元宝` : e.count, x + cw / 2, y + 168 * u, r.hero && r.yuanbao ? 18 : 22, '#fff');
       if (done) {
         ui.ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ui.ctx.fillRect(x + 10 * u, y + 4 * u, cw - 20 * u, ch - 8 * u);
@@ -113,7 +114,7 @@ export class SigninDialog implements Dialog {
 }
 
 function mulReward(r: Reward, m: number): Reward {
-  return { gold: r.gold && r.gold * m, yuanbao: r.yuanbao && r.yuanbao * m, iron: r.iron && r.iron * m, stamina: r.stamina && r.stamina * m, equip: r.equip };
+  return { gold: r.gold && r.gold * m, yuanbao: r.yuanbao && r.yuanbao * m, iron: r.iron && r.iron * m, stamina: r.stamina && r.stamina * m, equip: r.equip, hero: r.hero, shards: r.shards ? { hero: r.shards.hero, n: r.shards.n * m } : (r.hero && m > 1 ? { hero: r.hero, n: 20 * (m - 1) } : undefined) };
 }
 
 export class TasksDialog implements Dialog {
@@ -313,28 +314,35 @@ export class ItemDialog implements Dialog {
     }
     // 合成信息
     const mats = mergeCandidates(it);
-    if (it.q < 5) ui.text(`合成：3件同名${QUALITY_NAMES[it.q]}装备 → ${QUALITY_NAMES[it.q + 1]}（拥有${mats.length + 1}/3）`, x, y, 20, '#dc9be9', 'left');
+    if (it.q < 5) ui.text(`合成：3件同部位${QUALITY_NAMES[it.q]}装备 → ${QUALITY_NAMES[it.q + 1]}（拥有${mats.length + 1}/3）`, x, y, 20, '#dc9be9', 'left');
     y += 50 * u;
     // 按钮
-    const bw = (w - 140 * u) / 3, bh = 96 * u;
+    const bw = (w - 128 * u) / 4, bh = 96 * u;
     const by = f.y + h - bh - 50 * u;
     const eq = isEquipped(it);
-    if (ui.button('it_equip', f.x + 40 * u, by, bw, bh, eq ? '卸下' : '穿戴', eq ? C.btnGray : C.btnBlue, { size: 28 })) {
+    if (ui.button('it_equip', f.x + 32 * u, by, bw, bh, eq ? '卸下' : '穿戴', eq ? C.btnGray : C.btnBlue, { size: 26, disabled: eq && save.guide === 2 })) {
       if (eq) unequip(tpl.slot); else equip(it);
       playSfx('click');
       flushSave(true);
     }
     const cost = equipUpgradeCost(it.lv);
     const maxed = it.lv >= QUALITY_MAX_LV[it.q];
-    if (ui.button('it_up', f.x + 70 * u + bw, by, bw, bh, maxed ? '已满级' : '强化', C.btnGold, { size: 28, disabled: maxed, sub: maxed ? undefined : `${fmtNum(cost.gold)}金 ${cost.iron}铁` })) {
+    if (ui.button('it_up', f.x + 53 * u + bw, by, bw, bh, maxed ? '已满级' : '强化', C.btnGold, { size: 26, disabled: maxed, sub: maxed ? undefined : `${fmtNum(cost.gold)}金 ${cost.iron}铁` })) {
       const err = upgradeItem(it);
-      if (err) ui.toast(err); else { playSfx('levelup'); flushSave(true); }
+      if (err) ui.toast(err); else { if (save.guide === 2) save.guide = 3; playSfx('levelup'); flushSave(true); }
     }
-    if (ui.button('it_merge', f.x + 100 * u + bw * 2, by, bw, bh, '合成', C.btnPurple, { size: 28, disabled: mats.length < 2 || it.q >= 5 })) {
+    if (ui.button('it_up5', f.x + 74 * u + bw * 2, by, bw, bh, maxed ? '已满级' : '强化5次', C.btnGold, { size: 24, disabled: maxed, sub: maxed ? undefined : '连升5级' })) {
+      let n = 0, lastErr: string | null = null;
+      for (let k = 0; k < 5; k++) { const e = upgradeItem(it); if (e) { lastErr = e; break; } n++; }
+      if (!n && lastErr) ui.toast(lastErr);
+      else if (n) { if (save.guide === 2) save.guide = 3; playSfx('levelup'); ui.toast(`连升 ${n} 级`); flushSave(true); }
+    }
+    if (ui.button('it_merge', f.x + 95 * u + bw * 3, by, bw, bh, '合成', C.btnPurple, { size: 26, disabled: mats.length < 2 || it.q >= 5 })) {
       const err = mergeItem(it);
       if (err) ui.toast(err); else { playSfx('evolve'); ui.toast(`合成成功！品质提升为${QUALITY_NAMES[it.q]}`); flushSave(true); }
     }
     ui.text(`玄铁 ${fmtNum(save.iron)}   金币 ${fmtNum(save.gold)}`, ui.W / 2, by - 30 * u, 20, C.textDim);
+    if (save.guide === 2 && !maxed) guidePointer(ui, f.x + 53 * u + bw, by, bw, bh, '点击强化提升武器等级');
   }
 }
 

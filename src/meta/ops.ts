@@ -145,13 +145,14 @@ export function upgradeItem(it: EquipItem): string | null {
 
 /** 3 件同名同品质 → 1 件高一品质（保留主件等级，素材件等级返还玄铁） */
 export function mergeCandidates(it: EquipItem): EquipItem[] {
-  return save.items.filter((o) => o.uid !== it.uid && o.tid === it.tid && o.q === it.q);
+  const slot = EQUIP_BY_ID[it.tid].slot;
+  return save.items.filter((o) => o.uid !== it.uid && o.q === it.q && EQUIP_BY_ID[o.tid].slot === slot);
 }
 
 export function mergeItem(it: EquipItem): string | null {
   if (it.q >= 5) return '已是最高品质';
-  const mats = mergeCandidates(it).sort((a, b) => (isEquipped(a) ? 1 : 0) - (isEquipped(b) ? 1 : 0) || a.lv - b.lv).slice(0, 2);
-  if (mats.length < 2) return '需要3件相同品质的同名装备';
+  const mats = mergeCandidates(it).sort((a, b) => (isEquipped(a) ? 1 : 0) - (isEquipped(b) ? 1 : 0) || (a.tid === it.tid ? 0 : 1) - (b.tid === it.tid ? 0 : 1) || a.lv - b.lv).slice(0, 2);
+  if (mats.length < 2) return '需要3件同部位同品质的装备';
   let refund = 0;
   for (const m of mats) {
     for (let l = 1; l < m.lv; l++) refund += equipUpgradeCost(l).iron;
@@ -186,8 +187,12 @@ export function equipBest() {
     let best: EquipItem | null = null, bestScore = -1;
     for (const it of save.items) {
       if (EQUIP_BY_ID[it.tid].slot !== slot) continue;
-      const st = itemStats(it);
-      const score = (st.atk || 0) * 10 + (st.hp || 0) * 2 + it.q * 100;
+
+      const prev = save.equipped[slot];
+      save.equipped[slot] = it.uid;
+      const st = computeStats();
+      save.equipped[slot] = prev;
+      const score = combatPower(st) + (st.cd || 0) * 18 + (st.area || 0) * 10 + (st.bossDmg || 0) * 12 + (st.speed || 0) * 8 + it.q * 80;
       if (score > bestScore) { best = it; bestScore = score; }
     }
     if (best) save.equipped[slot] = best.uid;
@@ -291,7 +296,7 @@ export function heroRedDot(id: string): boolean {
   const st = save.heroes[id];
   const def = HERO_BY_ID[id];
   if (!st.owned) return def.unlockShards > 0 && st.shards >= def.unlockShards;
-  return (st.star < MAX_STAR && st.shards >= STAR_COST[st.star - 1]) || (st.star >= MAX_STAR && (st.peak || 0) < PEAK_MAX && st.shards >= peakCost(st.peak || 0)) || (st.lv < HERO.maxLevel && save.gold >= heroLevelCost(st.lv));
+  return (st.star < MAX_STAR && st.shards >= STAR_COST[st.star - 1]) || (st.star >= MAX_STAR && (st.peak || 0) < PEAK_MAX && st.shards >= peakCost(st.peak || 0)) || (id === save.hero && st.lv < HERO.maxLevel && save.gold >= heroLevelCost(st.lv));
 }
 
 export function anyHeroRedDot(): boolean {
@@ -324,7 +329,7 @@ export function grantReward(r: Reward, mul = 1): GrantResult {
   if (r.stamina) save.stamina += Math.round(r.stamina * mul);
   if (r.equip) for (let i = 0; i < mul; i++) items.push(newItem(r.equip.id || randomItemTemplate(), r.equip.q));
   if (r.shards) grantShards(r.shards.hero, r.shards.n * mul);
-  if (r.hero) grantHero(r.hero);
+  if (r.hero) { grantHero(r.hero); if (mul > 1) grantShards(r.hero, 20 * (mul - 1)); }
   markDirty();
   return { reward: r, items };
 }
@@ -343,7 +348,8 @@ export function spendStamina(n = STAMINA.costPerRun): boolean {
 
 // —— 巡营 ——
 export function patrolPending(): { minutes: number; gold: number; iron: number } {
-  const minutes = Math.min(PATROL.maxHours * 60, Math.floor((Date.now() - save.patrolTs) / 60000));
+  if (save.patrolTs > Date.now()) save.patrolTs = Date.now();
+  const minutes = Math.min(PATROL.maxHours * 60, Math.max(0, Math.floor((Date.now() - save.patrolTs) / 60000)));
   return patrolReward(minutes);
 }
 

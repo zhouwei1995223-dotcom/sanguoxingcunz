@@ -1,5 +1,6 @@
 import { PixelImage } from '../pixel';
 import { mountedFrame, riderImage } from './hero';
+import { NEW_UI } from '../../data/platformConfig';
 
 // 敌方单位：步兵生成器（盔、甲、兵器可配）+ 骑将生成器。
 
@@ -140,7 +141,11 @@ export function generalWeapon(kind: GeneralStyle['weapon'], color = 'S'): PixelI
     img.rect(1, 11, 3, 1, 'y'); img.set(1, 12, 'U');
     return img;
   }
-  img.line(0, 13, tipX, tipY, 'U');
+  img.line(0, 13, tipX, tipY, NEW_UI ? 'u' : 'U');
+  if (NEW_UI) {
+    img.line(1, 13, tipX, tipY + 1, 'U');
+    img.set(tipX - 1, tipY + 1, 'Y');
+  }
   switch (kind) {
     case 'spear':
       img.line(tipX, tipY, tipX + 3, tipY - 2, color); img.set(tipX - 1, tipY + 1, 'R'); img.set(tipX - 2, tipY + 2, 'R');
@@ -149,6 +154,11 @@ export function generalWeapon(kind: GeneralStyle['weapon'], color = 'S'): PixelI
       img.line(tipX, tipY, tipX + 3, tipY - 2, color);
       img.rect(tipX - 1, tipY - 3, 2, 3, color); img.set(tipX - 2, tipY - 3, color);
       img.set(tipX - 1, tipY + 2, 'R');
+      if (NEW_UI) {
+        img.set(tipX + 3, tipY - 2, 'w'); img.set(tipX + 2, tipY - 2, 'w');
+        img.set(tipX - 2, tipY - 3, 'w'); img.set(tipX - 1, tipY - 3, 'Y');
+        img.set(tipX, tipY + 2, 'f'); img.set(tipX - 2, tipY + 2, 'r');
+      }
       break;
     case 'axe':
       img.rect(tipX - 1, tipY - 3, 4, 6, color); img.rect(tipX + 3, tipY - 2, 1, 4, color);
@@ -167,6 +177,10 @@ export function generalWeapon(kind: GeneralStyle['weapon'], color = 'S'): PixelI
       img.line(tipX, tipY, tipX + 2, tipY - 3, color);
       img.rect(tipX - 1, tipY - 4, 3, 4, color); img.line(tipX + 2, tipY - 4, tipX + 3, tipY - 1, 'w');
       img.set(tipX - 1, tipY + 1, 'G');
+      if (NEW_UI) {
+        img.line(tipX + 1, tipY - 4, tipX + 2, tipY - 1, 'w');
+        img.set(tipX, tipY, 'Y'); img.set(tipX - 1, tipY + 2, 'R');
+      }
       break;
   }
   return img;

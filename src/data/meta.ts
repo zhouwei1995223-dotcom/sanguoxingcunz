@@ -6,7 +6,7 @@ export const HERO = {
   name: '赵云',
   title: '常山赵子龙',
   quote: '吾乃常山赵子龙也！',
-  passive: '一身是胆：生命低于30%时，伤害提升30%',
+  passive: '一身是胆：伤害+10%，生命低于30%时再提升30%',
   baseAtk: 20,
   baseHp: 120,
   atkPerLv: 2,
@@ -236,7 +236,7 @@ export function talentCost(t: TalentDef, lv: number): number {
 }
 
 // —— 体力 ——
-export const STAMINA = { max: 30, costPerRun: 5, regenSeconds: 300, adGain: 10, adDailyLimit: 3 };
+export const STAMINA = { max: 60, costPerRun: 5, regenSeconds: 300, adGain: 15, adDailyLimit: 3 };
 
 // —— 巡营（离线收益）——
 export const PATROL = {
@@ -337,4 +337,4 @@ export const SHOP_DAILY = {
 export const SIDEBAR_REWARD: Reward = { yuanbao: 50, stamina: 10 };
 
 /** 新玩家初始资源 */
-export const NEW_PLAYER = { gold: 300, yuanbao: 100, iron: 10, stamina: 30 };
+export const NEW_PLAYER = { gold: 300, yuanbao: 100, iron: 10, stamina: 60 };

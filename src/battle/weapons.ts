@@ -59,7 +59,7 @@ function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
     w.angle += 0.45;
     baseA = w.angle;
   } else {
-    const t = b.nearestEnemy(len * 1.6);
+    const t = b.nearestEnemy(len * 1.15);
     baseA = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   }
   const offsets: number[] = [];
@@ -96,7 +96,7 @@ function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 
 function sword(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const p = b.player;
-  if (!w.evo) {
+  if (!w.evo || L.cd > 0) {
     if (w.active <= 0) {
       w.t -= dt;
       if (w.t <= 0) { w.active = (L.duration || 3) * b.durMul; w.t = L.cd * b.cdMul; }
@@ -137,7 +137,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   let targets: Enemy[];
   if (w.link && b.hero.id === 'lvbu') {
     // 辕门射戟：一支巨箭贯穿一线
-    const t = b.nearestEnemy(b.viewW);
+    const t = b.nearestEnemy(105);
     const a = t ? Math.atan2(t.y - 4 * t.scale - oy, t.x - ox) : Math.atan2(b.player.dirY, b.player.dirX);
     const pr = newProjectile('bolt');
     pr.x = ox; pr.y = oy;
@@ -150,7 +150,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   }
   if (w.link && b.hero.id === 'zhuge') {
     // 元戎弩：一弩十矢，扇形齐射
-    const t = b.nearestEnemy(b.viewW);
+    const t = b.nearestEnemy(105);
     const base = t ? Math.atan2(t.y - 4 * t.scale - oy, t.x - ox) : Math.atan2(b.player.dirY, b.player.dirX);
     for (let i = 0; i < L.count; i++) {
       const a = base + (i - (L.count - 1) / 2) * 0.11;
@@ -166,7 +166,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   }
   if (w.link && b.hero.id === 'huangzhong') {
     // 定军神射：专射血最多的敌人
-    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
+    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
     if (!cands.length) return;
     cands.sort((a, c) => c.hp - a.hp);
     for (let i = 0; i < L.count; i++) {
@@ -184,12 +184,12 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   }
   if (w.evo) {
     // 随机射向附近的敌人
-    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
+    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
     if (!cands.length) return;
     cands.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
     targets = [cands[(Math.random() * Math.min(8, cands.length)) | 0]];
   } else {
-    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
+    const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
     if (!cands.length) return;
     cands.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
     targets = [];
@@ -325,7 +325,7 @@ function blade(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t = L.cd * b.cdMul;
   const p = b.player;
   const R = L.area * b.areaMul;
-  const t = b.nearestEnemy(R * 1.6);
+  const t = b.nearestEnemy(R * 1.15);
   const dir = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   const arc = L.arc || 1.2;
   let hits = 0;
@@ -359,7 +359,7 @@ function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (w.t > 0) return;
   w.t = L.cd * b.cdMul;
   const p = b.player;
-  const t = b.nearestEnemy(150);
+  const t = b.nearestEnemy(95);
   const base = t ? Math.atan2(t.y - (p.y - 10), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   for (let i = 0; i < L.count; i++) {
     const a = w.evo ? base + (i / L.count) * TAU : base + (i - (L.count - 1) / 2) * 0.35;
@@ -382,7 +382,7 @@ function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 /** 吕布：方天画戟旋风斩 */
 function halberd(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const p = b.player;
-  if (!w.evo) {
+  if (!w.evo || L.cd > 0) {
     if (w.active <= 0) {
       w.t -= dt;
       if (w.t <= 0) { w.active = (L.duration || 1) * b.durMul; w.t = L.cd * b.cdMul; }
@@ -406,7 +406,7 @@ function knife(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (w.t > 0) return;
   w.t = L.cd * b.cdMul;
   const p = b.player;
-  const t = b.nearestEnemy(L.area * 1.5);
+  const t = b.nearestEnemy(L.area * 1.15);
   const base = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   const sp = L.speed || 200;
   const range = L.area * Math.sqrt(b.areaMul);
@@ -491,7 +491,7 @@ function catapult(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t = L.cd * b.cdMul;
   const p = b.player;
   // 优先砸远处的敌群
-  const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -24));
+  const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -30));
   vis.sort((a, c) => (c.x - p.x) ** 2 + (c.y - p.y) ** 2 - ((a.x - p.x) ** 2 + (a.y - p.y) ** 2));
   for (let i = 0; i < L.count; i++) {
     const t = vis.length ? vis[Math.floor(Math.random() * Math.min(vis.length, 12))] : null;
@@ -570,7 +570,7 @@ function bow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (w.t > 0) return;
   w.t = L.cd * b.cdMul;
   const p = b.player;
-  const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -10));
+  const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
   if (!cands.length) { w.t = 0.2; return; }
   cands.sort((a, c) => c.hp - a.hp);
   const ox = p.x, oy = p.y - 10;
@@ -599,7 +599,7 @@ function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const p = b.player;
   const len = L.area * b.areaMul;
   const width = 13 * Math.sqrt(b.areaMul) * (w.evo ? 1.3 : 1);
-  const t = b.nearestEnemy(len * 1.3);
+  const t = b.nearestEnemy(len * 1.1);
   const baseA = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
   const dmg = L.dmg * b.base.atk;
   let hits = 0;
@@ -635,7 +635,7 @@ function chakram(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   const hit = new Set<number>();
   let thrown = 0;
   for (let s = 0; s < L.count; s++) {
-    let cur = s === 0 ? b.nearestEnemy(b.viewW * 0.6) : b.randomVisibleEnemy();
+    let cur = s === 0 ? b.nearestEnemy(b.viewW * 0.42) : b.randomVisibleEnemy();
     if (!cur || hit.has(cur.uid)) cur = b.randomVisibleEnemy();
     if (!cur || hit.has(cur.uid)) continue;
     thrown++;
@@ -667,7 +667,7 @@ function ji(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (w.t > 0) return;
   w.t = L.cd * b.cdMul;
   const p = b.player;
-  const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -16));
+  const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
   vis.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
   for (let i = 0; i < L.count; i++) {
     const t = vis.length ? vis[Math.floor(Math.random() * Math.min(vis.length, 10))] : null;

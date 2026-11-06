@@ -1,12 +1,16 @@
 // 上架前需要填写的平台配置。广告位 ID 在微信「流量主」/ 抖音「广告变现」后台申请。
 
 declare const process: { env: Record<string, string | undefined> };
+/** 浏览器网页版（构建时注入） */
+export const IS_WEB = process.env.TARGET === 'web';
 /** 小红书小工具版本（离线 H5，构建时注入） */
 export const IS_XHS = process.env.TARGET === 'xhs';
 /** TapTap H5 小游戏版本（离线 H5，构建时注入） */
 export const IS_TAP = process.env.TARGET === 'tap';
 /** 微信小游戏版本 */
 export const IS_WX = process.env.TARGET === 'wx';
+/** 新版国风重彩暗金 UI 开关（先在网页版启用，确认后再同步到微信版） */
+export const NEW_UI = IS_WEB;
 /** 离线 H5 版本（小红书 / TapTap）：不接平台 SDK，没有分享和好友排行，音效运行时合成 */
 export const IS_H5 = IS_XHS || IS_TAP;
 /** 无广告版本：原来看视频的地方改为免费领取、元宝兑换或直接去掉 */

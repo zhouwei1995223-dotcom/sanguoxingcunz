@@ -71,12 +71,13 @@ function updateEndless(b: Battle, dt: number) {
     et.bossIdx++;
     const [x, y] = b.spawnPoint();
     // 首领血量随时间成长
-    b.spawnBoss(id, x, y, false, 0.4 + m * 0.12);
+    const endlessGrow = b.chapter.hpMul * (1 + b.chapter.growth * m + (b.chapter.duration >= 1e8 ? 0.22 : 0.05) * m * m) * (0.75 + m * 0.08);
+    b.spawnBoss(id, x, y, false, endlessGrow);
     if (late) {
       const id2 = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
       et.bossIdx++;
       const [x2, y2] = b.spawnPoint();
-      b.spawnBoss(id2, x2, y2, false, 0.4 + m * 0.12);
+      b.spawnBoss(id2, x2, y2, false, endlessGrow);
       b.hooks.banner('两员敌将同时杀到！', '#e43b44');
     }
   }

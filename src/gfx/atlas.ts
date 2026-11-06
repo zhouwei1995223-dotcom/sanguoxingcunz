@@ -11,6 +11,7 @@ import { SOLDIER_STYLES, GENERAL_STYLES } from './art/roster';
 import * as I from './art/items';
 import { decorImage, THEMES } from './art/env';
 import { iconImage, ICON_NAMES } from './art/icons';
+import { getFinePixelIcon, FINE_ICON_NAMES } from '../ui/iconsFine';
 
 // 运行时图集：启动时把所有代码生成的像素图打包进若干张大画布。
 
@@ -207,4 +208,8 @@ export function buildAtlas() {
     }
   }
   ICON_NAMES.forEach((n) => addSprite('icon_' + n, iconImage(n)));
+  FINE_ICON_NAMES.forEach((n) => {
+    const img = getFinePixelIcon(n);
+    if (img) addSprite('icon_hd_' + n, img);
+  });
 }

@@ -17,7 +17,7 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
-import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG } from '../data/platformConfig';
+import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 import { ORDERS, LINKS } from '../data/defense';
@@ -89,10 +89,32 @@ function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: numb
   const pressed = ui.isPressed(id);
   const off = pressed ? 4 * u : 0;
   const border = info.evo || ex.evoReady ? '#feae34' : ex.link ? '#fee761' : info.isNew ? '#2ce8f5' : '#c89b5c';
-  ui.pixRect(x, y + off, w, h, '#120d0c');
-  ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
-  ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, info.evo ? '#5a3a14' : ex.link ? '#4a3418' : '#3a2c2a');
-  if (highlight || ex.rec) {
+    if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
+  if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
+  if (!NEW_UI) {
+      if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
+    if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
+    ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, info.evo ? '#5a3a14' : ex.link ? '#4a3418' : '#3a2c2a');
+    if (!NEW_UI && (highlight || ex.rec)) {
+      ui.ctx.globalAlpha = (highlight ? 0.15 : 0.08) + 0.08 * Math.sin(ui.time * 6);
+      ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#fee761');
+      ui.ctx.globalAlpha = 1;
+    }
+  } else {
+    ui.panel(x, y + off, w, h, 'wood');
+    const g = ui.ctx;
+    const accent = info.evo || ex.evoReady ? '#b8281e' : ex.link ? '#b85c14' : ex.rec ? '#256b38' : info.isNew ? '#1f5a82' : '#8c765a';
+    g.save();
+    g.strokeStyle = accent;
+    g.lineWidth = Math.max(1.5, u * (info.evo || ex.evoReady || ex.rec ? 2.2 : 1.4));
+    g.strokeRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u);
+    if (highlight || ex.rec || info.evo) {
+      g.fillStyle = info.evo ? 'rgba(184,40,30,0.08)' : 'rgba(37,107,56,0.07)';
+      g.fillRect(x + 9 * u, y + 9 * u + off, w - 18 * u, h - 18 * u);
+    }
+    g.restore();
+  }
+  if (!NEW_UI && (highlight || ex.rec)) {
     ui.ctx.globalAlpha = (highlight ? 0.15 : 0.08) + 0.08 * Math.sin(ui.time * 6);
     ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#fee761');
     ui.ctx.globalAlpha = 1;
@@ -114,13 +136,27 @@ function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: numb
     for (let i = 0; i < info.max; i++) {
       const sx = x + w - 30 * u - (info.max - i) * 26 * u, sy = y + 30 * u + off;
       if (sx < tagX) continue;
-      ui.pixRect(sx, sy, 20 * u, 20 * u, i < info.lv ? (i === info.lv - 1 ? '#fee761' : '#feae34') : '#231917', 4 * u);
+      if (!NEW_UI) {
+        ui.pixRect(sx, sy, 20 * u, 20 * u, i < info.lv ? (i === info.lv - 1 ? '#fee761' : '#feae34') : '#231917', 4 * u);
+      } else {
+        const active = i < info.lv;
+        const newest = i === info.lv - 1;
+        ui.pixRect(sx, sy, 18 * u, 18 * u, active ? (newest ? '#b8281e' : '#c97a1c') : '#dfd2ba', Math.max(1.5, Math.round(u * 2)));
+        ui.ctx.strokeStyle = active ? '#2b1e16' : '#8c7a64';
+        ui.ctx.lineWidth = Math.max(1, u);
+        ui.ctx.strokeRect(sx + 0.5, sy + 0.5, 18 * u - 1, 18 * u - 1);
+      }
     }
   }
   ui.wrapText(info.desc, tx, y + 64 * u + off, w - (tx - x) - 24 * u, 24, '#d9c6a0');
   if (ex.recipe) {
-    ui.pixRect(x + 20 * u, y + h - 50 * u + off, w - 40 * u, 34 * u, 'rgba(0,0,0,0.3)');
-    ui.text(ex.recipe, x + 34 * u, y + h - 33 * u + off, 20, ex.recipeOk ? '#9be37a' : ex.link ? '#fee761' : '#a89a86', 'left');
+    if (!NEW_UI) {
+      ui.pixRect(x + 20 * u, y + h - 50 * u + off, w - 40 * u, 34 * u, 'rgba(0,0,0,0.3)');
+    } else {
+      ui.pixRect(x + 20 * u, y + h - 50 * u + off, w - 40 * u, 34 * u, 'rgba(92,72,48,0.12)', Math.max(1.5, Math.round(u * 2)));
+      ui.pixRect(x + 20 * u, y + h - 50 * u + off, 4 * u, 34 * u, ex.recipeOk ? '#256b38' : '#b5281f');
+    }
+    ui.text(ex.recipe, x + 34 * u, y + h - 33 * u + off, 20, ex.recipeOk ? '#9be37a' : ex.link ? '#fee761' : '#a89a86', 'left', NEW_UI ? null : undefined);
   }
   if (ex.banish) {
     ui.ctx.globalAlpha = ex.banish === 'yes' ? 0.35 + 0.1 * Math.sin(ui.time * 8) : 0.55;
@@ -142,7 +178,7 @@ export class LevelUpDialog implements Dialog {
     const u = ui.u;
     const b = this.scene.battle;
     const t = this.t || 0;
-    ui.ribbon(ui.W / 2, ui.H * 0.2, 420 * u, `升级！Lv.${b.level}`, '#3e8948');
+    ui.ribbon(ui.W / 2, ui.H * 0.2, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
     ui.text('选择一项强化', ui.W / 2, ui.H * 0.2 + 64 * u, 26, C.textDim);
     const cw = ui.W - 70 * u, ch = 220 * u;
     let y = ui.H * 0.2 + 110 * u;
@@ -255,9 +291,18 @@ export class QiyuDialog implements Dialog {
     const u = ui.u;
     const d = QIYU_BY_ID[qid];
     const off = ui.isPressed(id) ? 4 * u : 0;
-    ui.pixRect(x, y + off, w, h, '#120d0c');
-    ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, '#4fb06a');
-    ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#1c3326');
+      if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
+    if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, '#4fb06a');
+    if (!NEW_UI) {
+        if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
+      if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, '#4fb06a');
+      ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#1c3326');
+    } else {
+      ui.panel(x, y + off, w, h, 'wood');
+      ui.ctx.strokeStyle = '#2b6e3f';
+      ui.ctx.lineWidth = Math.max(1.5, u * 1.8);
+      ui.ctx.strokeRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u);
+    }
     const isz = h - 60 * u;
     ui.qualityFrame(x + 20 * u, y + 30 * u + off, isz, '#4fb06a');
     ui.icon(d.icon, x + 20 * u + isz / 2, y + 30 * u + isz / 2 + off, isz * 0.66);
@@ -339,9 +384,18 @@ export class StrategyDialog implements Dialog {
     const off = pressed ? 4 * u : 0;
     // 边框按品质固定颜色（神机原来是流光变色，看着像在闪，改成固定的）
     const border = TIER_COLORS[d.tier];
-    ui.pixRect(x, y + off, w, h, '#120d0c');
-    ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
-    ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, d.tier === 2 ? '#3a2240' : d.tier === 1 ? '#4a3418' : '#1f2c40');
+      if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
+    if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
+    if (!NEW_UI) {
+        if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
+      if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
+      ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, d.tier === 2 ? '#3a2240' : d.tier === 1 ? '#4a3418' : '#1f2c40');
+    } else {
+      ui.panel(x, y + off, w, h, 'wood');
+      ui.ctx.strokeStyle = d.tier === 2 ? '#80327a' : d.tier === 1 ? '#b85c14' : '#1f5a82';
+      ui.ctx.lineWidth = Math.max(1.5, u * 1.8);
+      ui.ctx.strokeRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u);
+    }
     const isz = h - 60 * u;
     ui.qualityFrame(x + 20 * u, y + 30 * u + off, isz, border);
     ui.icon('jinnang', x + 20 * u + isz / 2, y + 30 * u + isz / 2 + off, isz * 0.66);

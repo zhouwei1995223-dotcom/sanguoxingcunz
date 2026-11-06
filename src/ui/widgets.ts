@@ -3,7 +3,7 @@ import { EQUIP_BY_ID, QUALITY_COLORS, QUALITY_NAMES, Reward } from '../data/meta
 import type { EquipItem } from '../meta/save';
 import { fmtNum, easeOutBack } from '../core/math';
 import { HERO_BY_ID } from '../data/heroes';
-import { NO_ADS } from '../data/platformConfig';
+import { NO_ADS, NEW_UI } from '../data/platformConfig';
 
 // 通用界面组件
 
@@ -80,15 +80,31 @@ export function dialogFrame(ui: UI, w: number, h: number, title: string, t = 1, 
   const x = ui.W / 2 - W / 2;
   const y = ui.H / 2 - H / 2;
   ui.panel(x, y, W, H, 'wood');
-  ui.ribbon(ui.W / 2, y + 6 * u, Math.min(W * 0.7, 380 * u), title);
+  ui.ribbon(ui.W / 2, y + 6 * u, Math.min(W * 0.72, 400 * u), title);
   let close = false;
   if (closeId) {
     const cs = 64 * u;
     const cx = x + W - cs + 10 * u, cy = y - 10 * u;
     close = ui.clicked(closeId, cx - 10 * u, cy - 10 * u, cs + 20 * u, cs + 20 * u);
-    ui.pixRect(cx, cy, cs, cs, '#120d0c');
-    ui.pixRect(cx + 4 * u, cy + 4 * u, cs - 8 * u, cs - 8 * u, '#a22633');
-    ui.text('✕', cx + cs / 2, cy + cs / 2, 30, '#fff', 'center', null);
+    if (!NEW_UI) {
+      ui.pixRect(cx, cy, cs, cs, '#120d0c');
+      ui.pixRect(cx + 4 * u, cy + 4 * u, cs - 8 * u, cs - 8 * u, '#a22633');
+      ui.text('✕', cx + cs / 2, cy + cs / 2, 30, '#fff', 'center', null);
+    } else {
+      // 轻巧朱文小方印关闭按钮
+      const pressed = ui.isPressed(closeId);
+      const off = pressed ? 2 * u : 0;
+      const p = Math.max(2, Math.round(u * 2.5));
+      const b = Math.max(1.5, Math.round(u * 1.8));
+      ui.pixRect(cx, cy + b * 1.2, cs, cs, 'rgba(28,20,14,0.2)', p);
+      ui.pixRect(cx, cy + off, cs, cs, '#362a20', p);
+      ui.pixRect(cx + b, cy + b + off, cs - b * 2, cs - b * 2, '#f5ecda', p);
+      ui.pixRect(cx + b * 2.2, cy + b * 2.2 + off, cs - b * 4.4, cs - b * 4.4, '#a8231c', Math.max(1, p - 1));
+      ui.ctx.strokeStyle = 'rgba(247,239,224,0.65)';
+      ui.ctx.lineWidth = Math.max(1, u * 1.2);
+      ui.ctx.strokeRect(cx + b * 3.4, cy + b * 3.4 + off, cs - b * 6.8, cs - b * 6.8);
+      ui.text('✕', cx + cs / 2, cy + cs / 2 + off, 26, '#fbf4e4', 'center', null);
+    }
   }
   return { x: ui.W / 2 - w / 2, y: ui.H / 2 - h / 2, close };
 }
@@ -102,15 +118,54 @@ export function adButton(ui: UI, id: string, x: number, y: number, w: number, h:
 
 export function currencyBar(ui: UI, x: number, y: number, w: number, icon: string, value: string, plusId?: string): boolean {
   const u = ui.u;
-  const h = 52 * u;
-  ui.pixRect(x, y, w, h, 'rgba(10,6,8,0.65)');
-  ui.icon(icon, x + 26 * u, y + h / 2, 40 * u);
-  ui.text(value, x + 52 * u, y + h / 2, 24, '#fff', 'left');
+  const h = 50 * u;
+  if (!NEW_UI) {
+    ui.pixRect(x, y, w, h, 'rgba(10,6,8,0.65)');
+    ui.icon(icon, x + 26 * u, y + h / 2, 40 * u);
+    ui.text(value, x + 52 * u, y + h / 2, 24, '#fff', 'left');
+    if (plusId) {
+      const ps = 40 * u;
+      const px = x + w - ps - 6 * u, py = y + (h - ps) / 2;
+      ui.pixRect(px, py, ps, ps, '#3e8948');
+      ui.text('+', px + ps / 2, py + ps / 2, 30, '#fff', 'center', null);
+      return ui.clicked(plusId, x, y, w, h);
+    }
+    return false;
+  }
+
+  // 新版轻盈宣纸乌丝货币笺条
+  const p = Math.max(2, Math.round(u * 2.5));
+  const b = Math.max(1.5, Math.round(u * 1.6));
+  const ctx = ui.ctx;
+  ui.pixRect(x, y + b, w, h, 'rgba(28,20,14,0.14)', p);
+  ui.pixRect(x, y, w, h, '#3d3025', p);
+  const slotGrad = ctx.createLinearGradient(x, y + b, x, y + h - b);
+  slotGrad.addColorStop(0, '#f7f0e0');
+  slotGrad.addColorStop(1, '#e6d7bc');
+  ui.pixRect(x + b, y + b, w - b * 2, h - b * 2, slotGrad as unknown as string, Math.max(1, p - 1));
+  ui.paperTexture(x + b, y + b, w - b * 2, h - b * 2, { alpha: 0.9, patina: true });
+  ctx.strokeStyle = 'rgba(130,108,82,0.42)';
+  ctx.lineWidth = Math.max(1, u);
+  ctx.strokeRect(x + b * 2, y + b * 2, w - b * 4, h - b * 4);
+  // 左侧图标淡墨圆底座
+  ctx.fillStyle = 'rgba(72,56,42,0.10)';
+  ctx.beginPath();
+  ctx.arc(x + 27 * u, y + h / 2, 16 * u, 0, Math.PI * 2);
+  ctx.fill();
+  ui.icon(icon, x + 27 * u, y + h / 2, 36 * u);
+  ui.text(value, x + 52 * u, y + h / 2 + 1 * u, 23, '#1e1814', 'left', null);
   if (plusId) {
-    const ps = 40 * u;
-    const px = x + w - ps - 6 * u, py = y + (h - ps) / 2;
-    ui.pixRect(px, py, ps, ps, '#3e8948');
-    ui.text('+', px + ps / 2, py + ps / 2, 30, '#fff', 'center', null);
+    const ps = 34 * u;
+    const px = x + w - ps - 8 * u, py = y + (h - ps) / 2;
+    const pressed = ui.isPressed(plusId);
+    const off = pressed ? 1.5 * u : 0;
+    // 轻巧朱砂小印加号按钮
+    ui.pixRect(px, py + off, ps, ps, '#8c2219', Math.max(1, p - 1));
+    ui.pixRect(px + b * 0.8, py + b * 0.8 + off, ps - b * 1.6, ps - b * 1.6, '#b82e23', Math.max(1, p - 1));
+    ctx.strokeStyle = 'rgba(247,239,224,0.55)';
+    ctx.lineWidth = Math.max(1, u);
+    ctx.strokeRect(px + b * 1.6, py + b * 1.6 + off, ps - b * 3.2, ps - b * 3.2);
+    ui.text('+', px + ps / 2, py + ps / 2 + off, 25, '#fbf4e4', 'center', null);
     return ui.clicked(plusId, x, y, w, h);
   }
   return false;

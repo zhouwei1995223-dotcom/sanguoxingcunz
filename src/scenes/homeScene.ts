@@ -30,7 +30,7 @@ import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
-import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE } from '../data/platformConfig';
+import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 
 /** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
@@ -101,17 +101,55 @@ export class HomeScene implements Scene {
   /** 非征战页的背景：深色砖纹 */
   private drawPlainBg(ui: UI) {
     const g = ui.ctx;
-    g.fillStyle = '#211a2c';
+    if (!NEW_UI) {
+      g.fillStyle = '#211a2c';
+      g.fillRect(0, 0, ui.W, ui.H);
+      const bw = 96 * ui.u, bh = 48 * ui.u;
+      g.fillStyle = '#2a2236';
+      for (let y = 0, r = 0; y < ui.H; y += bh, r++)
+        for (let x = (r % 2) * -bw / 2; x < ui.W; x += bw) g.fillRect(x + 3 * ui.u, y + 3 * ui.u, bw - 6 * ui.u, bh - 6 * ui.u);
+      const grad = g.createLinearGradient(0, 0, 0, ui.H);
+      grad.addColorStop(0, 'rgba(90,40,60,0.35)');
+      grad.addColorStop(1, 'rgba(10,8,16,0.6)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, ui.W, ui.H);
+      return;
+    }
+
+    // 新版水墨山河宣纸内页底纹：整张温润宣纸长卷 + 远山叠嶂淡墨剪影
+    ui.markPaper(0, 0, ui.W, ui.H);
+    const bgGrad = g.createLinearGradient(0, 0, 0, ui.H);
+    bgGrad.addColorStop(0, '#f0e7d5');
+    bgGrad.addColorStop(0.5, '#e3d5bb');
+    bgGrad.addColorStop(1, '#d2c0a0');
+    g.fillStyle = bgGrad;
     g.fillRect(0, 0, ui.W, ui.H);
-    const bw = 96 * ui.u, bh = 48 * ui.u;
-    g.fillStyle = '#2a2236';
-    for (let y = 0, r = 0; y < ui.H; y += bh, r++)
-      for (let x = (r % 2) * -bw / 2; x < ui.W; x += bw) g.fillRect(x + 3 * ui.u, y + 3 * ui.u, bw - 6 * ui.u, bh - 6 * ui.u);
-    const grad = g.createLinearGradient(0, 0, 0, ui.H);
-    grad.addColorStop(0, 'rgba(90,40,60,0.35)');
-    grad.addColorStop(1, 'rgba(10,8,16,0.6)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, ui.W, ui.H);
+    ui.paperTexture(0, 0, ui.W, ui.H, { alpha: 0.96, patina: true, patinaStrength: 1.2, stains: true });
+    // 宣纸横丝纹理
+    g.fillStyle = 'rgba(92,72,50,0.032)';
+    for (let y = 0; y < ui.H; y += Math.max(4, Math.round(12 * ui.u))) {
+      g.fillRect(0, y, ui.W, Math.max(1, Math.round(ui.u)));
+    }
+    // 顶部水墨远山淡影
+    g.fillStyle = 'rgba(60,52,44,0.08)';
+    g.beginPath();
+    g.moveTo(0, 360 * ui.u);
+    g.lineTo(0, 220 * ui.u);
+    g.quadraticCurveTo(ui.W * 0.28, 150 * ui.u, ui.W * 0.55, 235 * ui.u);
+    g.quadraticCurveTo(ui.W * 0.82, 165 * ui.u, ui.W, 215 * ui.u);
+    g.lineTo(ui.W, 360 * ui.u);
+    g.closePath();
+    g.fill();
+    // 底部远山叠嶂水墨剪影
+    g.fillStyle = 'rgba(54,46,38,0.09)';
+    g.beginPath();
+    g.moveTo(0, ui.H);
+    g.lineTo(0, ui.H - 280 * ui.u);
+    g.quadraticCurveTo(ui.W * 0.25, ui.H - 350 * ui.u, ui.W * 0.52, ui.H - 260 * ui.u);
+    g.quadraticCurveTo(ui.W * 0.78, ui.H - 340 * ui.u, ui.W, ui.H - 250 * ui.u);
+    g.lineTo(ui.W, ui.H);
+    g.closePath();
+    g.fill();
   }
 
   /** 进入主城时自动弹出：签到 */
@@ -126,21 +164,83 @@ export class HomeScene implements Scene {
   private drawTopBar(ui: UI, power: number) {
     const u = ui.u;
     const y = ui.safeTop + 6 * u;
-    // 头像与战力
-    const av = 92 * u;
-    ui.qualityFrame(16 * u, y, av, '#feae34');
-    ui.icon(`${heroSpriteName(save.hero)}_0`, 16 * u + av / 2, y + av / 2, av * 0.9);
-    ui.pixRect(16 * u, y + av - 4 * u, av, 30 * u, '#120d0c');
-    ui.text('Lv.' + save.heroes[save.hero].lv, 16 * u + av / 2, y + av + 11 * u, 18, '#fff');
-    ui.text('战力', 124 * u, y + 24 * u, 20, C.textDim, 'left');
-    const pc = this.flashPower > 0 ? (Math.floor(this.flashPower * 10) % 2 ? '#fee761' : '#fff') : '#fee761';
-    ui.text(fmtNum(power), 124 * u, y + 62 * u, 34, pc, 'left');
-    // 货币
+    if (!NEW_UI) {
+      // 头像与战力
+      const av = 92 * u;
+      ui.qualityFrame(16 * u, y, av, '#feae34');
+      ui.icon(`${heroSpriteName(save.hero)}_0`, 16 * u + av / 2, y + av / 2, av * 0.9);
+      ui.pixRect(16 * u, y + av - 4 * u, av, 30 * u, '#120d0c');
+      ui.text('Lv.' + save.heroes[save.hero].lv, 16 * u + av / 2, y + av + 11 * u, 18, '#fff');
+      ui.text('战力', 124 * u, y + 24 * u, 20, C.textDim, 'left');
+      const pc = this.flashPower > 0 ? (Math.floor(this.flashPower * 10) % 2 ? '#fee761' : '#fff') : '#fee761';
+      ui.text(fmtNum(power), 124 * u, y + 62 * u, 34, pc, 'left');
+      // 货币
+      const cw = 196 * u;
+      const cx = ui.W - cw - 16 * u;
+      const st = staminaNextSeconds();
+      if (currencyBar(ui, cx, y, cw, 'stamina', `${save.stamina}/${STAMINA.max}`, 'top_stamina')) game.openDialog(new StaminaDialog());
+      if (st > 0) ui.text(fmtTime(st), cx + cw / 2 + 10 * u, y + 66 * u, 16, C.textDim);
+      currencyBar(ui, cx - cw - 10 * u, y, cw, 'gold', fmtNum(save.gold));
+      if (currencyBar(ui, cx - cw - 10 * u, y + 62 * u + 20 * u, cw, 'yuanbao', fmtNum(save.yuanbao), 'top_yb')) this.tab = 'shop';
+      currencyBar(ui, cx, y + 62 * u + 20 * u, cw, 'iron', fmtNum(save.iron));
+      return;
+    }
+
+    const ctx = ui.ctx;
+    // 顶部轻柔宣纸云雾衬底，无生硬黑块
+    const topH = y + 146 * u;
+    const topGrad = ctx.createLinearGradient(0, 0, 0, topH);
+    topGrad.addColorStop(0, 'rgba(236,226,206,0.75)');
+    topGrad.addColorStop(0.65, 'rgba(236,226,206,0.28)');
+    topGrad.addColorStop(1, 'rgba(236,226,206,0)');
+    ctx.fillStyle = topGrad;
+    ctx.fillRect(0, 0, ui.W, topH);
+
+    // 左上角：轻盈水墨宣纸帅印牌 + 连体战力笺
+    const av = 94 * u;
+    const ax = 16 * u;
+    const p = Math.max(2, Math.round(u * 2.5));
+    const b = Math.max(1.5, Math.round(u * 1.6));
+    const px = ax + av - 6 * u;
+    const pw = 198 * u;
+    const ph = av;
+    const py = y;
+    ui.pixRect(px, py + b, pw, ph, 'rgba(28,20,14,0.14)', p);
+    ui.pixRect(px, py, pw, ph, '#3d3025', p);
+    const pGrad = ctx.createLinearGradient(px, py + b, px, py + ph - b);
+    pGrad.addColorStop(0, '#f7f0e0');
+    pGrad.addColorStop(1, '#e6d7bc');
+    ui.pixRect(px + b, py + b, pw - b * 2, ph - b * 2, pGrad as unknown as string, Math.max(1, p - 1));
+    ui.paperTexture(px + b, py + b, pw - b * 2, ph - b * 2, { alpha: 0.9, patina: true });
+    ctx.strokeStyle = 'rgba(130,108,82,0.42)';
+    ctx.lineWidth = Math.max(1, u);
+    ctx.strokeRect(px + b * 2, py + b * 2, pw - b * 4, ph - b * 4);
+    // 战力标题朱砂签条
+    ui.pixRect(px + 12 * u, py + 9 * u, pw - 24 * u, 25 * u, '#a8261d', Math.max(1, p - 1));
+    ui.icon('atk', px + 28 * u, py + 21.5 * u, 20 * u);
+    ui.text('主公战力', px + 44 * u, py + 21.5 * u, 18, '#fbf4e4', 'left', null);
+    const pc = this.flashPower > 0 ? (Math.floor(this.flashPower * 10) % 2 ? '#b5281f' : '#1e1814') : '#1e1814';
+    ui.text(fmtNum(power), px + 20 * u, py + 64 * u, 34, pc, 'left', null);
+
+    // 头像框与宣纸等级签
+    ui.qualityFrame(ax, y, av, '#b86818');
+    ui.icon(`${heroSpriteName(save.hero)}_0`, ax + av / 2, y + av / 2 - 2 * u, av * 0.88);
+    // 底部等级宣纸小横匾
+    const lvY = y + av - 6 * u;
+    ui.pixRect(ax + 4 * u, lvY, av - 8 * u, 28 * u, '#3d3025', Math.max(1, p - 1));
+    ui.pixRect(ax + 4 * u + b, lvY + b, av - 8 * u - b * 2, 28 * u - b * 2, '#f5ecda', Math.max(1, p - 1));
+    ui.text('Lv.' + save.heroes[save.hero].lv, ax + av / 2, lvY + 14 * u, 18, '#1e1814', 'center', null);
+    if (ui.clicked('top_hero_badge', ax, y, av + pw - 8 * u, av + 24 * u)) {
+      this.viewHero = save.hero;
+      this.tab = 'hero';
+    }
+
+    // 货币区（2×2 矩阵）
     const cw = 196 * u;
     const cx = ui.W - cw - 16 * u;
     const st = staminaNextSeconds();
     if (currencyBar(ui, cx, y, cw, 'stamina', `${save.stamina}/${STAMINA.max}`, 'top_stamina')) game.openDialog(new StaminaDialog());
-    if (st > 0) ui.text(fmtTime(st), cx + cw / 2 + 10 * u, y + 66 * u, 16, C.textDim);
+    if (st > 0) ui.text(fmtTime(st), cx + cw / 2 + 10 * u, y + 64 * u, 16, '#5c4d3e', 'center', 'rgba(246,238,222,0.85)');
     currencyBar(ui, cx - cw - 10 * u, y, cw, 'gold', fmtNum(save.gold));
     if (currencyBar(ui, cx - cw - 10 * u, y + 62 * u + 20 * u, cw, 'yuanbao', fmtNum(save.yuanbao), 'top_yb')) this.tab = 'shop';
     currencyBar(ui, cx, y + 62 * u + 20 * u, cw, 'iron', fmtNum(save.iron));
@@ -152,23 +252,102 @@ export class HomeScene implements Scene {
     const u = ui.u;
     const h = 140 * u;
     const y = ui.H - h - ui.safeBottom;
-    ui.ctx.fillStyle = '#120d0c';
-    ui.ctx.fillRect(0, y - 6 * u, ui.W, h + 6 * u + ui.safeBottom);
-    ui.ctx.fillStyle = C.border;
-    ui.ctx.fillRect(0, y - 6 * u, ui.W, 4 * u);
+    if (!NEW_UI) {
+      ui.ctx.fillStyle = '#120d0c';
+      ui.ctx.fillRect(0, y - 6 * u, ui.W, h + 6 * u + ui.safeBottom);
+      ui.ctx.fillStyle = C.border;
+      ui.ctx.fillRect(0, y - 6 * u, ui.W, 4 * u);
+      const tw = ui.W / TABS.length;
+      TABS.forEach((t, i) => {
+        const x = i * tw;
+        const active = this.tab === t.id;
+        const big = t.id === 'battle';
+        this.navRects[t.id] = [x, y, tw, h];
+        if (active) {
+          ui.pixRect(x + 6 * u, y + 4 * u, tw - 12 * u, h - 8 * u, '#5a3a24');
+          ui.pixRect(x + 10 * u, y + 8 * u, tw - 20 * u, h - 16 * u, '#7a5030');
+        }
+        const isz = (big ? 78 : 60) * u * (active ? 1.1 : 1);
+        ui.icon(t.icon, x + tw / 2, y + (big ? 52 : 56) * u - (active ? 6 * u : 0), isz);
+        ui.text(t.name, x + tw / 2, y + h - 26 * u, active ? 28 : 24, active ? C.gold : C.textDim);
+        const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && anyHeroRedDot());
+        if (dot) ui.redDot(x + tw - 22 * u, y + 18 * u);
+        if (ui.clicked('nav_' + t.id, x, y, tw, h)) {
+          this.tab = t.id;
+          if (save.guide === 1 && t.id === 'equip') save.guide = 2;
+          if (save.guide === 3 && t.id === 'talent') save.guide = 4;
+          if (save.guide === 5 && t.id === 'battle') save.guide = 6;
+        }
+      });
+      return;
+    }
+
+    const ctx = ui.ctx;
+    // 底部轻盈古籍宣纸长卷导航栏（去掉沉重黑底板，改用熟宣卷尾底座）
+    ui.markPaper(0, y - 8 * u, ui.W, h + 8 * u + ui.safeBottom);
+    const navGrad = ctx.createLinearGradient(0, y - 6 * u, 0, ui.H);
+    navGrad.addColorStop(0, '#e6d8be');
+    navGrad.addColorStop(0.5, '#d8c6a6');
+    navGrad.addColorStop(1, '#c8b490');
+    ctx.fillStyle = navGrad;
+    ctx.fillRect(0, y - 6 * u, ui.W, h + 6 * u + ui.safeBottom);
+    ui.paperTexture(0, y - 6 * u, ui.W, h + 6 * u + ui.safeBottom, { alpha: 0.92, patina: true });
+    // 顶部古籍双层乌丝栏墨线
+    ctx.fillStyle = '#3d3024';
+    ctx.fillRect(0, y - 7 * u, ui.W, 2.5 * u);
+    ctx.fillStyle = 'rgba(72,56,42,0.35)';
+    ctx.fillRect(0, y - 2 * u, ui.W, 1.2 * u);
+
     const tw = ui.W / TABS.length;
+    const p = Math.max(2, Math.round(u * 3));
+    const b = Math.max(1.5, Math.round(u * 1.6));
     TABS.forEach((t, i) => {
       const x = i * tw;
       const active = this.tab === t.id;
       const big = t.id === 'battle';
       this.navRects[t.id] = [x, y, tw, h];
-      if (active) {
-        ui.pixRect(x + 6 * u, y + 4 * u, tw - 12 * u, h - 8 * u, '#5a3a24');
-        ui.pixRect(x + 10 * u, y + 8 * u, tw - 20 * u, h - 16 * u, '#7a5030');
+
+      // 页签之间的乌丝细竖线
+      if (i > 0) {
+        ctx.fillStyle = 'rgba(72,56,42,0.22)';
+        ctx.fillRect(x - 0.6 * u, y + 16 * u, 1.2 * u, h - 32 * u);
       }
+
+      if (active) {
+        // 选中态：轻巧升起的宣纸朱砂书签
+        const ay = y - (big ? 10 * u : 4 * u);
+        const ah = h - 4 * u + (big ? 6 * u : 0);
+        ui.pixRect(x + 7 * u, ay + b, tw - 14 * u, ah, 'rgba(28,20,14,0.14)', p);
+        ui.pixRect(x + 7 * u, ay, tw - 14 * u, ah, '#3b2e22', p);
+        const tabGrad = ctx.createLinearGradient(x, ay + b, x, ay + ah - b);
+        tabGrad.addColorStop(0, '#fbf5e6');
+        tabGrad.addColorStop(1, '#ede0c6');
+        ui.pixRect(x + 7 * u + b, ay + b, tw - 14 * u - b * 2, ah - b * 2, tabGrad as unknown as string, Math.max(1, p - 1));
+        ui.paperTexture(x + 7 * u + b, ay + b, tw - 14 * u - b * 2, ah - b * 2, { alpha: 0.9, patina: true });
+        ctx.strokeStyle = 'rgba(168,38,29,0.45)';
+        ctx.lineWidth = Math.max(1, u);
+        ctx.strokeRect(x + 7 * u + b * 2.2, ay + b * 2.2, tw - 14 * u - b * 4.4, ah - b * 4.4);
+        // 顶部朱砂书签红条
+        ctx.fillStyle = '#b5281f';
+        ctx.fillRect(x + 22 * u, ay + b * 2.2, tw - 44 * u, 4 * u);
+      } else if (big) {
+        // 未选中时的中央「征战」淡墨圆晕
+        ctx.fillStyle = 'rgba(72,56,42,0.08)';
+        ctx.beginPath();
+        ctx.arc(x + tw / 2, y + 54 * u, 40 * u, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       const isz = (big ? 78 : 60) * u * (active ? 1.1 : 1);
-      ui.icon(t.icon, x + tw / 2, y + (big ? 52 : 56) * u - (active ? 6 * u : 0), isz);
-      ui.text(t.name, x + tw / 2, y + h - 26 * u, active ? 28 : 24, active ? C.gold : C.textDim);
+      const iy = y + (big ? 50 : 54) * u - (active ? 7 * u : 0);
+      if (active) {
+        ctx.fillStyle = 'rgba(181,40,31,0.10)';
+        ctx.beginPath();
+        ctx.arc(x + tw / 2, iy, isz * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ui.icon(t.icon, x + tw / 2, iy, isz);
+      ui.text(t.name, x + tw / 2, y + h - 24 * u, active ? 27 : 24, active ? '#a82219' : '#3b2f24', 'center', null);
       const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && anyHeroRedDot());
       if (dot) ui.redDot(x + tw - 22 * u, y + 18 * u);
       if (ui.clicked('nav_' + t.id, x, y, tw, h)) {
@@ -205,11 +384,74 @@ export class HomeScene implements Scene {
     const u = ui.u;
     const top = this.contentTop(ui);
     const L = this.battleLayout(ui);
-    // 标题
-    const ty = top + 64 * u;
-    ui.text(GAME_INFO.shortName, ui.W / 2 + 4 * u, ty + 4 * u, 88, '#3a0d12', 'center', null);
-    ui.text(GAME_INFO.shortName, ui.W / 2, ty, 88, '#fee761', 'center', '#7a1c24');
-    ui.text('— 乱世幸存者 —', ui.W / 2, ty + 66 * u, 28, '#fff4d6');
+    const ctx = ui.ctx;
+
+    // 标题牌匾与副标题
+    const ty = top + 62 * u;
+    if (!NEW_UI) {
+      ui.text(GAME_INFO.shortName, ui.W / 2 + 4 * u, ty + 4 * u, 88, '#3a0d12', 'center', null);
+      ui.text(GAME_INFO.shortName, ui.W / 2, ty, 88, '#fee761', 'center', '#7a1c24');
+      ui.text('— 乱世幸存者 —', ui.W / 2, ty + 66 * u, 28, '#fff4d6');
+    } else {
+      // 标题背后柔和宣纸云雾衬底（自然晕染，烘托焦墨大字）
+      ctx.save();
+      ctx.translate(ui.W / 2, ty + 4 * u);
+      ctx.scale(3.3, 1);
+      const rGrad = ctx.createRadialGradient(0, 0, 12 * u, 0, 0, 92 * u);
+      rGrad.addColorStop(0, 'rgba(244,235,216,0.78)');
+      rGrad.addColorStop(0.55, 'rgba(232,218,192,0.42)');
+      rGrad.addColorStop(1, 'rgba(232,218,192,0)');
+      ctx.fillStyle = rGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, 92 * u, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // 焦墨重彩书法大标题（外衬宣纸白边 + 浓墨渐变字芯）
+      ctx.save();
+      ctx.font = ui.font(86, true);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      // 宣纸飞白外轮廓与淡墨投影
+      ctx.fillStyle = 'rgba(20,15,12,0.32)';
+      ctx.fillText(GAME_INFO.shortName, ui.W / 2 + 4 * u, ty + 6 * u);
+      ctx.lineWidth = 14 * u;
+      ctx.strokeStyle = '#f6efe0';
+      ctx.strokeText(GAME_INFO.shortName, ui.W / 2, ty);
+      ctx.lineWidth = 6 * u;
+      ctx.strokeStyle = '#c9b694';
+      ctx.strokeText(GAME_INFO.shortName, ui.W / 2, ty);
+      const tGrad = ctx.createLinearGradient(0, ty - 42 * u, 0, ty + 40 * u);
+      tGrad.addColorStop(0, '#362c25');
+      tGrad.addColorStop(0.45, '#1c1613');
+      tGrad.addColorStop(1, '#0d0a08');
+      ctx.fillStyle = tGrad;
+      ctx.fillText(GAME_INFO.shortName, ui.W / 2, ty);
+      ctx.restore();
+
+      // 标题右上角：传统朱文方印「单骑」
+      const sealX = ui.W / 2 + 236 * u, sealY = ty - 38 * u, sealS = 44 * u;
+      ui.pixRect(sealX, sealY, sealS, sealS, '#a82219', Math.max(2, Math.round(u * 2.5)));
+      ctx.strokeStyle = '#f4ead5';
+      ctx.lineWidth = Math.max(1.5, 2 * u);
+      ctx.strokeRect(sealX + 3 * u, sealY + 3 * u, sealS - 6 * u, sealS - 6 * u);
+      ui.text('单骑', sealX + sealS / 2, sealY + sealS / 2 + 1 * u, 16, '#f7efe0', 'center', null);
+
+      // 副标题宣纸乌丝栏横匾 + 两侧对称水墨飞白线
+      const sw = 276 * u, sh = 38 * u, sy0 = ty + 66 * u;
+      const p = Math.max(2, Math.round(u * 3));
+      for (const dir of [-1, 1]) {
+        const wx = ui.W / 2 + dir * (sw / 2 + 10 * u);
+        ctx.fillStyle = 'rgba(28,22,18,0.68)';
+        ctx.fillRect(dir > 0 ? wx : wx - 54 * u, sy0 - 1.5 * u, 54 * u, 3 * u);
+      }
+      ui.pixRect(ui.W / 2 - sw / 2, sy0 - sh / 2, sw, sh, '#1c1613', p);
+      ui.pixRect(ui.W / 2 - sw / 2 + p * 0.8, sy0 - sh / 2 + p * 0.8, sw - p * 1.6, sh - p * 1.6, '#8c7960', p);
+      ui.pixRect(ui.W / 2 - sw / 2 + p * 1.6, sy0 - sh / 2 + p * 1.6, sw - p * 3.2, sh - p * 3.2, '#f0e5cf', Math.max(1, p - 1));
+      ui.text('◆  乱 世 幸 存 者  ◆', ui.W / 2, sy0, 21, '#9e1e18', 'center', null);
+    }
+
     // 点人物进武将页
     const hr = this.camp.heroBox;
     if (ui.clicked('home_hero', hr[0], hr[1], hr[2], hr[3])) { this.viewHero = save.hero; this.tab = 'hero'; }
@@ -259,9 +501,21 @@ export class HomeScene implements Scene {
       const y = sy + i * step;
       this.sideBtnRect[s.id] = [x, y, b, b];
       const pressed = ui.isPressed('side_' + s.id);
-      ui.panel(x, y + (pressed ? 3 * u : 0), b, b, 'dark');
-      ui.icon(s.icon, x + b / 2, y + b / 2 + (pressed ? 3 * u : 0), b * 0.58);
-      ui.text(s.label, x + b / 2, y + b + 16 * u, 20, '#fff');
+      const off = pressed ? 3 * u : 0;
+      ui.panel(x, y + off, b, b, 'dark');
+      ui.icon(s.icon, x + b / 2, y + b * (NEW_UI ? 0.45 : 0.5) + off, b * 0.56);
+      if (!NEW_UI) {
+        ui.text(s.label, x + b / 2, y + b + 16 * u, 20, '#fff');
+      } else {
+        // 底部轻巧宣纸细框题签
+        const lw = b + 4 * u, lh = 24 * u;
+        const lx = x - 2 * u, ly = y + b - 7 * u + off;
+        const lp = Math.max(1.5, Math.round(u * 2));
+        const lb = Math.max(1, Math.round(u * 1.4));
+        ui.pixRect(lx, ly, lw, lh, '#3d3126', lp);
+        ui.pixRect(lx + lb, ly + lb, lw - lb * 2, lh - lb * 2, '#f7f0e0', Math.max(1, lp - 1));
+        ui.text(s.label, x + b / 2, ly + lh / 2 + 0.5 * u, 17, '#1e1814', 'center', null);
+      }
       if (s.dot) ui.redDot(x + b - 6 * u, y + 6 * u);
       if (s.now) ui.tapNow('side_' + s.id, x, y, b, b, s.on);
       else if (ui.clicked('side_' + s.id, x, y, b, b)) s.on();
@@ -269,17 +523,47 @@ export class HomeScene implements Scene {
     drawSide(side, 18 * u, false);
     drawSide(sideR, ui.W - bs - 18 * u, true);
 
-    // 模式切换：征战 / 守城（章节卡上方两个页签）
+    // 模式切换：征战 / 守城（章节卡上方两个轻盈宣纸/篆印页签）
     const mode = save.homeMode || 'chapter';
     {
-      const mw = 200 * u, mh = 58 * u, my = L.cy - mh - 8 * u;
+      const mw = 206 * u, mh = 54 * u, my = L.cy - mh - 8 * u;
       const today = new Date().toISOString().slice(0, 10);
       (['chapter', 'defense'] as const).forEach((m, i) => {
         const mx = ui.W / 2 - mw - 6 * u + i * (mw + 12 * u);
         const on = mode === m;
-        ui.pixRect(mx, my, mw, mh, on ? (m === 'chapter' ? '#a22633' : '#2f7a3a') : 'rgba(20,12,10,0.78)');
-        ui.pixRect(mx, my + mh - 4 * u, mw, 4 * u, on ? '#fee761' : '#5a4038');
-        ui.text(m === 'chapter' ? '征 战' : '守 城', mx + mw / 2, my + mh / 2 - 2 * u, 28, on ? '#fff4d6' : '#a89a86', 'center', on ? '#3a0d12' : null);
+        if (!NEW_UI) {
+          ui.pixRect(mx, my, mw, mh, on ? (m === 'chapter' ? '#a22633' : '#2f7a3a') : 'rgba(20,12,10,0.78)');
+          ui.pixRect(mx, my + mh - 4 * u, mw, 4 * u, on ? '#fee761' : '#5a4038');
+          ui.text(m === 'chapter' ? '征 战' : '守 城', mx + mw / 2, my + mh / 2 - 2 * u, 28, on ? '#fff4d6' : '#a89a86', 'center', on ? '#3a0d12' : null);
+        } else {
+          const p = Math.max(2, Math.round(u * 2.5));
+          const b = Math.max(1.5, Math.round(u * 1.6));
+          ui.pixRect(mx, my + b, mw, mh, 'rgba(28,20,14,0.14)', p);
+          ui.pixRect(mx, my, mw, mh, '#3b2f24', p);
+          if (on) {
+            ui.pixRect(mx + b, my + b, mw - b * 2, mh - b * 2, '#f5ecda', p);
+            const tGrad = ctx.createLinearGradient(mx, my + b * 2, mx, my + mh - b * 2);
+            if (m === 'chapter') {
+              tGrad.addColorStop(0, '#bf3428');
+              tGrad.addColorStop(1, '#962016');
+            } else {
+              tGrad.addColorStop(0, '#3b8050');
+              tGrad.addColorStop(1, '#265c36');
+            }
+            ui.pixRect(mx + b * 2, my + b * 2, mw - b * 4, mh - b * 4, tGrad as unknown as string, Math.max(1, p - 1));
+          } else {
+            const tGrad = ctx.createLinearGradient(mx, my + b, mx, my + mh - b);
+            tGrad.addColorStop(0, '#f5eddc');
+            tGrad.addColorStop(1, '#e0d0b2');
+            ui.pixRect(mx + b, my + b, mw - b * 2, mh - b * 2, tGrad as unknown as string, Math.max(1, p - 1));
+            ctx.strokeStyle = 'rgba(120,98,74,0.4)';
+            ctx.lineWidth = Math.max(1, u);
+            ctx.strokeRect(mx + b * 2.2, my + b * 2.2, mw - b * 4.4, mh - b * 4.4);
+          }
+          const iconName = m === 'chapter' ? 'atk' : 'p_armor';
+          ui.icon(iconName, mx + mw / 2 - 46 * u, my + mh / 2, 28 * u, on ? 1 : 0.72);
+          ui.text(m === 'chapter' ? '征 战' : '守 城', mx + mw / 2 + 14 * u, my + mh / 2, 25, on ? '#fbf4e4' : '#2e241c', 'center', on ? (m === 'chapter' ? '#4a100b' : '#102e19') : null);
+        }
         if (m === 'defense' && !on && save.defense?.day !== today) ui.redDot(mx + mw - 8 * u, my + 6 * u);
         if (ui.clicked('mode_' + m, mx, my, mw, mh)) { save.homeMode = m; markDirty(); }
       });
@@ -294,24 +578,69 @@ export class HomeScene implements Scene {
     const cw = ui.W - 80 * u, chH = L.chH;
     const cx = 40 * u, cy = L.cy;
     ui.panel(cx, cy, cw, chH, 'wood');
-    // 难度页签
+    // 难度页签：古籍乌丝栏 · 朱砂圈点样式（去掉笨重凹槽与实心绿砖）
     const tw = (cw - 60 * u) / 3;
+    if (NEW_UI) {
+      ctx.fillStyle = 'rgba(72,56,42,0.32)';
+      ctx.fillRect(cx + 30 * u, cy + 64 * u, cw - 60 * u, Math.max(1, u * 1.2));
+    }
     DIFFICULTIES.forEach((df, i) => {
       const open = diffOpen(df.id);
-      const tx = cx + 30 * u + i * tw, ty = cy + 20 * u;
+      const tx = cx + 30 * u + i * tw, ty = cy + 18 * u;
       const on = d === df.id;
-      ui.pixRect(tx + 4 * u, ty, tw - 8 * u, 46 * u, on ? df.color : '#231917');
-      ui.text(df.name, tx + tw / 2, ty + 23 * u, 24, on ? '#1a1210' : open ? df.color : '#666', 'center', null);
-      if (!open) ui.icon('lock', tx + tw - 26 * u, ty + 23 * u, 26 * u);
+      if (!NEW_UI) {
+        ui.pixRect(tx + 4 * u, ty, tw - 8 * u, 46 * u, on ? df.color : '#231917');
+        ui.text(df.name, tx + tw / 2, ty + 23 * u, 24, on ? '#1a1210' : open ? df.color : '#666', 'center', null);
+      } else {
+        const accent = df.id === 0 ? '#2b6e3f' : df.id === 1 ? '#b86818' : '#a82219';
+        if (i > 0) {
+          ctx.fillStyle = 'rgba(72,56,42,0.22)';
+          ctx.fillRect(tx, ty + 10 * u, Math.max(1, u), 24 * u);
+        }
+        if (on) {
+          const p = Math.max(2, Math.round(u * 2));
+          ui.pixRect(tx + 8 * u, ty + 2 * u, tw - 16 * u, 40 * u, '#fbf5e6', p);
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = Math.max(1.2, u * 1.5);
+          ctx.strokeRect(tx + 10 * u, ty + 4 * u, tw - 20 * u, 36 * u);
+          ctx.fillStyle = accent;
+          ctx.fillRect(tx + 22 * u, ty + 4 * u, tw - 44 * u, 3 * u);
+        }
+        ui.text(on ? `◆ ${df.name} ◆` : df.name, tx + tw / 2, ty + 22 * u, 22, on ? accent : open ? '#3b2f24' : '#8a7c6c', 'center', null);
+      }
+      if (!open) ui.icon('lock', tx + tw - 26 * u, ty + 22 * u, 24 * u);
       if (ui.clicked('diff_' + df.id, tx, ty, tw, 46 * u)) {
         if (!open) ui.toast(`通关${DIFFICULTIES[df.id - 1].name}难度第1章解锁`);
         else { save.selectedDiff = df.id; markDirty(); }
       }
     });
     const oy = cy + 66 * u;
-    ui.text(`第${ch.id}章`, ui.W / 2, oy + 22 * u, 22, C.textDim);
-    ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, unlocked ? '#fff4d6' : '#8b8b8b');
-    ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
+    if (!NEW_UI) {
+      ui.text(`第${ch.id}章`, ui.W / 2, oy + 22 * u, 22, C.textDim);
+      ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, unlocked ? '#fff4d6' : '#8b8b8b');
+      ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
+    } else {
+      ui.text(`— 第 ${ch.id} 章 —`, ui.W / 2, oy + 20 * u, 21, '#5c4d3e', 'center', null);
+      // 章节名两侧对称水墨乌丝 + 朱砂菱印
+      const nameW = ui.measure(ch.name, 46);
+      const wingL = 56 * u;
+      for (const dir of [-1, 1]) {
+        const wx = ui.W / 2 + dir * (nameW / 2 + 18 * u);
+        const wy = oy + 60 * u;
+        ctx.fillStyle = '#382c22';
+        ctx.fillRect(dir > 0 ? wx : wx - wingL, wy - 1.5 * u, wingL, 3 * u);
+        ctx.fillStyle = '#b5281f';
+        ctx.beginPath();
+        ctx.moveTo(wx, wy - 5 * u);
+        ctx.lineTo(wx + dir * 6 * u, wy);
+        ctx.lineTo(wx, wy + 5 * u);
+        ctx.lineTo(wx - dir * 6 * u, wy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ui.text(ch.name, ui.W / 2, oy + 60 * u, 46, unlocked ? '#1a1410' : '#7a6e62', 'center', 'rgba(255,248,234,0.85)');
+      ui.text(`【 ${ch.subtitle} 】`, ui.W / 2, oy + 102 * u, 22, '#a8241b', 'center', null);
+    }
     const best = getBest(d, ch.id);
     const cleared = isCleared(d, ch.id);
     const stars = starCount(chapterStars(d, ch.id));
@@ -319,20 +648,28 @@ export class HomeScene implements Scene {
     const power = combatPower();
     const need = recommendedPower(ch, diff);
     // 进度与推荐战力放在同一行
-    ui.text(info, ui.W / 2 - 14 * u, oy + 142 * u, 20, cleared ? '#9be37a' : '#d9c6a0', 'right');
-    ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2 + 14 * u, oy + 142 * u, 20, power >= need ? '#9be37a' : '#ff8a80', 'left');
-    ui.pixRect(ui.W / 2 - 1 * u, oy + 132 * u, 2 * u, 20 * u, '#6b4a3a');
+    if (NEW_UI) {
+      const barW = cw - 96 * u, barH = 34 * u, barX = cx + 48 * u, barY = oy + 124 * u;
+      ui.pixRect(barX, barY, barW, barH, 'rgba(255,250,240,0.48)', Math.max(2, Math.round(u * 2)));
+      ctx.strokeStyle = 'rgba(120,98,74,0.38)';
+      ctx.lineWidth = Math.max(1, u);
+      ctx.strokeRect(barX + 1, barY + 1, barW - 2, barH - 2);
+    }
+    ui.text(info, ui.W / 2 - 14 * u, oy + 141 * u, 20, cleared ? '#9be37a' : '#e6d3b3', 'right', NEW_UI ? null : undefined);
+    ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2 + 14 * u, oy + 141 * u, 20, power >= need ? '#9be37a' : '#ff8a80', 'left', NEW_UI ? null : undefined);
+    ui.pixRect(ui.W / 2 - 1 * u, oy + 131 * u, 2 * u, 20 * u, '#8c663b');
     if (!unlocked) {
-      ui.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ui.ctx.fillStyle = 'rgba(20,16,12,0.58)';
       ui.ctx.fillRect(cx + 12 * u, oy + 2 * u, cw - 24 * u, chH - 78 * u);
       ui.icon('lock', ui.W / 2, oy + 52 * u, 70 * u);
-      ui.text(d === 0 ? `通关第${ch.id - 1}章解锁` : `通关${DIFFICULTIES[d - 1].name}难度第${ch.id}章解锁`, ui.W / 2, oy + 112 * u, 26, '#fff');
+      ui.text(d === 0 ? `通关第${ch.id - 1}章解锁` : `通关${DIFFICULTIES[d - 1].name}难度第${ch.id}章解锁`, ui.W / 2, oy + 112 * u, 26, '#fff4d6', 'center', '#140e0b');
     }
     if (ui.clicked('chapter_story', cx + 100 * u, oy, cw - 200 * u, chH - 70 * u)) game.openDialog(new ChapterStoryDialog(ch.id, d));
     // 左右切换
     const aw = 70 * u;
-    if (save.selectedChapter > 1 && ui.button('ch_prev', cx - 10 * u, oy + 66 * u - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedChapter--; markDirty(); }
-    if (save.selectedChapter < CHAPTERS.length && ui.button('ch_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedChapter++; markDirty(); }
+    const arrowCols = NEW_UI ? ['#5c4f42', '#362d25', '#8a7866'] : C.btnGray;
+    if (save.selectedChapter > 1 && ui.button('ch_prev', cx - 10 * u, oy + 66 * u - aw / 2, aw, aw, '◀', arrowCols, { size: 26 })) { save.selectedChapter--; markDirty(); }
+    if (save.selectedChapter < CHAPTERS.length && ui.button('ch_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', arrowCols, { size: 26 })) { save.selectedChapter++; markDirty(); }
 
     // 出征按钮
     const bw = 400 * u, bh = L.bh;
@@ -341,7 +678,7 @@ export class HomeScene implements Scene {
     const canSweep = unlocked && power >= need * SWEEP_K;
     if (canSweep) {
       if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
-      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleRun(ch, diff, true, ch.duration, 150, 1500, 2, 2, 3), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
+      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleRun(ch, diff, true, ch.duration, 150, 1500, 2, 2, 7), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
     } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     // 无尽模式入口
@@ -360,6 +697,7 @@ export class HomeScene implements Scene {
   /** 守城关卡卡片：和章节卡同样的位置与布局，十关依次解锁 */
   private drawDefenseCard(ui: UI, L: { chH: number; bh: number; by: number; cy: number }) {
     const u = ui.u;
+    const ctx = ui.ctx;
     const n = DEFENSE_LEVEL_COUNT;
     const lv = Math.max(1, Math.min(n, save.selectedDefense || 1));
     const ch = defenseChapter(lv);
@@ -368,26 +706,66 @@ export class HomeScene implements Scene {
     const cw = ui.W - 80 * u, chH = L.chH;
     const cx = 40 * u, cy = L.cy;
     ui.panel(cx, cy, cw, chH, 'wood');
-    ui.pixRect(cx + 30 * u, cy + 20 * u, cw - 60 * u, 46 * u, '#2f7a3a');
-    ui.text(`守城 · 第${lv}关`, ui.W / 2, cy + 43 * u, 24, '#fff4d6', 'center', null);
+    if (!NEW_UI) {
+      ui.pixRect(cx + 30 * u, cy + 20 * u, cw - 60 * u, 46 * u, '#2f7a3a');
+      ui.text(`守城 · 第${lv}关`, ui.W / 2, cy + 43 * u, 24, '#fff4d6', 'center', null);
+    } else {
+      const p = Math.max(2, Math.round(u * 2));
+      ui.pixRect(cx + 36 * u, cy + 18 * u, cw - 72 * u, 42 * u, '#fbf5e6', p);
+      ctx.strokeStyle = '#2b6e3f';
+      ctx.lineWidth = Math.max(1.2, u * 1.5);
+      ctx.strokeRect(cx + 38 * u, cy + 20 * u, cw - 76 * u, 38 * u);
+      ctx.fillStyle = '#2b6e3f';
+      ctx.fillRect(cx + 64 * u, cy + 20 * u, cw - 128 * u, 3 * u);
+      ui.text(`◆ 守城 · 第 ${lv} 关 ◆`, ui.W / 2, cy + 39 * u, 23, '#205930', 'center', null);
+    }
     const oy = cy + 66 * u;
-    ui.text('坚守五分钟 · 四面御敌', ui.W / 2, oy + 22 * u, 22, C.textDim);
-    ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, open ? '#fff4d6' : '#8b8b8b');
-    ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
+    ui.text('坚守五分钟 · 四面御敌', ui.W / 2, oy + 20 * u, 21, NEW_UI ? '#5c4d3e' : C.textDim);
+    if (!NEW_UI) {
+      ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, open ? '#fff4d6' : '#8b8b8b');
+      ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
+    } else {
+      const nameW = ui.measure(ch.name, 46);
+      const wingL = 56 * u;
+      for (const dir of [-1, 1]) {
+        const wx = ui.W / 2 + dir * (nameW / 2 + 18 * u);
+        const wy = oy + 60 * u;
+        ctx.fillStyle = '#382c22';
+        ctx.fillRect(dir > 0 ? wx : wx - wingL, wy - 1.5 * u, wingL, 3 * u);
+        ctx.fillStyle = '#255c35';
+        ctx.beginPath();
+        ctx.moveTo(wx, wy - 5 * u);
+        ctx.lineTo(wx + dir * 6 * u, wy);
+        ctx.lineTo(wx, wy + 5 * u);
+        ctx.lineTo(wx - dir * 6 * u, wy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ui.text(ch.name, ui.W / 2, oy + 60 * u, 46, open ? '#1a1410' : '#7a6e62', 'center', 'rgba(255,248,234,0.85)');
+      ui.text(`【 ${ch.subtitle} 】`, ui.W / 2, oy + 102 * u, 22, '#a8241b', 'center', null);
+    }
     const power = combatPower();
-    ui.text(cleared ? '已守住 ✓' : '尚未守住', ui.W / 2 - 14 * u, oy + 142 * u, 20, cleared ? '#9be37a' : '#d9c6a0', 'right');
-    ui.text(`推荐战力 ${fmtNum(ch.power)}`, ui.W / 2 + 14 * u, oy + 142 * u, 20, power >= ch.power ? '#9be37a' : '#ff8a80', 'left');
-    ui.pixRect(ui.W / 2 - 1 * u, oy + 132 * u, 2 * u, 20 * u, '#6b4a3a');
+    if (NEW_UI) {
+      const barW = cw - 96 * u, barH = 34 * u, barX = cx + 48 * u, barY = oy + 124 * u;
+      ui.pixRect(barX, barY, barW, barH, 'rgba(255,250,240,0.48)', Math.max(2, Math.round(u * 2)));
+      ctx.strokeStyle = 'rgba(120,98,74,0.38)';
+      ctx.lineWidth = Math.max(1, u);
+      ctx.strokeRect(barX + 1, barY + 1, barW - 2, barH - 2);
+    }
+    ui.text(cleared ? '已守住 ✓' : '尚未守住', ui.W / 2 - 14 * u, oy + 141 * u, 20, cleared ? '#9be37a' : '#e6d3b3', 'right', NEW_UI ? null : undefined);
+    ui.text(`推荐战力 ${fmtNum(ch.power)}`, ui.W / 2 + 14 * u, oy + 141 * u, 20, power >= ch.power ? '#9be37a' : '#ff8a80', 'left', NEW_UI ? null : undefined);
+    ui.pixRect(ui.W / 2 - 1 * u, oy + 131 * u, 2 * u, 20 * u, '#8c663b');
     if (!open) {
-      ui.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ui.ctx.fillStyle = 'rgba(20,16,12,0.58)';
       ui.ctx.fillRect(cx + 12 * u, oy + 2 * u, cw - 24 * u, chH - 78 * u);
       ui.icon('lock', ui.W / 2, oy + 52 * u, 70 * u);
-      ui.text(`守住第${lv - 1}关解锁`, ui.W / 2, oy + 112 * u, 26, '#fff');
+      ui.text(`守住第${lv - 1}关解锁`, ui.W / 2, oy + 112 * u, 26, '#fff4d6', 'center', '#140e0b');
     }
     if (ui.clicked('def_story', cx + 100 * u, oy, cw - 200 * u, chH - 70 * u)) game.openDialog(new TextDialog(`守城 · ${ch.name}`, ch.story));
     const aw = 70 * u;
-    if (lv > 1 && ui.button('def_prev', cx - 10 * u, oy + 66 * u - aw / 2, aw, aw, '◀', C.btnGray, { size: 26 })) { save.selectedDefense = lv - 1; markDirty(); }
-    if (lv < n && ui.button('def_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', C.btnGray, { size: 26 })) { save.selectedDefense = lv + 1; markDirty(); }
+    const arrowCols = NEW_UI ? ['#5c4f42', '#362d25', '#8a7866'] : C.btnGray;
+    if (lv > 1 && ui.button('def_prev', cx - 10 * u, oy + 66 * u - aw / 2, aw, aw, '◀', arrowCols, { size: 26 })) { save.selectedDefense = lv - 1; markDirty(); }
+    if (lv < n && ui.button('def_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', arrowCols, { size: 26 })) { save.selectedDefense = lv + 1; markDirty(); }
     // 出征 / 无尽 / 关卡总览
     const bw = 400 * u, bh = L.bh, by = L.by;
     if (open && power >= ch.power * SWEEP_K) {
@@ -434,8 +812,23 @@ export class HomeScene implements Scene {
     const panelH = 590 * u;
     ui.panel(16 * u, top, ui.W - 32 * u, panelH, 'wood');
     // 人物
-    ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ui.ctx.fillRect(ui.W / 2 - 150 * u, top + 60 * u, 300 * u, 330 * u);
+    if (!NEW_UI) {
+      ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ui.ctx.fillRect(ui.W / 2 - 150 * u, top + 60 * u, 300 * u, 330 * u);
+    } else {
+      // 水墨圆月景窗立绘底座
+      const bx = ui.W / 2 - 150 * u, by0 = top + 68 * u, bw0 = 300 * u, bh0 = 320 * u;
+      ui.pixRect(bx, by0, bw0, bh0, '#8c7a62', Math.max(2, Math.round(u * 3)));
+      ui.pixRect(bx + 3 * u, by0 + 3 * u, bw0 - 6 * u, bh0 - 6 * u, '#ded0b4', Math.max(2, Math.round(u * 2)));
+      ui.ctx.fillStyle = 'rgba(255,250,240,0.55)';
+      ui.ctx.beginPath();
+      ui.ctx.arc(ui.W / 2, by0 + bh0 * 0.48, 112 * u, 0, Math.PI * 2);
+      ui.ctx.fill();
+      ui.ctx.strokeStyle = 'rgba(72,56,42,0.25)';
+      ui.ctx.lineWidth = Math.max(1, 1.5 * u);
+      ui.ctx.stroke();
+      ui.paperTexture(bx + 3 * u, by0 + 3 * u, bw0 - 6 * u, bh0 - 6 * u, { alpha: 0.78, patina: true });
+    }
     ui.icon(heroIdleFrame(heroSpriteName(save.hero), ui.time), ui.W / 2, top + 230 * u, 280 * u);
     ui.text(`${HERO_BY_ID[save.hero].name} · Lv.${save.heroes[save.hero].lv}`, ui.W / 2, top + 50 * u, 28, C.gold);
     const st = computeStats();
@@ -456,7 +849,6 @@ export class HomeScene implements Scene {
       ui.text(it ? EQUIP_BY_ID[it.tid].name : SLOT_NAMES[slot], x + ss / 2, y + ss + 16 * u, 20, it ? QUALITY_COLORS[it.q] : C.textDim);
       if (slot === 'weapon') this.weaponSlotRect = [x, y, ss, ss];
       if (it && ui.clicked('slot_' + slot, x, y, ss, ss)) {
-        if (save.guide === 2) save.guide = 3;
         game.openDialog(new ItemDialog(it));
       }
     });
@@ -466,7 +858,7 @@ export class HomeScene implements Scene {
     if (ui.button('equip_best', ui.W / 2 - bw - 10 * u, by, bw, bh, '一键穿戴', C.btnBlue, { size: 26 })) { equipBest(); playSfx('levelup'); }
     if (ui.button('merge_all', ui.W / 2 + 10 * u, by, bw, bh, '一键合成', C.btnPurple, { size: 26 })) {
       const n = mergeAll();
-      ui.toast(n ? `合成成功 ${n} 次` : '没有可合成的装备（需3件同名同品质）');
+      ui.toast(n ? `合成成功 ${n} 次` : '没有可合成的装备（需3件同部位同品质）');
       if (n) playSfx('evolve');
     }
     // 背包
@@ -478,7 +870,26 @@ export class HomeScene implements Scene {
     const rows = Math.ceil(items.length / cols);
     const contentH = rows * cell + 30 * u;
     const off = ui.beginScroll('bag', 16 * u, gy + 12 * u, ui.W - 32 * u, gh - 24 * u, contentH);
-    if (!items.length) ui.text('暂无装备，通关章节或开启宝箱获得', ui.W / 2, gy + gh / 2, 24, C.textDim);
+    if (!items.length) {
+      if (!NEW_UI) {
+        ui.text('暂无装备，通关章节或开启宝箱获得', ui.W / 2, gy + gh / 2, 24, C.textDim);
+      } else {
+        const mcx = ui.W / 2, mcy = gy + gh / 2;
+        const g = ui.ctx;
+        g.save();
+        // 水墨古印与交叉双剑淡水印
+        g.strokeStyle = 'rgba(92,74,54,0.16)';
+        g.lineWidth = Math.max(1.5, u * 2);
+        g.beginPath(); g.arc(mcx, mcy - 36 * u, 54 * u, 0, Math.PI * 2); g.stroke();
+        g.strokeStyle = 'rgba(180,42,32,0.18)';
+        g.lineWidth = Math.max(1, u * 1.2);
+        g.strokeRect(mcx - 36 * u, mcy - 72 * u, 72 * u, 72 * u);
+        ui.icon('atk', mcx, mcy - 36 * u, 54 * u, 0.22);
+        g.restore();
+        ui.text('◆ 军械库暂空 ◆', mcx, mcy + 42 * u, 26, '#4a3c30', 'center', null);
+        ui.text('通关征战章节或前往「商店」开启宝箱可获神兵甲胄', mcx, mcy + 80 * u, 21, '#786856', 'center', null);
+      }
+    }
     items.forEach((it, i) => {
       const x = 36 * u + (i % cols) * cell;
       const y = gy + 20 * u + Math.floor(i / cols) * cell + off;
@@ -562,13 +973,28 @@ export class HomeScene implements Scene {
     const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1470 + 108 * heroLinks(this.viewHero || save.hero).length) * u);
     let y = py + 20 * u + off;
     // 立绘区
-    ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ui.ctx.fillRect(50 * u, y, ui.W - 100 * u, 260 * u);
+    if (!NEW_UI) {
+      ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ui.ctx.fillRect(50 * u, y, ui.W - 100 * u, 260 * u);
+    } else {
+      // 水墨山水圆月画框
+      const bx = 50 * u, bw0 = ui.W - 100 * u, bh0 = 260 * u;
+      ui.pixRect(bx, y, bw0, bh0, '#8c7a62', Math.max(2, Math.round(u * 3)));
+      ui.pixRect(bx + 3 * u, y + 3 * u, bw0 - 6 * u, bh0 - 6 * u, '#dfd0b4', Math.max(2, Math.round(u * 2)));
+      ui.ctx.fillStyle = 'rgba(255,250,240,0.58)';
+      ui.ctx.beginPath();
+      ui.ctx.arc(ui.W / 2, y + bh0 * 0.5, 102 * u, 0, Math.PI * 2);
+      ui.ctx.fill();
+      ui.ctx.strokeStyle = 'rgba(72,56,42,0.26)';
+      ui.ctx.lineWidth = Math.max(1, 1.5 * u);
+      ui.ctx.stroke();
+      ui.paperTexture(bx + 3 * u, y + 3 * u, bw0 - 6 * u, bh0 - 6 * u, { alpha: 0.78, patina: true });
+    }
     ui.icon(heroIdleFrame(heroSpriteName(h.id), ui.time), ui.W / 2, y + 130 * u, 250 * u, st.owned ? 1 : 0.5);
     ui.text(h.title, ui.W / 2, y + 290 * u, 34, h.color);
     ui.text(`「${h.quote}」`, ui.W / 2, y + 334 * u, 22, '#fff4d6');
-    ui.pixRect(60 * u, y + 14 * u, 140 * u, 40 * u, '#231917');
-    ui.text(h.role, 130 * u, y + 34 * u, 20, h.color, 'center', null);
+    ui.pixRect(60 * u, y + 14 * u, 140 * u, 40 * u, NEW_UI ? '#2b221c' : '#231917');
+    ui.text(h.role, 130 * u, y + 34 * u, 20, NEW_UI ? '#f5ead4' : h.color, 'center', null);
     if (st.owned) for (let k = 0; k < 5; k++) ui.icon('star', ui.W - 90 * u - (4 - k) * 30 * u, y + 34 * u, 26 * u, k < st.star ? 1 : 0.2);
     y += 370 * u;
     const hb = heroBase(h.id);
@@ -808,14 +1234,14 @@ export class HomeScene implements Scene {
       case 2:
         if (!getEquipped('weapon')) { save.guide = 3; break; }
         if (this.tab === 'equip') guidePointer(ui, ...this.weaponSlotRect, '新兵器已自动穿戴，点击可以强化');
-        else if (nav.equip) guidePointer(ui, ...nav.equip);
+        else if (nav.equip) guidePointer(ui, ...nav.equip, '去装备页强化新兵器');
         break;
       case 3:
         if (nav.talent) guidePointer(ui, ...nav.talent, '军略可以永久提升属性');
         break;
       case 4:
         if (this.tab === 'talent') guidePointer(ui, ...this.talentBtn, '升级「武艺」，提升全部伤害');
-        else if (nav.talent) guidePointer(ui, ...nav.talent);
+        else if (nav.talent) guidePointer(ui, ...nav.talent, '去军略页升级永久属性');
         break;
       case 5:
         if (nav.battle) guidePointer(ui, ...nav.battle, '准备完毕，继续征战吧！');

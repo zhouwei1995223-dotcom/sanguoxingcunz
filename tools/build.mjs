@@ -38,14 +38,17 @@ const common = {
 };
 
 function writeShells() {
-  // 浏览器
+  // 浏览器（引入 SIL OFL 免费可商用「思源宋体 Noto Serif SC」）
   fs.mkdirSync('dist/web', { recursive: true });
   fs.writeFileSync('dist/web/index.html', `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>长坂单骑传</title>
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;font-family:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif}</style>
 </head><body><script src="game.js"></script></body></html>
 `);
   copyDir('assets', 'dist/web/assets');
