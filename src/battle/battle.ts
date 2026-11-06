@@ -1,6 +1,7 @@
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
-import { ChapterDef, CHAPTER_TIME_SCALE } from '../data/chapters';
+import { ChapterDef } from '../data/chapters';
+import { IS_WEB } from '../data/platformConfig';
 import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
@@ -296,6 +297,8 @@ export class Battle {
 
   constructor(chapter: ChapterDef, base: HeroStats, viewW: number, viewH: number) {
     this.chapter = chapter;
+    this.stratTimes = chapter.defense ? STRAT_TIMES_DEFENSE : chapter.endless ? STRAT_TIMES_ENDLESS
+      : chapter.campaignMinutes ? STRAT_TIMES.map(t => Math.round(t * chapter.duration / 360)) : STRAT_TIMES;
     this.base = base;
     this.viewW = viewW;
     this.viewH = viewH;
@@ -604,7 +607,7 @@ export class Battle {
     if (this.ult) dt = rawDt * this.updateUlt(rawDt);
     this.t += dt;
     // 每周挑战 / 新手试炼：坚持到时间即胜利
-    if ((this.chapter.endless || this.chapter.tutorial) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
+    if ((this.chapter.endless || (!IS_WEB && this.chapter.tutorial)) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
       for (const e of this.enemies) if (!e.dead) { e.dead = true; this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
       this.won = true;
       return;
@@ -738,7 +741,7 @@ export class Battle {
     const to = ev.t - 0.5;
     if (to <= this.t) return false;
     while (this.eventIdx < this.chapter.events.length && this.chapter.events[this.eventIdx].t < to && this.chapter.events[this.eventIdx] !== ev) this.eventIdx++;
-    skipHordesBefore(to);
+    skipHordesBefore(to * 600 / this.chapter.duration);
     // 跳过的时间按经验速度补一半：取最近速度和本局平均速度里大的那个（最近速度是平滑过的，刚开局时还没跟上）
     const rate = Math.max(this.expRate, this.expTotal / Math.max(30, this.t));
     const bonus = rate * (to - this.t) * 0.5;
@@ -782,14 +785,12 @@ export class Battle {
   }
 
   /** 本模式的锦囊时间点 */
-  get stratTimes(): number[] {
-    return this.chapter.defense ? STRAT_TIMES_DEFENSE : this.chapter.endless ? STRAT_TIMES_ENDLESS : STRAT_TIMES;
-  }
+  readonly stratTimes: number[];
 
   /** 章节时间：章节一局压到 6 分钟后，成长曲线仍按 10 分钟设计，用实际秒数 ÷ 0.6 换算；无尽 / 新手试炼就是实际秒数 */
   get ct(): number {
     const ch = this.chapter;
-    return ch.endless || ch.tutorial || ch.defense ? this.t : this.t / CHAPTER_TIME_SCALE;
+    return ch.endless || ch.tutorial || ch.defense ? this.t : this.t * 600 / ch.duration;
   }
 
   spawnEnemy(id: string, x: number, y: number, opts: { elite?: boolean; hpMul?: number } = {}): Enemy {

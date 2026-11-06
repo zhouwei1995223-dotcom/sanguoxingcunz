@@ -23,14 +23,14 @@ import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
+  SidebarDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
-import { GAME_INFO, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
+import { GAME_INFO, IS_WEB, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 
 /** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
@@ -644,7 +644,7 @@ export class HomeScene implements Scene {
     const best = getBest(d, ch.id);
     const cleared = isCleared(d, ch.id);
     const stars = starCount(chapterStars(d, ch.id));
-    const info = cleared ? `${diff.name}已通关 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : best ? `最佳坚守 ${fmtTime(Math.min(best, ch.duration))}` : '尚未挑战';
+    const info = cleared ? `${diff.name}已通关 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
     const power = combatPower();
     const need = recommendedPower(ch, diff);
     // 进度与推荐战力放在同一行
@@ -675,11 +675,11 @@ export class HomeScene implements Scene {
     const bw = 400 * u, bh = L.bh;
     const by = L.by;
     // 战力碾压：战力达到推荐的 SWEEP_K 倍，可以不打直接拿胜利奖励（出征按钮让出一半位置）
-    const canSweep = unlocked && power >= need * SWEEP_K;
+    const canSweep = unlocked && power >= need * SWEEP_K && (!IS_WEB || cleared);
     if (canSweep) {
-      if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
-      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleRun(ch, diff, true, ch.duration, 150, 1500, 2, 2, 7), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
-    } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(ch.id, d);
+      if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
+      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleRun(ch, diff, true, IS_WEB ? best : ch.duration, 150, 1500, 2, 2, IS_WEB ? 0 : 7), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
+    } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     // 无尽模式入口
     const eo = endlessOpen();
@@ -720,7 +720,7 @@ export class HomeScene implements Scene {
       ui.text(`◆ 守城 · 第 ${lv} 关 ◆`, ui.W / 2, cy + 39 * u, 23, '#205930', 'center', null);
     }
     const oy = cy + 66 * u;
-    ui.text('坚守五分钟 · 四面御敌', ui.W / 2, oy + 20 * u, 21, NEW_UI ? '#5c4d3e' : C.textDim);
+    ui.text(IS_WEB ? '守护城池 · 击败攻城主将' : '坚守五分钟 · 四面御敌', ui.W / 2, oy + 20 * u, 21, NEW_UI ? '#5c4d3e' : C.textDim);
     if (!NEW_UI) {
       ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, open ? '#fff4d6' : '#8b8b8b');
       ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
@@ -768,7 +768,7 @@ export class HomeScene implements Scene {
     if (lv < n && ui.button('def_next', cx + cw - aw + 10 * u, oy + 66 * u - aw / 2, aw, aw, '▶', arrowCols, { size: 26 })) { save.selectedDefense = lv + 1; markDirty(); }
     // 出征 / 无尽 / 关卡总览
     const bw = 400 * u, bh = L.bh, by = L.by;
-    if (open && power >= ch.power * SWEEP_K) {
+    if (open && power >= ch.power * SWEEP_K && (!IS_WEB || cleared)) {
       if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
       if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: '免挑战' })) this.sweep(() => settleDefense(lv, true, 300, 120, 1200, 2, 1, 12), `守城 · ${ch.name}`, 'defense', lv, 0);
     } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
@@ -794,7 +794,13 @@ export class HomeScene implements Scene {
     game.openDialog(new SweepDialog(title, res));
   }
 
-  private startBattle(id: number, diff = 0) {
+  private chooseCampaign(id: number, diff: number) {
+    if (IS_WEB) {
+      game.openDialog(new CampaignDurationDialog(picked => this.startBattle(id, diff, picked)));
+    } else this.startBattle(id, diff);
+  }
+
+  private startBattle(id: number, diff = 0, minutes?: 5 | 10) {
     if (!spendStamina()) {
       game.openDialog(new StaminaDialog());
       return;
@@ -802,7 +808,7 @@ export class HomeScene implements Scene {
     if (save.guide === 6) save.guide = 99;
     flushSave(true);
     playSfx('boss');
-    game.setScene(new BattleScene(id, diff));
+    game.setScene(new BattleScene(id, diff, minutes));
   }
 
   // —— 装备页 ——

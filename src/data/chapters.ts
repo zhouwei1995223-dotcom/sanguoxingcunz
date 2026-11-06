@@ -27,6 +27,7 @@ export interface ChapterDef {
   theme: string;
   story: string;
   duration: number;
+  campaignMinutes?: 5 | 10;
   hpMul: number;
   dmgMul: number;
   growth: number; // 每分钟敌人生命成长
@@ -87,7 +88,7 @@ function standardEvents(o: { elite: string; ring: string; stampede: string; swar
   ];
 }
 
-export const CHAPTERS: ChapterDef[] = [
+const chapterTemplates: ChapterDef[] = [
   {
     id: 1, name: '长坂坡', subtitle: '单骑救主', theme: 'changban',
     story: '建安十三年，曹操亲率虎豹骑追击刘备于当阳长坂。赵云怀抱阿斗，于百万军中七进七出……',
@@ -178,7 +179,7 @@ function waves(early: string[], mid: string[], late: string[], heavy: string, el
   ];
 }
 
-CHAPTERS.push(
+chapterTemplates.push(
   {
     id: 6, name: '虎牢关', subtitle: '群雄讨董', theme: 'hulao',
     story: '十八路诸侯会盟讨伐董卓，西凉军据守虎牢关。华雄连败数将，诸侯军中一时无人敢出战……',
@@ -221,19 +222,19 @@ CHAPTERS.push(
   },
 );
 
-/**
- * 1.0.4：章节一局从 10 分钟压到 6 分钟。上面的波次 / 事件仍按 10 分钟写，这里整体乘 0.6；
- * 敌人成长、TENSION 起伏等按「章节时间」（实际秒数 ÷ 0.6）换算，见 battle.ts 的 ct。
- */
-export const CHAPTER_TIME_SCALE = 0.6;
-for (const ch of CHAPTERS) {
-  const S = CHAPTER_TIME_SCALE;
-  ch.duration = Math.round(ch.duration * S);
-  for (const e of ch.events) e.t = Math.round(e.t * S);
-  for (const w of ch.waves) {
-    w.from = Math.round(w.from * S);
-    if (w.to < 9000) w.to = Math.round(w.to * S);
-  }
+/** 各模式共用十分钟的章节模板，按所选时长缩放事件和波次。 */
+function scaleChapter(ch: ChapterDef, minutes: 5 | 6 | 10): ChapterDef {
+  const at = (seconds: number) => Math.round(seconds * minutes / 10);
+  return {
+    ...ch, duration: minutes * 60, campaignMinutes: minutes === 6 ? undefined : minutes,
+    events: ch.events.map(e => ({ ...e, t: at(e.t) })),
+    waves: ch.waves.map(w => ({ ...w, from: at(w.from), to: w.to < 9000 ? at(w.to) : w.to })),
+  };
+}
+
+export const CHAPTERS = chapterTemplates.map(ch => scaleChapter(ch, 6));
+export function campaignChapter(id: number, minutes: 5 | 10) {
+  return scaleChapter(chapterTemplates[id - 1], minutes);
 }
 
 /** 无尽模式：刷怪与事件由 spawner 动态生成 */

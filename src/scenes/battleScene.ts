@@ -4,7 +4,7 @@ import type { TouchKind, TouchPoint } from '../platform/types';
 import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
-import { CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
+import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, recommendedPower } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../meta/goals';
@@ -50,11 +50,13 @@ export class BattleScene implements Scene {
   private tipT = 0;
   private tipCheckT = 0;
   private autoGoldT = 0;
-  private nextSkillPickAt = 0;
+  private runAutoPick = false;
   paused = false;
 
-  get spacedSkillPicks() {
-    return IS_WEB && this.modeName === 'chapter' && !this.chapter.tutorial;
+  get autoPick() { return IS_WEB ? this.runAutoPick : save.settings.autoPick; }
+  set autoPick(on: boolean) {
+    if (IS_WEB) this.runAutoPick = on;
+    else { save.settings.autoPick = on; markDirty(); }
   }
 
   diff: DifficultyDef;
@@ -69,7 +71,7 @@ export class BattleScene implements Scene {
   videoPath: Promise<string | null> | null = null;
 
   /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼，-3 为守城模式 */
-  constructor(chapterId: number, diff = 0) {
+  constructor(chapterId: number, diff = 0, minutes: 5 | 10 = 5) {
     const themes = Object.keys(THEMES);
     if (chapterId === -3) {
       // 守城：第二个参数是关卡（1~10），没有难度
@@ -83,7 +85,7 @@ export class BattleScene implements Scene {
       this.weekly = currentWeekly();
       this.chapter = { ...ENDLESS, id: -1, name: '每周挑战', duration: WEEKLY_DURATION, theme: themes[(Math.random() * themes.length) | 0] };
       this.speedMul = this.weekly.gameSpeed || 1;
-    } else this.chapter = CHAPTERS[chapterId - 1];
+    } else this.chapter = IS_WEB ? campaignChapter(chapterId, minutes) : CHAPTERS[chapterId - 1];
     this.diff = DIFFICULTIES[diff] || DIFFICULTIES[0];
   }
 
@@ -252,7 +254,6 @@ export class BattleScene implements Scene {
         // 大招期间不弹窗，结束后再处理升级与宝箱
       } else if (b.pendingStrats.length) {
         const st = b.pendingStrats.shift()!;
-        if (this.spacedSkillPicks) this.nextSkillPickAt = Math.max(this.nextSkillPickAt, b.t + 12);
         playSfx('chest');
         game.openDialog(new StrategyDialog(this, st.tier, st.round));
       } else if (b.pendingChests.length) {
@@ -261,20 +262,17 @@ export class BattleScene implements Scene {
       } else if (b.pendingLevelUps > 0) {
         b.pendingLevelUps--;
         const choices = b.rollChoices();
-        const nextStratAt = b.stratTimes[b.stratRound] ?? Infinity;
-        const betweenPicks = this.spacedSkillPicks && (b.t < this.nextSkillPickAt || nextStratAt - b.t < 12);
         if (choices.every((c) => c.kind === 'heal' || c.kind === 'gold')) {
           // 技能全满：自动领取，避免频繁打断
           b.applyChoice(b.player.hp < b.player.maxHp * 0.6 ? { kind: 'heal' } : { kind: 'gold' });
           this.autoGoldT = 1;
-        } else if (betweenPicks || (save.settings.autoPick && save.guide > 0)) {
+        } else if (this.autoPick && (IS_WEB || save.guide > 0)) {
           // 自动选择：直接领推荐项，在武将身边飘字
           const c = choices[Math.max(0, b.recommend(choices))];
           playSfx('levelup');
           this.choose(c);
           this.floatLines([{ text: '升级 · ' + this.choiceLine(c), color: c.kind === 'evo' || c.kind === 'link' ? '#fee761' : '#b6f5a0' }]);
         } else {
-          if (this.spacedSkillPicks) this.nextSkillPickAt = b.t + 50;
           playSfx('levelup');
           if (save.stats.runs === 0) funnel('b1_levelup');
           game.openDialog(new LevelUpDialog(this, choices));
@@ -336,7 +334,7 @@ export class BattleScene implements Scene {
     if (this.chapter.endless) return '无尽战场';
     if (this.chapter.tutorial) return '新手试炼';
     if (this.chapter.defense) return `守城 · 第${this.chapter.id}关 ${this.chapter.name}`;
-    return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}`;
+    return `第${this.chapter.id}章 ${this.chapter.name}${this.diff.id ? ' · ' + this.diff.name : ''}${this.chapter.campaignMinutes ? ' · ' + this.chapter.campaignMinutes + '分钟' : ''}`;
   }
 
   /** 测试用：直接打开指定选项的升级弹窗 / 进化表 */
@@ -448,7 +446,7 @@ export class BattleScene implements Scene {
     } else if (b.def) {
       // 守城：剩余时间 + 城池血条
       const d = b.def;
-      ui.text(fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 64 * u, 38, '#fff');
+      ui.text(IS_WEB && b.finalBoss ? '击败攻城主将' : fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 64 * u, 38, '#fff');
       const cw = ui.W * 0.44, cx0 = ui.W / 2 - cw / 2, cy0 = top + 90 * u;
       ui.bar(cx0, cy0, cw, 28 * u, d.cityHp / d.cityMax, d.cityHp < d.cityMax * 0.3 ? '#e43b44' : '#63c74d', '#2a1414');
       if (d.cityFlash > 0) { ui.ctx.globalAlpha = 0.5; ui.pixRect(cx0, cy0, cw, 28 * u, '#ffffff'); ui.ctx.globalAlpha = 1; }

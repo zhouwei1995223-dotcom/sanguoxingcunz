@@ -76,9 +76,9 @@ export interface RunResult {
 /** 三星评价：通关 / 不复活 / 最终敌将 60 秒内击败 */
 export const STAR_BOSS_SEC = 80;
 export const STAR_LABELS = ['通关', '不复活', `${STAR_BOSS_SEC}秒内击败最终敌将`];
-export function runStars(win: boolean, revives: number, finalBossSec: number): number {
+export function runStars(win: boolean, revives: number, finalBossSec: number, minutes?: 5 | 10): number {
   if (!win) return 0;
-  return 1 | (revives === 0 ? 2 : 0) | (finalBossSec >= 0 && finalBossSec <= STAR_BOSS_SEC ? 4 : 0);
+  return 1 | (revives === 0 ? 2 : 0) | (minutes !== 5 && finalBossSec >= 0 && finalBossSec <= STAR_BOSS_SEC ? 4 : 0);
 }
 export const starCount = (bits: number) => (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1);
 /** 某难度某章拿到过的星 */
@@ -134,7 +134,10 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   const key = ck(d, ch.id);
   // 三星：第一次集齐三颗星送元宝
   const oldStars = save.stars[key] || 0;
-  const allStars = oldStars | stars;
+  // 网页征战按单局最佳保留星级，避免两种模式的不同条件拼出三星。
+  const allStars = ch.campaignMinutes
+    ? (starCount(stars) > starCount(oldStars) ? stars : oldStars)
+    : oldStars | stars;
   let starBonus = 0;
   if (allStars !== oldStars) {
     save.stars[key] = allStars;

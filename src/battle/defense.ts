@@ -1,4 +1,5 @@
 import { rand, TAU, weighted } from '../core/math';
+import { IS_WEB } from '../data/platformConfig';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
   DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
@@ -798,7 +799,7 @@ export function updateDefense(b: Battle, dt: number) {
   for (const e of b.enemies) if (!e.dead && !e.fixedDir) terrainPush(e, e.r);
   updateBuilds(b, dt);
   // 撑到时间：胜利
-  if (b.t >= DEFENSE_DURATION && !b.won && !d.lost) {
+  if (!IS_WEB && b.t >= DEFENSE_DURATION && !b.won && !d.lost) {
     for (const e of b.enemies) if (!e.dead) { e.dead = true; b.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
     b.won = true;
   }

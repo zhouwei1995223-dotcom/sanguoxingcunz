@@ -179,7 +179,7 @@ export class LevelUpDialog implements Dialog {
     const b = this.scene.battle;
     const t = this.t || 0;
     ui.ribbon(ui.W / 2, ui.H * 0.2, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
-    ui.text(this.scene.spacedSkillPicks ? '选择一项强化，其间升级自动领取推荐项' : '选择一项强化', ui.W / 2, ui.H * 0.2 + 64 * u, 26, C.textDim);
+    ui.text('选择一项强化', ui.W / 2, ui.H * 0.2 + 64 * u, 26, C.textDim);
     const cw = ui.W - 70 * u, ch = 220 * u;
     let y = ui.H * 0.2 + 110 * u;
     const tutorial = save.guide === 0 && b.level === 2;
@@ -236,8 +236,8 @@ export class LevelUpDialog implements Dialog {
     // 自动选择：打开后以后的升级直接领推荐项（暂停里可以关）
     if (!tutorial) {
       const aw = 300 * u;
-      if (ui.button('lv_auto', ui.W / 2 - aw / 2, y + bh + 20 * u, aw, 76 * u, this.scene.spacedSkillPicks ? '改为全自动' : '自动选择：关', C.btnGray, { size: 24 })) {
-        save.settings.autoPick = true; markDirty();
+      if (ui.button('lv_auto', ui.W / 2 - aw / 2, y + bh + 20 * u, aw, 76 * u, '自动选择：关', C.btnGray, { size: 24 })) {
+        this.scene.autoPick = true;
         ui.toast('已开启自动选择（暂停里可以关闭）');
         this.scene.choose(this.choices[Math.max(0, rec)]);
         return false;
@@ -480,7 +480,7 @@ export class PauseDialog implements Dialog {
       ['p_shake', '震屏:' + (save.settings.screenShake ? '开' : '关'), () => { save.settings.screenShake = !save.settings.screenShake; }, save.settings.screenShake],
       ['p_ult', '大招:' + (save.settings.ultRight ? '右' : '左'), () => { save.settings.ultRight = !save.settings.ultRight; }, false],
       ['p_power', '省电:' + (save.settings.lowPower ? '开' : '关'), () => { save.settings.lowPower = !save.settings.lowPower; }, save.settings.lowPower],
-      ['p_auto', this.scene.spacedSkillPicks ? (save.settings.autoPick ? '升级:全自动' : '升级:间隔手选') : '自动选技能:' + (save.settings.autoPick ? '开' : '关'), () => { save.settings.autoPick = !save.settings.autoPick; }, save.settings.autoPick],
+      ['p_auto', '自动选技能:' + (this.scene.autoPick ? '开' : '关'), () => { this.scene.autoPick = !this.scene.autoPick; }, this.scene.autoPick],
       ['p_num', '伤害数字:' + (save.settings.dmgNum ? '开' : '关'), () => { save.settings.dmgNum = !save.settings.dmgNum; b.showDamage = save.settings.dmgNum; }, save.settings.dmgNum],
     ];
     toggles.forEach(([id, label, fn, on], i) => {
@@ -660,7 +660,7 @@ export class ResultDialog implements Dialog {
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless
         ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
-        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec));
+        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec, b.chapter.campaignMinutes));
     }
     if (scene.videoPath) scene.videoPath.then((p) => { this.video = p; });
     if (save.guide === 0) save.guide = 1;
@@ -693,7 +693,7 @@ export class ResultDialog implements Dialog {
         const on = !!(st & (1 << i));
         const cx = f.x + 40 * u + sw * i + sw / 2;
         ui.icon('star', cx, y + 10 * u, 52 * u, on ? 1 : 0.2);
-        ui.text(label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
+        ui.text(i === 2 && b.chapter.campaignMinutes === 5 ? '十分钟模式可得' : label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
       });
       y += 92 * u;
       const tip = this.res.starBonus ? `集齐三星！额外元宝×${this.res.starBonus}` : starCount(st) < 3 ? '集齐三星可额外领取元宝' : '';
