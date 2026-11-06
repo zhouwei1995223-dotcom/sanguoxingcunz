@@ -1,5 +1,4 @@
 import { C, UI } from './ui';
-import { NEW_UI } from '../data/platformConfig';
 
 // 新手引导：文字提示 + 手指指向
 
@@ -10,7 +9,7 @@ export function guideHint(ui: UI, text: string, y: number) {
   const ctx = ui.ctx;
   ctx.save();
   ctx.globalAlpha = a;
-  if (!NEW_UI) {
+  if (!ui.paperTheme) {
     ui.pixRect(ui.W / 2 - w / 2, y - 40 * u, w, 80 * u, 'rgba(16,10,12,0.82)');
     ctx.fillStyle = C.gold;
     ctx.fillRect(ui.W / 2 - w / 2 + 8 * u, y - 40 * u, w - 16 * u, 3 * u);
@@ -36,7 +35,7 @@ export function guidePointer(ui: UI, x: number, y: number, w: number, h: number,
   const u = ui.u;
   const g = ui.ctx;
   const pulse = (Math.sin(ui.time * 6) + 1) / 2;
-  g.strokeStyle = NEW_UI ? '#b8281e' : C.gold;
+  g.strokeStyle = ui.paperTheme ? '#b8281e' : C.gold;
   g.lineWidth = (4 + pulse * 3) * u;
   g.strokeRect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u);
   // 手指（像素风）

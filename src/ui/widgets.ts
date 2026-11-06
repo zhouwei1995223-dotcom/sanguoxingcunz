@@ -3,7 +3,7 @@ import { EQUIP_BY_ID, QUALITY_COLORS, QUALITY_NAMES, Reward } from '../data/meta
 import type { EquipItem } from '../meta/save';
 import { fmtNum, easeOutBack } from '../core/math';
 import { HERO_BY_ID } from '../data/heroes';
-import { NO_ADS, NEW_UI } from '../data/platformConfig';
+import { NO_ADS } from '../data/platformConfig';
 
 // 通用界面组件
 
@@ -86,7 +86,7 @@ export function dialogFrame(ui: UI, w: number, h: number, title: string, t = 1, 
     const cs = 64 * u;
     const cx = x + W - cs + 10 * u, cy = y - 10 * u;
     close = ui.clicked(closeId, cx - 10 * u, cy - 10 * u, cs + 20 * u, cs + 20 * u);
-    if (!NEW_UI) {
+    if (!ui.paperTheme) {
       ui.pixRect(cx, cy, cs, cs, '#120d0c');
       ui.pixRect(cx + 4 * u, cy + 4 * u, cs - 8 * u, cs - 8 * u, '#a22633');
       ui.text('✕', cx + cs / 2, cy + cs / 2, 30, '#fff', 'center', null);
@@ -119,7 +119,7 @@ export function adButton(ui: UI, id: string, x: number, y: number, w: number, h:
 export function currencyBar(ui: UI, x: number, y: number, w: number, icon: string, value: string, plusId?: string): boolean {
   const u = ui.u;
   const h = 50 * u;
-  if (!NEW_UI) {
+  if (!ui.paperTheme) {
     ui.pixRect(x, y, w, h, 'rgba(10,6,8,0.65)');
     ui.icon(icon, x + 26 * u, y + h / 2, 40 * u);
     ui.text(value, x + 52 * u, y + h / 2, 24, '#fff', 'left');

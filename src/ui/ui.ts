@@ -23,9 +23,8 @@ interface ScrollState {
   max: number;
 }
 
-export const FONT = NEW_UI
-  ? '"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun","NSimSun",serif'
-  : '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
+const PAPER_FONT = '"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun","NSimSun",serif';
+const CLASSIC_FONT = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
 
 export const C = {
   bg: '#1d1a2b',
@@ -52,6 +51,7 @@ export const C = {
 };
 
 export class UI {
+  paperTheme = NEW_UI;
   ctx: CanvasRenderingContext2D;
   W: number;
   H: number;
@@ -254,7 +254,7 @@ export class UI {
 
   // —— 绘制工具 ——
   font(size: number, bold = true) {
-    return `${bold ? 'bold ' : ''}${Math.round(size * this.u)}px ${FONT}`;
+    return `${bold ? 'bold ' : ''}${Math.round(size * this.u)}px ${this.paperTheme ? PAPER_FONT : CLASSIC_FONT}`;
   }
 
   markPaper(x: number, y: number, w: number, h: number) {
@@ -262,7 +262,7 @@ export class UI {
   }
 
   private isOnPaper(x: number, y: number): boolean {
-    if (!NEW_UI) return false;
+    if (!this.paperTheme) return false;
     let inPaper = false;
     let paperLayer = -1;
     for (const z of this.paperZones) {
@@ -361,7 +361,7 @@ export class UI {
 
   /** 在指定矩形内叠加真实手工宣纸纹理（竹帘纹 + 檀皮纤维 + 古籍包浆边缘） */
   paperTexture(x: number, y: number, w: number, h: number, opts?: XuanTextureOpts) {
-    if (!NEW_UI) return;
+    if (!this.paperTheme) return;
     drawXuanTexture(this.ctx, x, y, w, h, this.u, opts);
   }
 
@@ -370,7 +370,7 @@ export class UI {
     const ctx = this.ctx;
     const c = cut ?? Math.max(2, Math.round(this.u * 4));
     let fill = color;
-    if (NEW_UI && typeof color === 'string') {
+    if (this.paperTheme && typeof color === 'string') {
       const lc = color.toLowerCase();
       const onP = this.isOnPaper(x + w / 2, y + h / 2);
       if (onP) {
@@ -411,7 +411,7 @@ export class UI {
     ctx.fillStyle = fill;
     ctx.fillRect(x + c, y, w - c * 2, h);
     ctx.fillRect(x, y + c, w, h - c * 2);
-    if (NEW_UI && typeof fill === 'string' && w >= 28 * this.u && h >= 18 * this.u) {
+    if (this.paperTheme && typeof fill === 'string' && w >= 28 * this.u && h >= 18 * this.u) {
       const fl = fill.toLowerCase();
       if (fl.startsWith('#f') || fl.startsWith('#e') || fl.startsWith('#d') || fl.startsWith('#cf')) {
         this.paperTexture(x + 2, y + 2, w - 4, h - 4, { alpha: 0.72, patina: w > 120 * this.u && h > 100 * this.u });
@@ -423,7 +423,7 @@ export class UI {
   panel(x: number, y: number, w: number, h: number, style: 'wood' | 'paper' | 'dark' = 'wood') {
     const p = Math.max(2, Math.round(this.u * 4));
     const ctx = this.ctx;
-    if (!NEW_UI) {
+    if (!this.paperTheme) {
       if (style === 'paper') {
         this.pixRect(x, y, w, h, C.borderDark, p);
         this.pixRect(x + p, y + p, w - p * 2, h - p * 2, C.paperDark, p);
@@ -563,7 +563,7 @@ export class UI {
     const h = 62 * this.u;
     const p = Math.max(2, Math.round(this.u * 3));
     const x = cx - w / 2, y = cy - h / 2;
-    if (!NEW_UI) {
+    if (!this.paperTheme) {
       this.pixRect(x - p * 3, y + p * 2, w + p * 6, h - p * 4, '#120d0c', p);
       this.pixRect(x - p * 2, y + p * 3, w + p * 4, h - p * 6, '#6b1c24', p);
       this.pixRect(x, y, w, h, '#120d0c', p);
@@ -631,7 +631,7 @@ export class UI {
     const off = pressed ? Math.round(2.5 * this.u) : 0;
     const p = Math.max(2, Math.round(this.u * 3));
     const cols = opts.disabled ? C.btnGray : colors;
-    if (!NEW_UI) {
+    if (!this.paperTheme) {
       this.pixRect(x, y + p, w, h, '#120d0c', p); // 投影
       this.pixRect(x, y + off, w, h - p, '#120d0c', p);
       this.pixRect(x + p, y + p + off, w - p * 2, h - p * 3, cols[1], p);
@@ -788,7 +788,7 @@ export class UI {
   redDot(x: number, y: number) {
     const r = 11 * this.u;
     const ctx = this.ctx;
-    if (!NEW_UI) {
+    if (!this.paperTheme) {
       ctx.fillStyle = '#120d0c';
       ctx.beginPath(); ctx.arc(x, y, r + 2 * this.u, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ff2a3a';
@@ -807,9 +807,9 @@ export class UI {
     ctx.beginPath(); ctx.arc(x - r * 0.28, y - r * 0.3, r * 0.28, 0, Math.PI * 2); ctx.fill();
   }
 
-  /** 绘制图标：NEW_UI 下优先使用 16x16 精细像素图标，保持纯正像素风与整数倍清晰缩放 */
+  /** 绘制图标：this.paperTheme 下优先使用 16x16 精细像素图标，保持纯正像素风与整数倍清晰缩放 */
   icon(name: string, cx: number, cy: number, size: number, alpha = 1) {
-    if (NEW_UI && hasSprite('icon_hd_' + name)) {
+    if (this.paperTheme && hasSprite('icon_hd_' + name)) {
       this.drawSprite(sprite('icon_hd_' + name), cx, cy, size, alpha);
       return;
     }
@@ -820,7 +820,7 @@ export class UI {
   drawSprite(s: Sprite, cx: number, cy: number, size: number, alpha = 1) {
     const max = Math.max(s.w, s.h);
     let scale = size / max;
-    if (NEW_UI && s.key && s.key.startsWith('icon_hd_')) {
+    if (this.paperTheme && s.key && s.key.startsWith('icon_hd_')) {
       scale = scale >= 1.65 ? Math.floor(scale + 0.35) : Math.max(1, Math.floor(scale + 0.25));
     } else {
       if (scale >= 2) scale = Math.floor(scale);
@@ -850,7 +850,7 @@ export class UI {
     ctx.fillRect(x + p, y + p, fw, h - p * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.28)';
     ctx.fillRect(x + p, y + p, fw, Math.max(1, (h - p * 2) * 0.32));
-    if (NEW_UI && h >= 14 * this.u) {
+    if (this.paperTheme && h >= 14 * this.u) {
       ctx.strokeStyle = 'rgba(216,170,96,0.35)';
       ctx.lineWidth = Math.max(1, this.u);
       ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
@@ -860,7 +860,7 @@ export class UI {
   /** 品质框 */
   qualityFrame(x: number, y: number, size: number, color: string) {
     const p = Math.max(2, Math.round(this.u * 4));
-    if (!NEW_UI) {
+    if (!this.paperTheme) {
       this.pixRect(x, y, size, size, '#120d0c', p);
       this.pixRect(x + p, y + p, size - p * 2, size - p * 2, color, p);
       this.pixRect(x + p * 2, y + p * 2, size - p * 4, size - p * 4, '#2a2030', p);
@@ -918,7 +918,7 @@ export class UI {
       const a = t.t < 0.15 ? t.t / 0.15 : t.t > 1.5 ? (1.8 - t.t) / 0.3 : 1;
       ctx.save();
       ctx.globalAlpha = a;
-      if (!NEW_UI) {
+      if (!this.paperTheme) {
         const w = this.measure(t.text, 28) + 60 * u;
         this.pixRect(this.W / 2 - w / 2, y - 30 * u, w, 60 * u, 'rgba(12,8,10,0.85)');
         this.text(t.text, this.W / 2, y, 28, '#fff4d6', 'center', null);

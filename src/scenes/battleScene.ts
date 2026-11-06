@@ -32,6 +32,7 @@ import { UNITS, MAX_ALLIES, BUILDS, BUILD_CARD_MAX, REPAIR_PCT, HERO_SUMMON_TIME
 import { ORDERS, LINKS, defenseChapter } from '../data/defense';
 
 export class BattleScene implements Scene {
+  readonly classicUI = true;
   battle!: Battle;
   renderer!: WorldRenderer;
   chapter: ChapterDef;

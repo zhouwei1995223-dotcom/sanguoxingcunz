@@ -83,6 +83,13 @@ function tag(ui: UI, x: number, y: number, text: string, color: string): number 
   return w + 8 * u;
 }
 
+function battleCardFrame(ui: UI, x: number, y: number, w: number, h: number, border: string, fill: string) {
+  const edge = 4 * ui.u;
+  ui.pixRect(x, y, w, h, '#120d0c');
+  ui.pixRect(x + edge, y + edge, w - 2 * edge, h - 2 * edge, border);
+  ui.pixRect(x + 2 * edge, y + 2 * edge, w - 4 * edge, h - 4 * edge, fill);
+}
+
 /** 技能卡片 */
 function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: number, h: number, highlight = false, ex: CardExtra = {}): boolean {
   const u = ui.u;
@@ -174,32 +181,30 @@ function drawSkillColumn(ui: UI, id: string, info: ReturnType<typeof choiceInfo>
   const u = ui.u, cx = x + w / 2, pad = 16 * u;
   const top = y + (ui.isPressed(id) ? 3 * u : 0);
   const evolution = info.evo || ex.evoReady;
-  const accent = ex.banish === 'yes' ? '#a92f24' : evolution ? '#af6514' : ex.rec ? '#32633d' : '#776447';
+  const border = evolution ? C.gold : ex.link ? '#fee761' : info.isNew ? '#2ce8f5' : C.border;
   const g = ui.ctx;
-  ui.panel(x, top, w, h, 'paper');
-  g.strokeStyle = accent;
-  g.lineWidth = Math.max(1, (ex.rec ? 4 : 2) * u);
-  g.strokeRect(x + 2 * u, top + 2 * u, w - 4 * u, h - 4 * u);
+  battleCardFrame(ui, x, top, w, h, border, evolution ? '#5a3a14' : ex.link ? '#4a3418' : C.panel);
   const badge = ex.banish ? (ex.banish === 'yes' ? '点击封禁' : '不可封禁')
     : evolution ? (info.evo ? '进化' : '可进化') : ex.rec ? '推荐' : '';
   if (badge) {
     const bw = ui.measure(badge, 20) + 20 * u;
-    g.fillStyle = accent;
+    g.fillStyle = ex.banish ? '#a22633' : evolution ? C.red : '#c96d17';
     g.fillRect(x + 3 * u, top + 3 * u, bw, 32 * u);
     ui.text(badge, x + 3 * u + bw / 2, top + 19 * u, 20, '#fbf4e4', 'center', null);
   }
+  ui.qualityFrame(cx - 48 * u, top + 35 * u, 96 * u, border);
   ui.icon(info.icon, cx, top + 81 * u, 78 * u);
-  ui.text(info.name, cx, top + 153 * u, 30, '#251c16', 'center', null);
+  ui.text(info.name, cx, top + 153 * u, 30, C.text);
   const state = [ex.link ? '专属' : '', info.evo ? '进化' : info.isNew ? '新' : '', info.max ? `${info.lv}/${info.max}级` : '', ex.evoReady ? '可进化' : ''].filter(Boolean).join(' · ');
-  ui.text(state, cx, top + 193 * u, 20, accent, 'center', null);
-  g.fillStyle = accent;
+  ui.text(state, cx, top + 193 * u, 20, evolution ? C.gold : C.textDim);
+  g.fillStyle = C.borderDark;
   g.fillRect(x + pad, top + 217 * u, w - 2 * pad, Math.max(1, u));
-  ui.wrapText(info.desc, x + pad, top + 231 * u, w - 2 * pad, 24, '#362b22', 1.3);
+  ui.wrapText(info.desc, x + pad, top + 231 * u, w - 2 * pad, 24, '#d9c6a0', 1.3);
   if (ex.recipe) {
     const lineH = 21 * u * 1.25;
     const lines = ui.wrapLines(ex.recipe, w - 2 * pad, 21);
     // 与微信版配方状态对应：已搭配为绿、专属为金、其余为灰。
-    const recipeInk = ex.recipeOk ? '#206637' : ex.link ? '#89590d' : '#63594e';
+    const recipeInk = ex.recipeOk ? '#9be37a' : ex.link ? '#fee761' : '#c2ad92';
     lines.forEach((line, i) => ui.text(line, x + pad, top + h - pad - (lines.length - i - 0.5) * lineH,
       21, recipeInk, 'left', null, !!(ex.recipeOk || ex.link)));
   }
@@ -226,16 +231,16 @@ function drawOwnedSkills(ui: UI, groups: ReturnType<typeof ownedSkillGroups>, x:
   const rows = groups.reduce((n, group) => n + Math.max(1, Math.ceil(group.items.length / 3)), 0);
   const bodyH = Math.min(5, rows) * rowH;
   const h = 66 * u + bodyH;
-  ui.panel(x, y, w, h, 'paper');
-  ui.text('本局已获得', x + 20 * u, y + 29 * u, 26, '#36271c', 'left', null);
+  ui.panel(x, y, w, h, 'wood');
+  ui.text('本局已获得', x + 20 * u, y + 29 * u, 26, C.gold, 'left', null);
   const listY = y + 52 * u;
   const offset = ui.beginScroll('lv_owned', x, listY, w, bodyH, rows * rowH);
   let lineY = listY + offset + rowH / 2;
   for (const group of groups) {
-    ui.text(group.name, x + 20 * u, lineY, 22, '#765132', 'left', null);
+    ui.text(group.name, x + 20 * u, lineY, 22, C.textDim, 'left', null);
     const items = group.items.length ? group.items : ['暂无'];
     items.forEach((item, i) => ui.text(item, x + 94 * u + (i % 3) * (w - 106 * u) / 3,
-      lineY + Math.floor(i / 3) * rowH, 22, '#36271c', 'left', null));
+      lineY + Math.floor(i / 3) * rowH, 22, C.text, 'left', null));
     lineY += Math.ceil(items.length / 3) * rowH;
   }
   ui.endScroll();
@@ -384,27 +389,16 @@ export class QiyuDialog implements Dialog {
     const u = ui.u;
     const d = QIYU_BY_ID[qid];
     const off = ui.isPressed(id) ? 4 * u : 0;
+    battleCardFrame(ui, x, y + off, w, h, '#4fb06a', '#1c3326');
     if (IS_WEB) {
       const cy = y + off, cx = x + w / 2;
-      ui.panel(x, cy, w, h, 'paper');
+      ui.qualityFrame(cx - 50 * u, cy + 28 * u, 100 * u, '#4fb06a');
       ui.icon(d.icon, cx, cy + 78 * u, 82 * u);
-      ui.text(d.name, cx, cy + 156 * u, 31, '#271f18', 'center', null);
-      ui.wrapText(d.story, cx, cy + 192 * u, w - 32 * u, 20, '#385940', 1.3, 'center');
-      ui.pixRect(x + 16 * u, cy + 262 * u, w - 32 * u, Math.max(1, u), '#9b8565');
-      ui.wrapText(d.desc, x + 16 * u, cy + 280 * u, w - 32 * u, 24, '#a02b20', 1.3);
+      ui.text(d.name, cx, cy + 156 * u, 31, C.text);
+      ui.wrapText(d.story, cx, cy + 192 * u, w - 32 * u, 20, '#8fbf9a', 1.3, 'center');
+      ui.pixRect(x + 16 * u, cy + 262 * u, w - 32 * u, Math.max(1, u), '#497754');
+      ui.wrapText(d.desc, x + 16 * u, cy + 280 * u, w - 32 * u, 24, '#fee761', 1.3);
       return ui.clicked(id, x, y, w, h);
-    }
-      if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
-    if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, '#4fb06a');
-    if (!NEW_UI) {
-        if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
-      if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, '#4fb06a');
-      ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, '#1c3326');
-    } else {
-      ui.panel(x, y + off, w, h, 'wood');
-      ui.ctx.strokeStyle = '#2b6e3f';
-      ui.ctx.lineWidth = Math.max(1.5, u * 1.8);
-      ui.ctx.strokeRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u);
     }
     const isz = h - 60 * u;
     ui.qualityFrame(x + 20 * u, y + 30 * u + off, isz, '#4fb06a');
@@ -487,18 +481,7 @@ export class StrategyDialog implements Dialog {
     const off = pressed ? 4 * u : 0;
     // 边框按品质固定颜色（神机原来是流光变色，看着像在闪，改成固定的）
     const border = TIER_COLORS[d.tier];
-      if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
-    if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
-    if (!NEW_UI) {
-        if (!NEW_UI) ui.pixRect(x, y + off, w, h, '#120d0c');
-      if (!NEW_UI) ui.pixRect(x + 4 * u, y + 4 * u + off, w - 8 * u, h - 8 * u, border);
-      ui.pixRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u, d.tier === 2 ? '#3a2240' : d.tier === 1 ? '#4a3418' : '#1f2c40');
-    } else {
-      ui.panel(x, y + off, w, h, 'wood');
-      ui.ctx.strokeStyle = d.tier === 2 ? '#80327a' : d.tier === 1 ? '#b85c14' : '#1f5a82';
-      ui.ctx.lineWidth = Math.max(1.5, u * 1.8);
-      ui.ctx.strokeRect(x + 8 * u, y + 8 * u + off, w - 16 * u, h - 16 * u);
-    }
+    battleCardFrame(ui, x, y + off, w, h, border, d.tier === 2 ? '#3a2240' : d.tier === 1 ? '#4a3418' : '#1f2c40');
     const isz = h - 60 * u;
     ui.qualityFrame(x + 20 * u, y + 30 * u + off, isz, border);
     ui.icon('jinnang', x + 20 * u + isz / 2, y + 30 * u + isz / 2 + off, isz * 0.66);
