@@ -6,7 +6,7 @@ import { guidePointer } from '../ui/guide';
 import { save, markDirty, flushSave, staminaNextSeconds, preparedSkillsFor } from '../meta/save';
 import type { EquipItem } from '../meta/save';
 import {
-  canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, patrolPending, patrolReward,
+  canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, tasksRedDot, patrolPending, patrolReward,
   collectPatrol, itemStats, isEquipped, equip, unequip, upgradeItem, mergeCandidates, mergeItem, grantReward, progressTask,
 } from '../meta/ops';
 import {
@@ -14,7 +14,7 @@ import {
   PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES, adStep,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { isCleared, getBest, chapterOpen, defenseOpen, STAR_BOSS_SEC } from '../meta/run';
+import { isCleared, getBest, chapterOpen, chapterStars, defenseOpen, defenseStars, starRating, STAR_BOSS_SEC } from '../meta/run';
 import type { RunResult } from '../meta/run';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
@@ -130,6 +130,15 @@ export class TasksDialog implements Dialog {
     const barY = f.y + 110 * u;
     const bx = f.x + 50 * u, bw = w - 100 * u;
     ui.text(`活跃度 ${pts}`, bx, barY - 30 * u, 24, C.gold, 'left');
+    if (IS_WEB && ui.button('tk_claim_all', bx + bw - 194 * u, barY - 68 * u, 194 * u, 58 * u, '一键领取', C.btnGold, { size: 23, disabled: !tasksRedDot() })) {
+      let tasks = 0, boxes = 0;
+      for (const task of DAILY_TASKS) if (claimTask(task.id)) tasks++;
+      // 先领取任务增加活跃度，再领取本次刚解锁和之前已解锁的宝箱。
+      for (let i = 0; i < ACTIVITY_REWARDS.length; i++) if (claimActivityBox(i)) boxes++;
+      playSfx('coin');
+      flushSave(true);
+      ui.toast(`已领任务 ${tasks} 项 · 活跃宝箱 ${boxes} 个`);
+    }
     ui.bar(bx, barY, bw, 24 * u, pts / 100, '#feae34');
     ACTIVITY_REWARDS.forEach((a, i) => {
       const x = bx + bw * (a.points / 100) - 36 * u;
@@ -735,7 +744,7 @@ export class ChapterListDialog implements Dialog {
         ui.pixRect(bx, y + 16 * u, bw, rowH - 32 * u, open ? (done ? df.color : '#231917') : '#1a1414');
         ui.text(df.name, bx + bw / 2, y + 44 * u, 20, done ? '#1a1210' : open ? df.color : '#555', 'center', null);
         const best = getBest(df.id, ch.id);
-        ui.text(done ? '✓' : open ? (best ? fmtTime(best) : '—') : '未解锁', bx + bw / 2, y + 78 * u, 18, done ? '#1a1210' : open ? '#fff' : '#555', 'center', null);
+        ui.text(done ? (IS_WEB ? starRating(chapterStars(df.id, ch.id)) : '✓') : open ? (best ? fmtTime(best) : '—') : '未解锁', bx + bw / 2, y + 78 * u, 18, done ? '#1a1210' : open ? '#fff' : '#555', 'center', null);
         if (open && ui.clicked(`cl_${ch.id}_${df.id}`, bx, y + 16 * u, bw, rowH - 32 * u)) { this.onPick(ch.id, df.id); picked = true; }
       });
     });
@@ -753,8 +762,11 @@ export class SweepDialog implements Dialog {
     const w = ui.W - 80 * u, h = 640 * u + (this.res.items.length > 2 ? 160 * u : 0);
     const f = dialogFrame(ui, w, h, '战力碾压', this.t);
     ui.text(this.title, ui.W / 2, f.y + 96 * u, 28, '#fff4d6');
-    ui.text(this.res.firstClear ? '兵锋所指，一战而定！（首次通关）' : '兵锋所指，一战而定！', ui.W / 2, f.y + 140 * u, 24, C.gold);
     const r = this.res;
+    const outcome = IS_WEB && r.stars !== undefined ? (r.firstClear ? '首次通关' : '三星通关') + '  ' + starRating(r.stars)
+      : r.firstClear ? '兵锋所指，一战而定！（首次通关）' : '兵锋所指，一战而定！';
+    ui.text(outcome, ui.W / 2, f.y + 140 * u, 24, C.gold);
+    if (IS_WEB && r.starBonus) ui.text(`含首次三星奖励 · 元宝×${r.starBonus}`, ui.W / 2, f.y + 186 * u, 20, C.textDim);
     rewardRow(ui, rewardEntries({ gold: r.gold, iron: r.iron, yuanbao: r.yuanbao, hero: r.heroReward, shards: r.shardReward }, r.items), ui.W / 2, f.y + 230 * u, 110 * u, this.t || 1);
     if (ui.button('sweep_ok', ui.W / 2 - 150 * u, f.y + h - 140 * u, 300 * u, 90 * u, '收下', C.btnGold, { size: 30 })) return false;
   }
@@ -781,7 +793,7 @@ export class DefenseListDialog implements Dialog {
       ui.pixRect(f.x + 30 * u, y, w - 60 * u, rowH, open ? '#3a4a30' : '#2a2422');
       ui.text(`${lv}. ${ch.name}`, f.x + 54 * u, y + 34 * u, 28, open ? '#fff4d6' : '#777', 'left');
       ui.text(`${ch.subtitle} · 推荐战力 ${fmtNum(ch.power)}`, f.x + 54 * u, y + 76 * u, 20, C.textDim, 'left');
-      ui.text(done ? '已守住 ✓' : open ? '可挑战' : '未解锁', f.x + w - 60 * u, y + rowH / 2, 22, done ? '#9be37a' : open ? '#fee761' : '#666', 'right');
+      ui.text(done ? (IS_WEB ? starRating(defenseStars(lv)) : '已守住 ✓') : open ? '可挑战' : '未解锁', f.x + w - 60 * u, y + rowH / 2, 22, done ? '#9be37a' : open ? '#fee761' : '#666', 'right');
       if (open && ui.clicked('dl_' + lv, f.x + 30 * u, y, w - 60 * u, rowH)) { this.onPick(lv); picked = true; }
     }
     ui.endScroll();

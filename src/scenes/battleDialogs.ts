@@ -830,7 +830,7 @@ export class ResultDialog implements Dialog {
       this.tierCount = w.rewards.length;
     } else {
       this.res = b.def
-        ? settleDefense(b.chapter.id, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx)
+        ? settleDefense(b.chapter.id, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx, IS_WEB ? runStars(win, b.reviveCount, b.finalBossSec) : undefined)
         : b.chapter.tutorial
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless
@@ -861,7 +861,7 @@ export class ResultDialog implements Dialog {
     if (this.res.newSkills) ui.text('解锁新技能：' + this.res.newSkills.join('、'), ui.W / 2, y + 34 * u, 20, '#9be37a');
     y += 60 * u;
     if (showStars) {
-      // 三星评价：通关 / 不复活 / 60 秒内击败最终敌将
+      // 三星评价：通关 / 不复活 / 限时击败最终敌将
       const st = this.res.stars || 0;
       const sw = (w - 80 * u) / 3;
       STAR_LABELS.forEach((label, i) => {
@@ -871,8 +871,8 @@ export class ResultDialog implements Dialog {
         ui.text(i === 2 && b.chapter.campaignMinutes === 5 ? '十分钟模式可得' : label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
       });
       y += 92 * u;
-      const tip = this.res.starBonus ? `集齐三星！额外元宝×${this.res.starBonus}` : starCount(st) < 3 ? '集齐三星可额外领取元宝' : '';
-      const hard = this.res.firstClear && this.scene.diff.id === 0 && this.scene.chapter.id === 1 && diffOpen(1) ? '困难难度已解锁，去挑战吧！' : '';
+      const tip = this.res.starBonus ? `集齐三星！额外元宝×${this.res.starBonus}` : !this.res.defense && starCount(st) < 3 ? '集齐三星可额外领取元宝' : '';
+      const hard = !this.res.defense && this.res.firstClear && this.scene.diff.id === 0 && this.scene.chapter.id === 1 && diffOpen(1) ? '困难难度已解锁，去挑战吧！' : '';
       if (tip || hard) ui.text(hard || tip, ui.W / 2, y, 20, this.res.starBonus ? C.gold : '#9be37a');
       y += 36 * u;
     }

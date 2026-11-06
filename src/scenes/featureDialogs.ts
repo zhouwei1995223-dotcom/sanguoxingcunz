@@ -10,6 +10,7 @@ import {
 } from '../meta/goals';
 import { ACHIEVEMENTS, NEWBIE_DAYS, NEWBIE_PRIZES, NEWBIE_WINDOW_DAYS, WEEKLY_TIERS, WEEKLY_DURATION, GoalDef } from '../data/goals';
 import { STAMINA } from '../data/meta';
+import { IS_WEB } from '../data/platformConfig';
 import { fmtNum, fmtTime } from '../core/math';
 import { playSfx } from '../audio/sound';
 import { RewardDialog, StaminaDialog } from './homeDialogs';
@@ -139,6 +140,20 @@ export class CodexDialog implements Dialog {
     // 可领取的排前面，已领取的排最后
     const list = ACHIEVEMENTS.slice().sort((a, b) => rank(a) - rank(b));
     function rank(a: GoalDef) { return save.achClaimed[a.id] ? 2 : goalDone(a) ? 0 : 1; }
+    if (IS_WEB) {
+      const ready = list.filter(a => rank(a) === 0);
+      ui.text(`已领取 ${Object.keys(save.achClaimed).length}/${list.length}`, fx + 40 * u, top + 32 * u, 22, C.gold, 'left');
+      const label = ready.length ? `一键领取(${ready.length})` : '一键领取';
+      if (ui.button('ach_claim_all', fx + w - 242 * u, top, 208 * u, 64 * u, label, C.btnGold, { size: 23, disabled: !ready.length })) {
+        let claimed = 0;
+        for (const a of ready) if (claimAch(a)) claimed++;
+        playSfx('coin');
+        flushSave(true);
+        ui.toast(`已领取 ${claimed} 项成就奖励`);
+      }
+      top += 78 * u;
+      vh -= 78 * u;
+    }
     const rowH = 110 * u;
     const off = ui.beginScroll('ach', fx + 20 * u, top, w - 40 * u, vh, list.length * (rowH + 10 * u));
     list.forEach((a, i) => {

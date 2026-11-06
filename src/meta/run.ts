@@ -73,8 +73,9 @@ export interface RunResult {
   starBonus?: number;
 }
 
-/** 三星评价：通关 / 不复活 / 最终敌将 60 秒内击败 */
+/** 三星评价：通关 / 不复活 / 限时击败最终敌将 */
 export const STAR_BOSS_SEC = 80;
+export const THREE_STARS = 0b111;
 export const STAR_LABELS = ['通关', '不复活', `${STAR_BOSS_SEC}秒内击败最终敌将`];
 export function runStars(win: boolean, revives: number, finalBossSec: number, minutes?: 5 | 10): number {
   if (!win) return 0;
@@ -83,6 +84,11 @@ export function runStars(win: boolean, revives: number, finalBossSec: number, mi
 export const starCount = (bits: number) => (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1);
 /** 某难度某章拿到过的星 */
 export const chapterStars = (d: number, chId: number) => save.stars[ck(d, chId)] || 0;
+export const defenseStars = (level: number) => save.defense?.stars?.[level] ?? ((save.defense?.cleared || 0) >= level ? 1 : 0);
+export function starRating(bits: number): string {
+  const n = starCount(bits);
+  return '★'.repeat(n) + '☆'.repeat(3 - n);
+}
 
 /** 新手试炼的结算：固定奖励 + 必得兵器（装备引导用），不记通关、不记最佳 */
 export function settleTutorial(win: boolean, coins: number, kills: number): RunResult {
@@ -97,9 +103,10 @@ export function settleTutorial(win: boolean, coins: number, kills: number): RunR
   return { win, firstClear: false, gold, iron: 0, yuanbao, items, newBest: false };
 }
 
-export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0): RunResult {
+/** t 为 null 表示免战碾压，发完整通关奖励，不计入手动坚守时长。 */
+export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0): RunResult {
   const d = diff.id;
-  const progress = Math.min(1, t / ch.duration);
+  const progress = t === null ? 1 : Math.min(1, t / ch.duration);
   const gold = Math.round((ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1)) * diff.reward + coins * 2);
   const iron = Math.round((ch.id * 2 + progress * 6 * ch.id + (win ? 4 * ch.id : 0)) * diff.reward);
   let yuanbao = win ? Math.round(20 * ch.id * diff.reward) : 0;
@@ -144,7 +151,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
     if (starCount(allStars) === 3 && starCount(oldStars) < 3) { starBonus = (50 + 20 * ch.id) * (1 + d); yuanbao += starBonus; }
   }
   // 记录封顶在章节时长：打赢后敌将战还在走时间，不封顶比较的话每次打赢都会显示「新纪录」
-  const capped = Math.min(ch.duration, Math.floor(t));
+  const capped = Math.min(ch.duration, Math.floor(t ?? 0));
   const newBest = capped > (save.bests[key] || 0);
   if (newBest) save.bests[key] = capped;
   if (d === 0 && capped > (save.chapterBest[ch.id] || 0)) save.chapterBest[ch.id] = capped;
@@ -168,7 +175,7 @@ export function defenseOpen(level: number): boolean {
  * 守城模式结算：金币玄铁按关卡和坚守时间；胜利送元宝和碎片，每天第一次胜利碎片翻倍；
  * 第一次守住某一关额外送 80×关卡 元宝和碎片。
  */
-export function settleDefense(level: number, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number): RunResult {
+export function settleDefense(level: number, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number, stars?: number): RunResult {
   const ch = CHAPTERS[Math.max(0, Math.min(CHAPTERS.length - 1, level - 1))];
   const dfs = (save.defense = save.defense || { best: 0, wins: 0, day: '', cleared: 0 });
   const progress = Math.min(1, t / 300);
@@ -186,6 +193,9 @@ export function settleDefense(level: number, win: boolean, t: number, coins: num
   if (sn) { shardReward = { hero: randomShardHero(true), n: sn }; grantShards(shardReward.hero, sn); }
   const newBest = waves > dfs.best;
   if (newBest) dfs.best = waves;
+  if (win && stars !== undefined && starCount(stars) > starCount(defenseStars(level))) {
+    (dfs.stars ??= {})[level] = stars;
+  }
   if (win) { dfs.wins++; dfs.day = today; if (firstClear) dfs.cleared = level; }
   save.gold += gold;
   save.iron += iron;
@@ -194,7 +204,7 @@ export function settleDefense(level: number, win: boolean, t: number, coins: num
   progressTask('kill', kills);
   if (bossKills) progressTask('boss', bossKills);
   markDirty();
-  return { win, firstClear, gold, iron, yuanbao, items, newBest, shardReward, defense: { waves, dailyFirst } };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, shardReward, defense: { waves, dailyFirst }, stars };
 }
 
 /** 无尽模式结算：按坚持时间发奖励，每 5 分钟额外送碎片 */
