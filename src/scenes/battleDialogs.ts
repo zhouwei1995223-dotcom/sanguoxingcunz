@@ -85,6 +85,13 @@ function tag(ui: UI, x: number, y: number, text: string, color: string): number 
 
 function battleCardFrame(ui: UI, x: number, y: number, w: number, h: number, border: string, fill: string) {
   const edge = 4 * ui.u;
+  if (ui.paperTheme) {
+    ui.panel(x, y, w, h, 'paper');
+    ui.ctx.strokeStyle = border;
+    ui.ctx.lineWidth = Math.max(1, ui.u * 1.8);
+    ui.ctx.strokeRect(x + 2 * edge, y + 2 * edge, w - 4 * edge, h - 4 * edge);
+    return;
+  }
   ui.pixRect(x, y, w, h, '#120d0c');
   ui.pixRect(x + edge, y + edge, w - 2 * edge, h - 2 * edge, border);
   ui.pixRect(x + 2 * edge, y + 2 * edge, w - 4 * edge, h - 4 * edge, fill);

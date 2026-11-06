@@ -103,7 +103,7 @@ export function dialogFrame(ui: UI, w: number, h: number, title: string, t = 1, 
       ui.ctx.strokeStyle = 'rgba(247,239,224,0.65)';
       ui.ctx.lineWidth = Math.max(1, u * 1.2);
       ui.ctx.strokeRect(cx + b * 3.4, cy + b * 3.4 + off, cs - b * 6.8, cs - b * 6.8);
-      ui.text('✕', cx + cs / 2, cy + cs / 2 + off, 26, '#fbf4e4', 'center', null);
+      ui.text('✕', cx + cs / 2, cy + cs / 2 + off, 26, ui.preserveTextColors ? '#fff' : '#fbf4e4', 'center', null);
     }
   }
   return { x: ui.W / 2 - w / 2, y: ui.H / 2 - h / 2, close };

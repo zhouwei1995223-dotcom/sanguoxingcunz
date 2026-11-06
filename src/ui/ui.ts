@@ -51,7 +51,8 @@ export const C = {
 };
 
 export class UI {
-  paperTheme = NEW_UI;
+  readonly paperTheme = NEW_UI;
+  preserveTextColors = false;
   ctx: CanvasRenderingContext2D;
   W: number;
   H: number;
@@ -308,7 +309,9 @@ export class UI {
     ctx.textAlign = align;
     ctx.textBaseline = 'middle';
     const cLow = color.toLowerCase();
-    if (this.isOnPaper(x, y) && cLow !== '#fbf4e4' && cLow !== '#f5ead4') {
+    const onPaper = this.isOnPaper(x, y);
+    if (this.preserveTextColors && onPaper) stroke ??= '#443328';
+    if (!this.preserveTextColors && onPaper && cLow !== '#fbf4e4' && cLow !== '#f5ead4') {
       const inkCol = this.mapInkColor(color);
       if (stroke) {
         // 水墨字在宣纸上统一衬一层淡淡的宣纸暖白光晕，即便跨过深色乌丝栏或山水印记也清晰如古籍刻本
@@ -622,7 +625,7 @@ export class UI {
       }
     }
 
-    this.text(label, cx, cy + 1 * this.u, 31, '#fbf4e4', 'center', '#450e09');
+    this.text(label, cx, cy + 1 * this.u, 31, this.preserveTextColors ? C.text : '#fbf4e4', 'center', '#450e09');
   }
 
   /** 按钮：colors = [主色, 暗色, 高光] */
@@ -704,11 +707,11 @@ export class UI {
       }
       // 阴文篆刻白字（去掉粗描边，仅保留轻微刻痕阴影，视觉更轻盈）
       this.text(label, tx, ty + 1.5 * this.u, size, 'rgba(30,8,6,0.32)', 'center', null);
-      this.text(label, tx, ty, size, '#fbf4e4', 'center', null);
+      this.text(label, tx, ty, size, this.preserveTextColors ? C.text : '#fbf4e4', 'center', null);
       if (opts.sub) {
         const subY = ty + size * this.u * 0.92;
         const subSize = size * 0.54;
-        this.text(`— ${opts.sub} —`, x + w / 2, subY, subSize, '#f5ead4', 'center', null);
+        this.text(`— ${opts.sub} —`, x + w / 2, subY, subSize, this.preserveTextColors ? '#fff' : '#f5ead4', 'center', null);
       }
     } else {
       // 次级与常规按钮（无尽 / 章节 / 签到 / 升级 / 箭头等）：轻盈「宣纸乌丝题签」样式
@@ -771,11 +774,12 @@ export class UI {
         this.icon(opts.icon, x + w / 2 - total / 2 + isz / 2, ty, isz);
         tx = x + w / 2 - total / 2 + isz + 8 * this.u + tw / 2;
       }
-      this.text(label, tx, ty, size, opts.disabled ? '#786b5c' : '#1e1814', 'center', null);
+      const labelColor = this.preserveTextColors ? (opts.disabled ? '#e0e0e0' : C.text) : (opts.disabled ? '#786b5c' : '#1e1814');
+      this.text(label, tx, ty, size, labelColor, 'center', null);
       if (opts.sub) {
         const subY = ty + size * this.u * 0.92;
         const subSize = size * 0.58;
-        this.text(opts.sub, x + w / 2, subY, subSize, subColor, 'center', null);
+        this.text(opts.sub, x + w / 2, subY, subSize, this.preserveTextColors ? '#fff' : subColor, 'center', null);
       }
     }
 
@@ -952,11 +956,7 @@ export class UI {
           ctx.closePath();
           ctx.fill();
         }
-        ctx.font = this.font(26, true);
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#1e1814';
-        ctx.fillText(t.text, this.W / 2, y + 0.5 * u);
+        this.text(t.text, this.W / 2, y + 0.5 * u, 26, this.preserveTextColors ? C.text : '#1e1814', 'center', this.preserveTextColors ? '#443328' : null);
       }
       ctx.restore();
       y += 70 * u;

@@ -25,7 +25,7 @@ export function guideHint(ui: UI, text: string, y: number) {
     ctx.strokeStyle = '#b5281f';
     ctx.lineWidth = Math.max(1.2, u * 1.4);
     ctx.strokeRect(x + 6 * u, top + 6 * u, w - 12 * u, h - 12 * u);
-    ui.text(text, ui.W / 2, y, 25, '#1e1814', 'center', null);
+    ui.text(text, ui.W / 2, y, 25, ui.preserveTextColors ? C.text : '#1e1814', 'center', ui.preserveTextColors ? '#443328' : null);
   }
   ctx.restore();
 }
