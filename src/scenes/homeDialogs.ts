@@ -6,6 +6,7 @@ import { guidePointer } from '../ui/guide';
 import { EvoTableDialog } from './evoTableDialog';
 import { save, markDirty, flushSave, staminaNextSeconds, preparationPresetsFor, selectedPreparationStage } from '../meta/save';
 import type { EquipItem } from '../meta/save';
+import type { ChestResult } from '../meta/ops';
 import {
   canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, tasksRedDot, patrolPending, patrolReward,
   collectPatrol, itemStats, isEquipped, equip, unequip, upgradeItem, mergeCandidates, mergeItem, grantReward, progressTask,
@@ -410,6 +411,29 @@ export class ChestResultDialog implements Dialog {
     }
     const bw = 300 * u;
     if (t > 1.3 && ui.button('cr_ok', ui.W / 2 - bw / 2, cy + 420 * u, bw, 96 * u, '确定', C.btnGold)) return false;
+  }
+}
+
+export class ChestBatchResultDialog implements Dialog {
+  t?: number;
+  constructor(private name: string, private results: ChestResult[]) { playSfx('chest'); }
+  draw(ui: UI) {
+    const u = ui.u, w = ui.W - 52 * u, h = 845 * u;
+    const f = dialogFrame(ui, w, h, this.name + ' · 十连抽', this.t);
+    const cellW = (w - 68 * u) / 2, rowH = 123 * u;
+    this.results.forEach(({ item, hero, shards }, i) => {
+      const x = f.x + 28 * u + (i % 2) * (cellW + 12 * u);
+      const y = f.y + 83 * u + Math.floor(i / 2) * rowH;
+      ui.pixRect(x, y, cellW, rowH - 9 * u, '#4a3630');
+      itemSlot(ui, x + 10 * u, y + 21 * u, 71 * u, item);
+      const tx = x + 94 * u;
+      ui.text(EQUIP_BY_ID[item.tid].name, tx, y + 26 * u, 25, C.text, 'left', null);
+      ui.text(QUALITY_NAMES[item.q], tx, y + 58 * u, 20, QUALITY_COLORS[item.q], 'left', null);
+      const extra = hero ? (hero.got === 'new' ? '获得' + HERO_BY_ID[hero.id].name : HERO_BY_ID[hero.id].name + '碎片×20')
+        : shards ? HERO_BY_ID[shards.hero].name + '碎片×' + shards.n : '';
+      if (extra) ui.text(extra, tx, y + 88 * u, 21, '#763568', 'left', null);
+    });
+    if (ui.button('cr_batch_ok', ui.W / 2 - 146 * u, f.y + h - 117 * u, 292 * u, 86 * u, '收下', C.btnGold)) return false;
   }
 }
 

@@ -389,10 +389,13 @@ for (const [wid, d] of Object.entries(WEAPONS)) {
     if (lv.tick) lv.tick = +(lv.tick * (wid === 'aura' ? 1.35 : 1.15)).toFixed(2);
   }
   d.evo.area = Math.min(72, Math.max(16, Math.round(d.evo.area * AREA_SCALE)));
-  if (d.evo.cd > 0) d.evo.cd = +(d.evo.cd * CD_SCALE).toFixed(2);
-  else if (wid === 'sword') { d.evo.cd = 2.2; d.evo.duration = 3.2; }
-  else if (wid === 'halberd') { d.evo.cd = 2.2; d.evo.duration = 1.5; }
-  if (d.evo.tick) d.evo.tick = +(d.evo.tick * (wid === 'aura' ? 1.35 : 1.15)).toFixed(2);
+  // 专属武器的原始进化计时来自微信 1.0.6，网页版直接沿用（含吕布的常驻横扫）。
+  if (!(IS_WEB && d.hero)) {
+    if (d.evo.cd > 0) d.evo.cd = +(d.evo.cd * CD_SCALE).toFixed(2);
+    else if (wid === 'sword') { d.evo.cd = 2.2; d.evo.duration = 3.2; }
+    else if (wid === 'halberd') { d.evo.cd = 2.2; d.evo.duration = 1.5; }
+    if (d.evo.tick) d.evo.tick = +(d.evo.tick * (wid === 'aura' ? 1.35 : 1.15)).toFixed(2);
+  }
   for (const l of d.links || []) {
     if (l.evo.area) l.evo.area = Math.min(74, Math.max(16, Math.round(l.evo.area * AREA_SCALE)));
     if (l.evo.cd && l.evo.cd > 0) l.evo.cd = +(l.evo.cd * CD_SCALE).toFixed(2);

@@ -260,6 +260,7 @@ export class Battle {
   // 局内派生属性
   dmgMul = 1;
   cdMul = 1;
+  heroEvoCdMul = 1;
   areaMul = 1;
   durMul = 1;
   hero: HeroDef;
@@ -326,23 +327,37 @@ export class Battle {
     return this.weapons.find((w) => w.id === id);
   }
 
+  /** 两套冷却规则共用装备、武将和计策，按各版本的兵书系数与缩减上限分别结算。 */
+  private cooldownMultiplier(wechatEvolution: boolean): number {
+    const gear = 1 - this.base.cd / 100;
+    const book = 1 - this.passiveLv('book') * (wechatEvolution ? 0.06 : 0.045);
+    let factor = Math.max(wechatEvolution ? 0.35 : 0.58, gear * book);
+    if (this.hero.id === 'zhuge') factor *= 0.9;
+    if (this.hero.id === 'sunshangxiang') factor *= 0.92;
+    if (this.frenzy) factor *= 0.5;
+    if (this.hasStrat('shensu')) factor *= 0.92;
+    if (this.hasStrat('wolong')) factor *= 0.85;
+    factor = Math.max(wechatEvolution ? 0.30 : 0.58, factor);
+    if (this.qiyu === 'dunjia') factor = Math.max(wechatEvolution ? 0.30 : 0.55, factor * 0.9);
+    return factor;
+  }
+
   recalc() {
     const P = (id: PassiveId) => this.passiveLv(id);
     const b = this.base;
     const auraEvo = this.weapon('aura')?.evo;
     this.dmgMul = 1 + b.dmg / 100 + 0.1 * P('tiger');
-    this.cdMul = Math.max(0.58, (1 - b.cd / 100) * (1 - 0.045 * P('book')));
+    this.cdMul = this.cooldownMultiplier(false);
+    this.heroEvoCdMul = IS_WEB ? this.cooldownMultiplier(true) : this.cdMul;
     this.areaMul = 1 + b.area / 100 + 0.06 * P('flag');
     this.durMul = 1 + 0.12 * P('pouch');
     const hid = this.hero.id;
     // 武将天赋
     if (hid === 'guanyu') { this.critBonus = 0.08; this.critDmgBonus = 0.4; }
-    if (hid === 'zhuge') this.cdMul *= 0.9;
     if (hid === 'zhaoyun') this.dmgMul += 0.1;
     if (hid === 'lvbu') this.dmgMul += 0.2;
     if (hid === 'huangzhong') this.critBonus = 0.1;
-    if (hid === 'sunshangxiang') this.cdMul *= 0.92;
-    if (this.frenzy) { this.dmgMul += 0.6; this.cdMul *= 0.5; }
+    if (this.frenzy) this.dmgMul += 0.6;
     this.dmgMul += this.reviveDmg;
     const qianli = this.weapon('horse')?.link && hid === 'guanyu';
     this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (hid === 'machao' ? 0.1 : 0) + (qianli ? 0.2 : 0) + this.reviveSpd);
@@ -375,9 +390,8 @@ export class Battle {
     if (S('libing')) this.dmgMul += 0.2;
     if (S('kurou')) this.dmgMul += 0.35;
     if (S('shengou')) this.dmgTakenMul *= 0.88;
-    if (S('shensu')) { this.speed *= 1.12; this.cdMul *= 0.92; }
-    if (S('wolong')) { this.cdMul *= 0.85; this.areaMul += 0.15; this.durMul += 0.15; }
-    this.cdMul = Math.max(0.58, this.cdMul);
+    if (S('shensu')) this.speed *= 1.12;
+    if (S('wolong')) { this.areaMul += 0.15; this.durMul += 0.15; }
     if (S('jiliang')) { this.goldMul += 0.4; this.expMul *= 1.1; }
     if (S('qinwang')) this.eliteDmg += 0.3;
     this.potionHeal = this.potionBase.heal + (S('yangjing') ? 0.1 : 0);
@@ -392,7 +406,6 @@ export class Battle {
     if (Q('huatuo')) { this.potionHeal += 0.1; this.potionCdMax = Math.round(this.potionCdMax * 0.7); this.potionCd = Math.min(this.potionCd, this.potionCdMax); }
     if (Q('tengjia')) this.dmgTakenMul *= 0.85;
     if (Q('shuijing')) this.expMul *= 1.25;
-    if (Q('dunjia')) this.cdMul = Math.max(0.55, this.cdMul * 0.9);
     if (Q('sunzi')) { this.areaMul += 0.12; this.durMul += 0.15; }
     this.areaMul = Math.min(1.38, this.areaMul);
     if (Q('tongque')) this.goldMul += 0.5;

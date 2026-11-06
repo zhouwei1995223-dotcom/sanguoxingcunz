@@ -10,6 +10,10 @@ export function levelData(w: WeaponState): WeaponLevel {
   return w.evo ? w.evoL || d.evo : d.levels[w.lv - 1];
 }
 
+function attackCooldown(b: Battle, w: WeaponState, level: WeaponLevel): number {
+  return level.cd * (w.evo && w.id === b.hero.weapon ? b.heroEvoCdMul : b.cdMul);
+}
+
 /** 计入「舆图」数量加成后的数值 */
 function withBonus(b: Battle, w: WeaponState): WeaponLevel {
   const L = levelData(w);
@@ -50,7 +54,7 @@ export function updateWeapons(b: Battle, dt: number) {
 function spear(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const len = L.area * b.areaMul;
   const width = 11 * Math.sqrt(b.areaMul) * (w.evo ? 1.3 : 1);
@@ -99,7 +103,7 @@ function sword(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (!w.evo || L.cd > 0) {
     if (w.active <= 0) {
       w.t -= dt;
-      if (w.t <= 0) { w.active = (L.duration || 3) * b.durMul; w.t = L.cd * b.cdMul; }
+      if (w.t <= 0) { w.active = (L.duration || 3) * b.durMul; w.t = attackCooldown(b, w, L); }
       return;
     }
     w.active -= dt;
@@ -130,7 +134,7 @@ function sword(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const dmg = L.dmg * b.base.atk;
   const ox = p.x, oy = p.y - 10;
@@ -219,7 +223,7 @@ function crossbow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function horse(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const dmg = L.dmg * b.base.atk;
   const sp = L.speed || 230;
@@ -252,7 +256,7 @@ function horse(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function fire(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   for (let i = 0; i < L.count; i++) {
     const t = b.randomVisibleEnemy();
@@ -322,7 +326,7 @@ function sweep(b: Battle, cx: number, cy: number, R: number, dir: number, arc: n
 function blade(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const R = L.area * b.areaMul;
   const t = b.nearestEnemy(R * 1.15);
@@ -342,7 +346,7 @@ function blade(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function snake(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const R = L.area * b.areaMul;
   w.angle += 2.1;
@@ -357,7 +361,7 @@ function snake(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function fan(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const t = b.nearestEnemy(95);
   const base = t ? Math.atan2(t.y - (p.y - 10), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
@@ -385,7 +389,7 @@ function halberd(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   if (!w.evo || L.cd > 0) {
     if (w.active <= 0) {
       w.t -= dt;
-      if (w.t <= 0) { w.active = (L.duration || 1) * b.durMul; w.t = L.cd * b.cdMul; }
+      if (w.t <= 0) { w.active = (L.duration || 1) * b.durMul; w.t = attackCooldown(b, w, L); }
       return;
     }
     w.active -= dt;
@@ -404,7 +408,7 @@ function halberd(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function knife(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const t = b.nearestEnemy(L.area * 1.15);
   const base = t ? Math.atan2(t.y - 4 * t.scale - (p.y - 8), t.x - p.x) : Math.atan2(p.dirY, p.dirX);
@@ -430,7 +434,7 @@ function knife(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function thunder(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const hit = new Set<number>();
   const dmg = L.dmg * b.base.atk;
   const jump = L.area * Math.sqrt(b.areaMul);
@@ -464,7 +468,7 @@ function thunder(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function rock(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   for (let i = 0; i < L.count; i++) {
     const t = b.randomVisibleEnemy();
@@ -488,7 +492,7 @@ function rock(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function catapult(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   // 优先砸远处的敌群
   const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -30));
@@ -540,7 +544,7 @@ function drum(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   }
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   w.burst = L.count;
   w.active = 0;
 }
@@ -549,7 +553,7 @@ function drum(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function caltrop(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const life = (L.duration || 4) * b.durMul;
   // 同时存在的铁蒺藜有上限，避免越叠越多
@@ -568,7 +572,7 @@ function caltrop(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function bow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const cands = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
   if (!cands.length) { w.t = 0.2; return; }
@@ -595,7 +599,7 @@ function bow(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const len = L.area * b.areaMul;
   const width = 13 * Math.sqrt(b.areaMul) * (w.evo ? 1.3 : 1);
@@ -628,7 +632,7 @@ function lance(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function chakram(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const dmg = L.dmg * b.base.atk;
   const jump = L.area * Math.sqrt(b.areaMul);
@@ -665,7 +669,7 @@ function chakram(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function ji(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y, -28));
   vis.sort((a, c) => (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((c.x - p.x) ** 2 + (c.y - p.y) ** 2));
@@ -695,7 +699,7 @@ function ji(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 function meteor(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
   w.t -= dt;
   if (w.t > 0) return;
-  w.t = L.cd * b.cdMul;
+  w.t = attackCooldown(b, w, L);
   const p = b.player;
   for (let i = 0; i < L.count; i++) {
     const t = b.randomVisibleEnemy();

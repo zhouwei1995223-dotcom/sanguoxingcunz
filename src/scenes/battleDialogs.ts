@@ -637,9 +637,13 @@ export class PauseDialog implements Dialog {
     // 进化表
     if (ui.button('p_evo', ui.W / 2 - 180 * u, y - 30 * u, 360 * u, 64 * u, '查看进化表', C.btnGreen, { size: 24 })) game.openDialog(new EvoTableDialog(b));
     y += 60 * u;
+    let cooldown = `${Math.round((1 - b.cdMul) * 100)}%`;
+    if (IS_WEB && b.weapon(b.hero.weapon)?.evo && WEAPONS[b.hero.weapon].evo.cd > 0 && b.cdMul !== b.heroEvoCdMul) {
+      cooldown += ` · 专武${Math.round((1 - b.heroEvoCdMul) * 100)}%`;
+    }
     const stats: [string, string][] = [
       ['攻击', String(b.base.atk)], ['生命', `${Math.ceil(b.player.hp)}/${b.player.maxHp}`],
-      ['伤害加成', `${Math.round((b.dmgMul - 1) * 100)}%`], ['冷却缩减', `${Math.round((1 - b.cdMul) * 100)}%`],
+      ['伤害加成', `${Math.round((b.dmgMul - 1) * 100)}%`], ['冷却缩减', cooldown],
       ['暴击率', `${Math.round(b.crit * 100)}%`], ['移动速度', `${Math.round(b.speed)}`],
     ];
     stats.forEach((s, i) => {

@@ -9,11 +9,11 @@ import { WEAPONS, PASSIVES, heroLinks, skillPoolFor, fitPreparation } from '../d
 import {
   heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, peakUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
-  canSignin, tasksRedDot, patrolPending, spendStamina, chestById, openChest, progressTask, GOLD_CHEST_HERO_RATE, chestOddsText,
+  canSignin, tasksRedDot, patrolPending, spendStamina, openChest, progressTask, GOLD_CHEST_HERO_RATE, chestOddsText,
 } from '../meta/ops';
 import {
   HERO, heroLevelCost, potionStats, SLOTS, SLOT_NAMES, SLOT_ICONS, EQUIP_BY_ID, TALENTS, talentCost, STAT_NAMES, PERCENT_STATS, STAMINA,
-  CHESTS, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
+  CHESTS, ChestDef, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
 import { settleRun, settleDefense, RunResult, defenseOpen, chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, THREE_STARS, starRating, chapterStars, defenseStars } from '../meta/run';
@@ -22,7 +22,7 @@ import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
-  SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
+  SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, ChestBatchResultDialog, StaminaDialog, RankDialog,
   SidebarDialog, PreparationDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
@@ -1172,14 +1172,15 @@ export class HomeScene implements Scene {
       } else ui.text('可能获得：' + qs.map((q) => QUALITY_NAMES[q]).join('/') + '装备、武将碎片', 270 * u, y + 56 * u, 20, '#d9c6a0', 'left');
       const used = save.daily.chestAd[c.id] || 0;
       const bw = 200 * u;
+      const buttonH = (IS_WEB ? 74 : 110) * u;
       if (used < (c.freeDaily || 0)) {
         // 每天第一次不用看广告
-        if (ui.button('chest_free_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', C.btnGreen, { sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
+        if (ui.button('chest_free_' + c.id, 270 * u, y + 140 * u, bw, buttonH, '免费', C.btnGreen, { sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
           save.daily.chestAd[c.id] = used + 1;
           markDirty();
-          this.openChestNow(c.id);
+          this.openChestNow(c);
         }
-      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, 110 * u, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}${c.freeDaily && used < c.adDaily ? ` 送${CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)]}元宝` : ''}`, size: 28 })) {
+      } else if (adButton(ui, 'chest_ad_' + c.id, 270 * u, y + 140 * u, bw, buttonH, '免费', { disabled: used >= c.adDaily, sub: `${c.adDaily - used}/${c.adDaily}${c.freeDaily && used < c.adDaily ? ` 送${CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)]}元宝` : ''}`, size: 28 })) {
         getPlatform().showRewardedAd('chest_' + c.id).then((ok) => {
           if (!ok) return;
           save.daily.chestAd[c.id] = used + 1;
@@ -1187,22 +1188,21 @@ export class HomeScene implements Scene {
           // 1.0.4：军资箱看广告开箱额外送元宝，一次比一次多
           const bonus = c.freeDaily ? CHEST_AD_BONUS[Math.min(CHEST_AD_BONUS.length - 1, used - c.freeDaily)] || 0 : 0;
           if (bonus) { save.yuanbao += bonus; ui.toast(`额外获得元宝×${bonus}`); }
-          this.openChestNow(c.id);
+          this.openChestNow(c);
         });
       }
-      if (ui.button('chest_buy_' + c.id, 490 * u, y + 140 * u, bw, 110 * u, String(c.cost), save.yuanbao >= c.cost ? C.btnGold : C.btnGray, { icon: 'yuanbao', size: 28 })) {
-        if (save.yuanbao < c.cost) ui.toast('元宝不足');
-        else { save.yuanbao -= c.cost; this.openChestNow(c.id); }
-      }
+      if (ui.button('chest_buy_' + c.id, 490 * u, y + 140 * u, bw, buttonH, String(c.cost), save.yuanbao >= c.cost ? C.btnGold : C.btnGray, { icon: 'yuanbao', size: 28 })) this.buyChests(c, 1);
+      if (IS_WEB && ui.button('chest_ten_' + c.id, 270 * u, y + 221 * u, 420 * u, 65 * u, `十连抽 · ${10 * c.cost}元宝`, save.yuanbao >= 10 * c.cost ? C.btnRed : C.btnGray, { size: 26 })) this.buyChests(c, 10);
       y += h + 20 * u;
     }
     // 每日补给
     ui.ribbon(ui.W / 2, y + 30 * u, 360 * u, '每日补给');
     y += 80 * u;
     // 1.0.4：看广告领的补给一次比一次多，卡片上显示「本次 / 下次」
-    const ybAmt = (k: number) => Math.round(SHOP_DAILY.adYuanbao.amount * adStep(SHOP_DAILY.adYuanbao.limit, k));
+    const supplyMultiplier = IS_WEB ? 2 : 1;
+    const ybAmt = (k: number) => supplyMultiplier * Math.round(SHOP_DAILY.adYuanbao.amount * adStep(SHOP_DAILY.adYuanbao.limit, k));
     const goldAmt = (k: number) => Math.floor(SHOP_DAILY.adGold.minutes * adStep(SHOP_DAILY.adGold.limit, k) * (3 + save.maxCleared * 3));
-    const shardAmt = (k: number) => Math.round(SHOP_DAILY.adShards.amount * adStep(SHOP_DAILY.adShards.limit, k));
+    const shardAmt = (k: number) => supplyMultiplier * Math.round(SHOP_DAILY.adShards.amount * adStep(SHOP_DAILY.adShards.limit, k));
     const dy = save.daily;
     const nextTxt = (left: number, v: string) => (left > 1 ? `（下次×${v}）` : '');
     const ybLeft = SHOP_DAILY.adYuanbao.limit - dy.adYuanbao, goldLeft = SHOP_DAILY.adGold.limit - dy.adGold;
@@ -1237,11 +1237,22 @@ export class HomeScene implements Scene {
     ui.endScroll();
   }
 
-  private openChestNow(id: string) {
-    const r = openChest(chestById(id));
+  private buyChests(chest: ChestDef, count: 1 | 10) {
+    const cost = chest.cost * count;
+    if (save.yuanbao < cost) { game.ui.toast('元宝不足'); return; }
+    save.yuanbao -= cost;
+    this.openChestNow(chest, count);
+  }
+
+  private openChestNow(chest: ChestDef, count: 1 | 10 = 1) {
+    const results = Array.from({ length: count }, () => openChest(chest));
     markDirty();
     flushSave(true);
-    game.openDialog(new ChestResultDialog(r.item, id === 'gold', r.shards, r.hero));
+    if (count === 10) game.openDialog(new ChestBatchResultDialog(chest.name, results));
+    else {
+      const r = results[0];
+      game.openDialog(new ChestResultDialog(r.item, chest.id === 'gold', r.shards, r.hero));
+    }
   }
 
   // —— 新手引导 ——
