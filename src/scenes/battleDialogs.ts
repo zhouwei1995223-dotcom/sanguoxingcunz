@@ -256,15 +256,84 @@ function drawOwnedSkills(ui: UI, groups: ReturnType<typeof ownedSkillGroups>, x:
 
 export class LevelUpDialog implements Dialog {
   private banishTip = false;
+  private offerPreparedRefresh: boolean;
+  private adBusy = false;
+  private usedPreparedAd = false;
+  closed = false;
   constructor(private scene: BattleScene, private choices: Choice[]) {
+    this.offerPreparedRefresh = scene.hasPreparation && scene.autoPick && !scene.skipPreparedPrompts
+      && scene.battle.adRerolls < LEVELUP_AD_LIMIT && !scene.preparedMatch(choices)
+      && !!scene.preparedMatch(scene.battle.availableLevelChoices());
     // 第三次升级时提示刷新和封禁（新手局第一次升级有手指引导，先不打扰）
     if (!save.tips.banish && scene.battle.level >= 4) { this.banishTip = true; save.tips.banish = true; markDirty(); }
   }
   private banishMode = false;
+
+  private reroll() {
+    this.choices = this.scene.battle.rollChoices();
+    this.banishMode = false;
+    this.offerPreparedRefresh = false;
+    this.t = 0.2;
+    if (this.scene.hasPreparation && this.scene.autoPick) {
+      this.closed = this.scene.autoChooseUpgrade(this.choices);
+      if (!this.closed) game.ui.toast('刷新后仍无备战技能，请手选');
+    }
+  }
+
+  private async watchRefreshAd() {
+    const b = this.scene.battle;
+    if (this.adBusy || this.closed || this.usedPreparedAd || b.adRerolls >= LEVELUP_AD_LIMIT) return;
+    this.adBusy = true;
+    try {
+      const ok = await getPlatform().showRewardedAd('levelup_reroll');
+      if (game.scene !== this.scene || !game.dialogs.includes(this) || this.closed) return;
+      if (!ok) {
+        game.ui.toast('未完成观看，保留原选项');
+        return;
+      }
+      b.adRerolls++;
+      progressTask('ad', 1);
+      this.usedPreparedAd = this.scene.hasPreparation && this.scene.autoPick;
+      this.reroll();
+    } catch {
+      game.ui.toast('广告暂时无法播放，保留原选项');
+    } finally {
+      this.adBusy = false;
+    }
+  }
+
+  private drawPreparedActions(ui: UI, y: number) {
+    const u = ui.u, b = this.scene.battle, h = 90 * u, w = 300 * u;
+    const left = ui.W / 2 - w - 10 * u, right = ui.W / 2 + 10 * u;
+    const hasFree = b.rerolls > 0;
+    if (hasFree && ui.button('prep_free', left, y, w, h, `免费刷新(${b.rerolls})`, C.btnBlue, { size: 26 })) {
+      b.rerolls--;
+      this.reroll();
+      return;
+    }
+    if (adButton(ui, 'prep_ad', hasFree ? right : (ui.W - w) / 2, y, w, h, '看广告刷新一次', { size: 26 })) {
+      void this.watchRefreshAd();
+      return;
+    }
+    const by = y + h + 16 * u;
+    if (ui.button('prep_manual', left, by, w, h, '不刷新，手动选', C.btnGray, { size: 26 })) this.offerPreparedRefresh = false;
+    if (ui.button('prep_silence', right, by, w, h, '本局不再提示', C.btnGray, { size: 26 })) {
+      this.scene.skipPreparedPrompts = true;
+      this.offerPreparedRefresh = false;
+      ui.toast('本局未命中时直接手选');
+    }
+  }
+
   draw(ui: UI) {
+    if (this.closed) return false;
     const u = ui.u;
     const b = this.scene.battle;
     const t = this.t || 0;
+    if (this.adBusy) {
+      const f = dialogFrame(ui, ui.W - 80 * u, 245 * u, '刷新技能', 1);
+      ui.text('正在等待广告结果…', ui.W / 2, f.y + 138 * u, 28);
+      return;
+    }
     const gap = 12 * u, panelW = ui.W - 46 * u;
     const cw = IS_WEB ? (panelW - 2 * gap) / 3 : ui.W - 70 * u;
     const cards = this.choices.map(c => ({ info: choiceInfo(c), ex: cardExtra(b, c) }));
@@ -276,7 +345,9 @@ export class LevelUpDialog implements Dialog {
     }
     const titleY = IS_WEB ? Math.max(ui.safeTop + 45 * u, Math.min(ui.H * 0.18, (ui.H - ch - 590 * u) / 2)) : ui.H * 0.2;
     ui.ribbon(ui.W / 2, titleY, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
-    ui.text(this.banishMode && IS_WEB ? '选择要封禁的新技能' : '选择一项强化', ui.W / 2, titleY + 64 * u, 26, C.textDim);
+    const instruction = this.offerPreparedRefresh ? '本次没有备战技能，要看广告刷新一次吗？'
+      : this.banishMode && IS_WEB ? '选择要封禁的新技能' : '选择一项强化';
+    ui.text(instruction, ui.W / 2, titleY + 64 * u, 26, C.textDim);
     const cardTop = titleY + 110 * u;
     const firstX = IS_WEB ? (ui.W - cards.length * cw - (cards.length - 1) * gap) / 2 : (ui.W - cw) / 2;
     let y = cardTop;
@@ -296,7 +367,11 @@ export class LevelUpDialog implements Dialog {
         : choiceCard(ui, id, c, x, y, cw, ch, tutorial && i === 0, ex);
       if (picked && t > 0.25) {
         if (this.banishMode) {
-          if (ex.banish === 'yes' && b.banish(this.choices, i)) { this.banishMode = false; playSfx('hurt'); }
+          if (ex.banish === 'yes' && b.banish(this.choices, i)) {
+            this.banishMode = false;
+            playSfx('hurt');
+            if (this.scene.hasPreparation && this.scene.autoChooseUpgrade(this.choices)) return false;
+          }
           else ui.toast('只能封禁新技能');
           continue;
         }
@@ -309,27 +384,24 @@ export class LevelUpDialog implements Dialog {
     // 刷新 / 封禁
     const bh = 92 * u;
     y += 10 * u;
+    if (this.offerPreparedRefresh) {
+      this.drawPreparedActions(ui, y);
+      return;
+    }
     const showBanish = !tutorial && b.banishes > 0;
     const bw = showBanish ? 300 * u : 300 * u;
     const rx = showBanish ? ui.W / 2 - bw - 12 * u : ui.W / 2 - bw / 2;
     if (b.rerolls > 0) {
       if (ui.button('lv_reroll', rx, y, bw, bh, `刷新(${b.rerolls})`, C.btnBlue)) {
         b.rerolls--;
-        this.choices = b.rollChoices();
-        this.banishMode = false;
-        this.t = 0.2;
+        this.reroll();
+        return;
       }
     } else {
       const left = LEVELUP_AD_LIMIT - b.adRerolls;
-      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: `本局剩余${Math.max(0, left)}次` })) {
-        getPlatform().showRewardedAd('levelup_reroll').then((ok) => {
-          if (!ok) return;
-          b.adRerolls++;
-          progressTask('ad', 1);
-          this.choices = b.rollChoices();
-          this.banishMode = false;
-          this.t = 0.2;
-        });
+      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0 || this.usedPreparedAd, sub: this.usedPreparedAd ? '本次已刷新' : `本局剩余${Math.max(0, left)}次` })) {
+        void this.watchRefreshAd();
+        return;
       }
     }
     if (showBanish && ui.button('lv_banish', ui.W / 2 + 12 * u, y, bw, bh, this.banishMode ? '取消封禁' : `封禁(${b.banishes})`, this.banishMode ? C.btnGray : C.btnRed)) {
@@ -338,7 +410,13 @@ export class LevelUpDialog implements Dialog {
     // 自动选择：打开后以后的升级直接领推荐项（暂停里可以关）
     if (!tutorial) {
       const aw = 300 * u;
-      if (ui.button('lv_auto', ui.W / 2 - aw / 2, y + bh + 20 * u, aw, 76 * u, '自动选择：关', C.btnGray, { size: 24 })) {
+      const label = this.scene.hasPreparation ? '备战选技：' + (this.scene.autoPick ? '开' : '关') : '自动选择：关';
+      if (ui.button('lv_auto', ui.W / 2 - aw / 2, y + bh + 20 * u, aw, 76 * u, label, C.btnGray, { size: 24 })) {
+        if (this.scene.hasPreparation) {
+          this.scene.autoPick = !this.scene.autoPick;
+          if (this.scene.autoChooseUpgrade(this.choices)) return false;
+          return;
+        }
         this.scene.autoPick = true;
         ui.toast('已开启自动选择（暂停里可以关闭）');
         this.scene.choose(this.choices[Math.max(0, rec)]);
@@ -573,7 +651,7 @@ export class PauseDialog implements Dialog {
       ['p_shake', '震屏:' + (save.settings.screenShake ? '开' : '关'), () => { save.settings.screenShake = !save.settings.screenShake; }, save.settings.screenShake],
       ['p_ult', '大招:' + (save.settings.ultRight ? '右' : '左'), () => { save.settings.ultRight = !save.settings.ultRight; }, false],
       ['p_power', '省电:' + (save.settings.lowPower ? '开' : '关'), () => { save.settings.lowPower = !save.settings.lowPower; }, save.settings.lowPower],
-      ['p_auto', '自动选技能:' + (this.scene.autoPick ? '开' : '关'), () => { this.scene.autoPick = !this.scene.autoPick; }, this.scene.autoPick],
+      ['p_auto', (this.scene.hasPreparation ? '备战选技:' : '自动选技能:') + (this.scene.autoPick ? '开' : '关'), () => { this.scene.autoPick = !this.scene.autoPick; }, this.scene.autoPick],
       ['p_num', '伤害数字:' + (save.settings.dmgNum ? '开' : '关'), () => { save.settings.dmgNum = !save.settings.dmgNum; b.showDamage = save.settings.dmgNum; }, save.settings.dmgNum],
     ];
     toggles.forEach(([id, label, fn, on], i) => {

@@ -2035,7 +2035,16 @@ export class Battle {
 
   // —— 升级选项 ——
   rollChoices(n = 3): Choice[] {
-    if (this.def) return this.rollDefenseChoices(n);
+    return this.pickChoices(this.levelUpPool(), n);
+  }
+
+  /** 复用实际抽卡池判断备战技能还有没有机会出现，不消耗随机数。 */
+  availableLevelChoices(): Choice[] {
+    return this.levelUpPool().map(item => item.c);
+  }
+
+  private levelUpPool() {
+    if (this.def) return this.defenseChoicePool();
     const pool: { c: Choice; w: number }[] = [];
     const ok = (kind: string, id: string) => !this.banned.has(kind + ':' + id);
     // 已有武器对应的进化兵法：出现几率更高，方便凑出进化
@@ -2053,7 +2062,7 @@ export class Battle {
       const k = Math.min(1, 8 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: (wanted.has(id) ? 3 : 1.4) * k });
     }
-    return this.pickChoices(pool, n);
+    return pool;
   }
 
   private pickChoices(pool: { c: Choice; w: number }[], n: number): Choice[] {
@@ -2078,7 +2087,7 @@ export class Battle {
     return [this.hero.weapon, ...heroLinks(this.hero.id).map((x) => x.weapon)].filter((id, i, a) => a.indexOf(id) === i && (id === this.hero.weapon || can.has(id)));
   }
 
-  private rollDefenseChoices(n: number): Choice[] {
+  private defenseChoicePool() {
     const d = this.def!;
     const pool: { c: Choice; w: number }[] = [];
     const ok = (kind: string, id: string) => !this.banned.has(kind + ':' + id);
@@ -2094,7 +2103,7 @@ export class Battle {
       else if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id, lv: w.lv + 1, isNew: false }, w: id === this.hero.weapon ? 2.6 : 2 });
       else if (!w.evo) pool.push({ c: { kind: 'evo', id }, w: 6 });
     }
-    return this.pickChoices(pool, n);
+    return pool;
   }
 
   /** 封禁一个新技能选项：本局不再出现，并换一个新的 */
@@ -2222,7 +2231,7 @@ export class Battle {
    */
   rollChest(boss: boolean): Choice[] {
     // 守城：宝箱直接给守城的升级项（不重复）
-    if (this.def) return this.rollDefenseChoices(boss ? 3 : Math.random() < 0.3 ? 2 : 1).filter((c) => c.kind !== 'heal' && c.kind !== 'gold');
+    if (this.def) return this.rollChoices(boss ? 3 : Math.random() < 0.3 ? 2 : 1).filter((c) => c.kind !== 'heal' && c.kind !== 'gold');
     const out: Choice[] = [];
     let evo = this.evolvable();
     let count = boss ? 3 : Math.random() < 0.08 ? 5 : Math.random() < 0.3 ? 3 : 1;

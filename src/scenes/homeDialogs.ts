@@ -3,7 +3,7 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries, itemSlot, RewardEntry } from '../ui/widgets';
 import { guidePointer } from '../ui/guide';
-import { save, markDirty, flushSave, staminaNextSeconds } from '../meta/save';
+import { save, markDirty, flushSave, staminaNextSeconds, preparedSkillsFor } from '../meta/save';
 import type { EquipItem } from '../meta/save';
 import {
   canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, patrolPending, patrolReward,
@@ -24,6 +24,7 @@ import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_WEB } from '../data/plat
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
+import { weaponsForHero, passivesFor, WEAPONS, PASSIVES } from '../data/skills';
 import { setOf, redeem } from '../meta/goals';
 import { getEquipped } from '../meta/ops';
 import { SLOTS } from '../data/meta';
@@ -571,6 +572,71 @@ export class SidebarDialog implements Dialog {
         return false;
       }
     } else if (ui.button('sb_go', ui.W / 2 - bw / 2, by, bw, 100 * u, '前往侧边栏', C.btnBlue)) p.navigateToSidebar();
+  }
+}
+
+export class PreparationDialog implements Dialog {
+  t?: number;
+  private readonly hero = save.hero;
+  private selected = preparedSkillsFor(this.hero);
+  private tab: 'weapons' | 'passives' = 'weapons';
+  private readonly weapons = weaponsForHero(this.hero, save.maxCleared).map(id => WEAPONS[id]);
+  private readonly passives = passivesFor(save.maxCleared).map(id => PASSIVES[id]);
+
+  draw(ui: UI) {
+    const u = ui.u, w = ui.W - 52 * u;
+    const h = Math.min(1100 * u, ui.H - ui.safeTop - ui.safeBottom - 125 * u);
+    const f = dialogFrame(ui, w, h, `备战 · ${HERO_BY_ID[this.hero].name}`, this.t, 'prep_close');
+    if (f.close) return false;
+    const x = f.x + 28 * u, innerW = w - 56 * u;
+    ui.text('按点选顺序自动拿技能，再点一次可取消', ui.W / 2, f.y + 79 * u, 24, C.ink, 'center', null);
+    const tabW = (innerW - 12 * u) / 2;
+    for (const [i, tab] of (['weapons', 'passives'] as const).entries()) {
+      const count = this[tab].filter(skill => this.selected.includes(skill.id)).length;
+      const title = (tab === 'weapons' ? '武器' : '兵法') + (count ? ` · ${count}` : '');
+      if (ui.button('prep_' + tab, x + i * (tabW + 12 * u), f.y + 116 * u, tabW, 74 * u, title, this.tab === tab ? C.btnRed : C.btnGray, { size: 28 })) {
+        this.tab = tab;
+        ui.resetScroll('prep_list');
+      }
+    }
+    const listY = f.y + 214 * u, footerY = f.y + h - 132 * u;
+    const listH = footerY - listY - 50 * u, rowH = 140 * u;
+    const skills = this[this.tab];
+    const dy = ui.beginScroll('prep_list', x, listY, innerW, listH, Math.ceil(skills.length / 2) * rowH);
+    skills.forEach((skill, i) => {
+      const cx = x + (i % 2) * (tabW + 12 * u);
+      const cy = listY + Math.floor(i / 2) * rowH + dy;
+      if (cy + rowH <= listY || cy >= listY + listH) return;
+      const rank = this.selected.indexOf(skill.id);
+      const ink = rank < 0 ? '#a3937b' : '#9e2c20';
+      ui.ctx.fillStyle = rank < 0 ? '#f4ebd9' : '#f3ddbc';
+      ui.ctx.fillRect(cx + u, cy + u, tabW - 2 * u, rowH - 12 * u);
+      ui.ctx.strokeStyle = ink;
+      ui.ctx.lineWidth = Math.max(1, u * (rank < 0 ? 1 : 3));
+      ui.ctx.strokeRect(cx + 2 * u, cy + 2 * u, tabW - 4 * u, rowH - 14 * u);
+      ui.icon(skill.icon, cx + 37 * u, cy + 38 * u, 46 * u);
+      ui.text(skill.name, cx + 71 * u, cy + 38 * u, 27, C.ink, 'left', null);
+      if (rank >= 0) {
+        ui.pixRect(cx + tabW - 44 * u, cy + 9 * u, 32 * u, 32 * u, '#9e2c20');
+        ui.text(String(rank + 1), cx + tabW - 28 * u, cy + 25 * u, 20, '#fbf4e4', 'center', null);
+      }
+      ui.wrapText('intro' in skill ? skill.intro : skill.desc, cx + 14 * u, cy + 67 * u, tabW - 28 * u, 21, C.textDim, 1.2);
+      if (ui.clicked('prep_skill_' + skill.id, cx, cy, tabW, rowH - 10 * u)) {
+        if (rank < 0) this.selected.push(skill.id);
+        else this.selected.splice(rank, 1);
+      }
+    });
+    ui.endScroll();
+    ui.text(`已选 ${this.selected.length} 项 · ${save.homeMode === 'defense' ? '守城仅匹配可用武器' : '未命中时可手选或刷新'}`, ui.W / 2, footerY - 23 * u, 22, C.textDim, 'center', null);
+    const clearW = 170 * u;
+    if (ui.button('prep_clear', x, footerY + 12 * u, clearW, 88 * u, '清空', C.btnGray, { disabled: !this.selected.length })) this.selected = [];
+    if (ui.button('prep_save', x + clearW + 14 * u, footerY + 12 * u, innerW - clearW - 14 * u, 88 * u, '保存备战', C.btnRed)) {
+      (save.preparedSkills ??= {})[this.hero] = this.selected.slice();
+      markDirty();
+      flushSave(true);
+      ui.toast(this.selected.length ? '备战已保存，下次出战自动匹配' : '备战已清空，升级时手选');
+      return false;
+    }
   }
 }
 

@@ -23,7 +23,7 @@ import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
   SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
+  SidebarDialog, PreparationDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
@@ -467,6 +467,7 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
+      ...(IS_WEB ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();

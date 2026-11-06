@@ -8,6 +8,7 @@ export type WeaponId =
 export type PassiveId =
   | 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal'
   | 'map' | 'mirror' | 'wine' | 'ration' | 'horn' | 'whetstone';
+export type SkillId = WeaponId | PassiveId;
 
 export interface WeaponLevel {
   dmg: number; // 伤害倍率（× 攻击力）

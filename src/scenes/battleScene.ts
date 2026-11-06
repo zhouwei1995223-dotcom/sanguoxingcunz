@@ -10,12 +10,12 @@ import { endlessHpMul, endlessDmgMul, recommendedPower } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../meta/goals';
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
-import type { WeaponId } from '../data/skills';
+import type { SkillId, WeaponId } from '../data/skills';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
 import { BossDef } from '../data/enemies';
 import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
 import { computeStats, combatPower } from '../meta/ops';
-import { save, markDirty, flushSave } from '../meta/save';
+import { save, markDirty, flushSave, preparedSkillsFor } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
 import { fmtTime, fmtNum, clamp } from '../core/math';
@@ -52,12 +52,35 @@ export class BattleScene implements Scene {
   private tipCheckT = 0;
   private autoGoldT = 0;
   private runAutoPick = false;
+  private preparedSkills: SkillId[] = [];
+  skipPreparedPrompts = false;
   paused = false;
 
   get autoPick() { return IS_WEB ? this.runAutoPick : save.settings.autoPick; }
   set autoPick(on: boolean) {
     if (IS_WEB) this.runAutoPick = on;
     else { save.settings.autoPick = on; markDirty(); }
+  }
+
+  get hasPreparation() { return this.preparedSkills.length > 0; }
+
+  preparedMatch(choices: Choice[]): Choice | undefined {
+    for (const id of this.preparedSkills) {
+      const match = choices.find(c => (c.kind === 'weapon' || c.kind === 'evo' || c.kind === 'passive') && c.id === id);
+      if (match) return match;
+    }
+    return undefined;
+  }
+
+  autoChooseUpgrade(choices: Choice[]): boolean {
+    if (!this.autoPick || (!IS_WEB && save.guide === 0)) return false;
+    const b = this.battle;
+    const pick = this.hasPreparation ? this.preparedMatch(choices) : choices[b.recommend(choices)];
+    if (!pick) return false;
+    this.choose(pick);
+    const prefix = this.hasPreparation ? '备战 · ' : '升级 · ';
+    this.floatLines([{ text: prefix + this.choiceLine(pick), color: pick.kind === 'evo' || pick.kind === 'link' ? '#fee761' : '#b6f5a0' }]);
+    return true;
   }
 
   diff: DifficultyDef;
@@ -131,6 +154,12 @@ export class BattleScene implements Scene {
       this.renderer.clearCenter = true;
     }
     this.battle.showDamage = save.settings.dmgNum;
+    if (IS_WEB && !this.chapter.tutorial) {
+      const skills = preparedSkillsFor(this.battle.hero.id);
+      const defenseWeapons = this.battle.def ? new Set<SkillId>(this.battle.defenseWeapons()) : null;
+      this.preparedSkills = defenseWeapons ? skills.filter(id => defenseWeapons.has(id)) : skills;
+      this.runAutoPick = this.hasPreparation;
+    }
     this.battle.hooks = {
       sfx: (n) => playSfx(n as Sfx),
       shake: (pw) => { if (save.settings.screenShake) this.renderer.shake = Math.max(this.renderer.shake, pw * 0.7); },
@@ -267,16 +296,12 @@ export class BattleScene implements Scene {
           // 技能全满：自动领取，避免频繁打断
           b.applyChoice(b.player.hp < b.player.maxHp * 0.6 ? { kind: 'heal' } : { kind: 'gold' });
           this.autoGoldT = 1;
-        } else if (this.autoPick && (IS_WEB || save.guide > 0)) {
-          // 自动选择：直接领推荐项，在武将身边飘字
-          const c = choices[Math.max(0, b.recommend(choices))];
-          playSfx('levelup');
-          this.choose(c);
-          this.floatLines([{ text: '升级 · ' + this.choiceLine(c), color: c.kind === 'evo' || c.kind === 'link' ? '#fee761' : '#b6f5a0' }]);
         } else {
           playSfx('levelup');
-          if (save.stats.runs === 0) funnel('b1_levelup');
-          game.openDialog(new LevelUpDialog(this, choices));
+          if (!this.autoChooseUpgrade(choices)) {
+            if (save.stats.runs === 0) funnel('b1_levelup');
+            game.openDialog(new LevelUpDialog(this, choices));
+          }
         }
       }
     }

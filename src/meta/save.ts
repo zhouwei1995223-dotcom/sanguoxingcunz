@@ -2,6 +2,7 @@ import { getPlatform } from '../platform';
 import { dayKey } from '../core/math';
 import { DEBUG } from '../debug';
 import { NEW_PLAYER, STAMINA, SLOTS, Slot } from '../data/meta';
+import { SkillId, weaponsForHero, passivesFor } from '../data/skills';
 
 // 存档：本地 JSON，带版本号便于后续迁移。
 
@@ -54,6 +55,8 @@ export interface SaveData {
   heroLv: number; // 旧版字段，迁移到 heroes.zhaoyun.lv
   heroes: Record<string, HeroState>;
   hero: string; // 当前出战武将
+  /** 每名武将的备战技能，依玩家点选的优先顺序保存。 */
+  preparedSkills?: Record<string, SkillId[]>;
   talents: Record<string, number>;
   items: EquipItem[];
   equipped: Record<Slot, number>;
@@ -190,6 +193,13 @@ function freshSave(): SaveData {
 
 export let save: SaveData = freshSave();
 let dirty = false;
+
+export function preparedSkillsFor(hero: string): SkillId[] {
+  const stored = save.preparedSkills?.[hero];
+  if (!Array.isArray(stored)) return [];
+  const available = new Set<SkillId>([...weaponsForHero(hero, save.maxCleared), ...passivesFor(save.maxCleared)]);
+  return [...new Set(stored.filter(id => available.has(id)))];
+}
 
 export function loadSave() {
   const raw = getPlatform().getItem(KEY);
