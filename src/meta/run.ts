@@ -23,6 +23,10 @@ const DROP_WEIGHTS: number[][] = [
   [0, 0, 0, 35, 53, 12],
 ];
 const FIRST_CLEAR_Q = [1, 2, 2, 3, 3, 3, 4, 4, 4, 5];
+// 掉落和首通奖励最高为神话，无双通过同部位装备合成。
+const MAX_DROP_QUALITY = DROP_WEIGHTS[0].length - 1;
+export const firstClearQuality = (chapter: number, difficulty: number) =>
+  Math.min(MAX_DROP_QUALITY, FIRST_CLEAR_Q[chapter - 1] + difficulty);
 
 export const ck = (d: number, c: number) => `${d}-${c}`;
 export const isCleared = (d: number, c: number) => !!save.clears[ck(d, c)];
@@ -48,7 +52,7 @@ export function endlessOpen(): boolean {
 function dropQuality(chId: number, shift: number): number {
   const w = DROP_WEIGHTS[Math.min(DROP_WEIGHTS.length - 1, chId - 1)];
   let q = weighted([0, 1, 2, 3, 4, 5], (k) => w[k]);
-  for (let i = 0; i < shift; i++) if (q < 5 && Math.random() < 0.5) q++;
+  for (let i = 0; i < shift; i++) if (q < MAX_DROP_QUALITY && Math.random() < 0.5) q++;
   return q;
 }
 
@@ -72,15 +76,17 @@ export interface RunResult {
   /** 三星评价：本局拿到的星（位）、第一次集齐三星的元宝奖励 */
   stars?: number;
   starBonus?: number;
+  /** 长局实际打过的波次给基础军饷和玄铁带来的倍率。 */
+  materialMultiplier?: number;
 }
 
 /** 三星评价：通关 / 不复活 / 限时击败最终敌将 */
 export const STAR_BOSS_SEC = 80;
 export const THREE_STARS = 0b111;
 export const STAR_LABELS = ['通关', '不复活', `${STAR_BOSS_SEC}秒内击败最终敌将`];
-export function runStars(win: boolean, revives: number, finalBossSec: number, minutes?: 5 | 10): number {
+export function runStars(win: boolean, revives: number, finalBossSec: number): number {
   if (!win) return 0;
-  return 1 | (revives === 0 ? 2 : 0) | (minutes !== 5 && finalBossSec >= 0 && finalBossSec <= STAR_BOSS_SEC ? 4 : 0);
+  return 1 | (revives === 0 ? 2 : 0) | (finalBossSec >= 0 && finalBossSec <= STAR_BOSS_SEC ? 4 : 0);
 }
 export const starCount = (bits: number) => (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1);
 /** 某难度某章拿到过的星 */
@@ -105,11 +111,14 @@ export function settleTutorial(win: boolean, coins: number, kills: number): RunR
 }
 
 /** t 为 null 表示免战碾压，发完整通关奖励，不计入手动坚守时长。 */
-export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0): RunResult {
+export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0, skippedSeconds = 0): RunResult {
   const d = diff.id;
   const progress = t === null ? 1 : Math.min(1, t / ch.duration);
-  const gold = Math.round((ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1)) * diff.reward + coins * 2);
-  const iron = Math.round((ch.id * 2 + progress * 6 * ch.id + (win ? 4 * ch.id : 0)) * diff.reward);
+  // 前五分钟按标准发放。后五分钟的材料加成只累计实际战斗波次，不计跳过的波次或主将加时。
+  const waveSeconds = Math.min(t ?? 0, ch.duration) - skippedSeconds;
+  const materialMultiplier = ch.campaignMinutes === 10 ? 1 + 0.8 * Math.max(0, Math.min(1, (waveSeconds - 300) / 300)) : 1;
+  const gold = Math.round(ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1) * diff.reward * materialMultiplier + coins * 2);
+  const iron = Math.round((ch.id * 2 + progress * 6 * ch.id + (win ? 4 * ch.id : 0)) * diff.reward * materialMultiplier);
   let yuanbao = win ? Math.round(20 * ch.id * diff.reward) : 0;
   const items: EquipItem[] = [];
   for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(ch.id, diff.qShift)));
@@ -120,7 +129,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
     if (d === 0) save.firstClear[ch.id] = true;
     yuanbao += 100 * ch.id * (1 + d);
     // 第一章首通必得兵器，引导玩家体验装备系统
-    items.push(newItem(ch.id === 1 && d === 0 ? 'yajiao' : randomItemTemplate(), Math.min(5, FIRST_CLEAR_Q[ch.id - 1] + d)));
+    items.push(newItem(ch.id === 1 && d === 0 ? 'yajiao' : randomItemTemplate(), firstClearQuality(ch.id, d)));
   }
   // 新手首局：无论胜负都赠送兵器，保证装备引导可以进行
   if (save.guide === 0 && !save.items.some((i) => i.tid === 'yajiao')) items.push(newItem('yajiao', 1));
@@ -164,7 +173,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   if (bossKills) progressTask('boss', bossKills);
   getPlatform().submitScore('score', bestScore());
   markDirty();
-  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus };
+  return { win, firstClear, gold, iron, yuanbao, items, newBest, heroReward, shardReward, newSkills: newSkills?.length ? newSkills : undefined, stars, starBonus, materialMultiplier };
 }
 
 /** 守城关卡是否开放：第 1 关直接开放，之后要守住前一关 */

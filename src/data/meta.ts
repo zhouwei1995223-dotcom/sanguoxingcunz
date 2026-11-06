@@ -1,5 +1,5 @@
 // 局外养成：武将、装备、军略、商店、任务、签到等配置
-import { NO_ADS } from './platformConfig';
+import { IS_WEB, NO_ADS } from './platformConfig';
 
 export const HERO = {
   id: 'zhaoyun',
@@ -31,6 +31,13 @@ export const QUALITY_NAMES = ['普通', '优良', '精良', '史诗', '传说', 
 export const QUALITY_COLORS = ['#c0cbdc', '#63c74d', '#0099db', '#b55088', '#f77622', '#e43b44'];
 export const QUALITY_MAX_LV = [10, 20, 30, 40, 50, 60];
 export const QUALITY_STAT_MUL = [1, 1.6, 2.4, 3.6, 5.2, 7.5];
+if (IS_WEB) {
+  QUALITY_NAMES.push('无双');
+  QUALITY_COLORS.push('#20a59c');
+  QUALITY_MAX_LV.push(70);
+  QUALITY_STAT_MUL.push(10);
+}
+export const MAX_EQUIP_QUALITY = QUALITY_NAMES.length - 1;
 
 export interface StatBlock {
   atk?: number;
@@ -188,6 +195,19 @@ export const EQUIPS: EquipTemplate[] = [
     ],
   },
 ];
+
+// 无双是合成品质。同部位的两种装备保留各自原有特效，再解锁一条部位特效。
+if (IS_WEB) {
+  const bonus: Record<Slot, Omit<EquipTemplate['unlocks'][number], 'q'>> = {
+    weapon: { stats: { dmg: 8 }, desc: '伤害+8%' },
+    helm: { stats: { hp: 300 }, desc: '生命+300' },
+    armor: { stats: { regen: 1.5 }, desc: '每秒回复1.5生命' },
+    boots: { stats: { speed: 4 }, desc: '移速+4%' },
+    mount: { stats: { atk: 35 }, desc: '攻击+35' },
+    jade: { stats: { critDmg: 20 }, desc: '暴击伤害+20%' },
+  };
+  for (const tpl of EQUIPS) tpl.unlocks.push({ q: MAX_EQUIP_QUALITY, ...bonus[tpl.slot] });
+}
 
 export const EQUIP_BY_ID: Record<string, EquipTemplate> = {};
 EQUIPS.forEach((e) => (EQUIP_BY_ID[e.id] = e));

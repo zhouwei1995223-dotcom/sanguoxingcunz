@@ -92,8 +92,11 @@ export class BattleScene implements Scene {
   /** 每周挑战规则（每周挑战模式下有值） */
   weekly: WeeklyDef | null = null;
   private speedMul = 1;
-  /** 玩家开的加速：1 或 1.5 倍 */
-  private userSpeed = 1;
+  private normalSpeed: 1 | 1.5 = 1;
+  private doubleSpeedUnlocked = false;
+  private doubleSpeedActive = false;
+  private speedAdPending = false;
+  private get userSpeed() { return this.doubleSpeedActive ? 2 : this.normalSpeed; }
   private speedAcc = 0;
   videoPath: Promise<string | null> | null = null;
 
@@ -191,6 +194,7 @@ export class BattleScene implements Scene {
   }
 
   onTouch(kind: TouchKind, touches: TouchPoint[]) {
+    if (this.speedAdPending) return;
     if (kind === 'start') {
       if (game.dialogs.length) return;
       const t = touches[0];
@@ -245,7 +249,7 @@ export class BattleScene implements Scene {
   update(dt: number) {
     const b = this.battle;
     const ui = game.ui;
-    const blocked = game.dialogs.length > 0 || this.paused;
+    const blocked = game.dialogs.length > 0 || this.paused || this.speedAdPending;
     if (blocked) this.joyId = null;
     if (!blocked) {
       const [mx, my] = this.joyVector();
@@ -254,7 +258,7 @@ export class BattleScene implements Scene {
       // 调试加速：拆成多个小步长，保证碰撞稳定
       // 顿帧：命中瞬间画面停一下，增强打击感
       if (b.hitStop > 0) b.hitStop -= dt;
-      // 加速（1.5 倍速）：每两帧多走一步，而不是把步长放大，碰撞依然稳定
+      // 倍速按完整的小步运行，保持碰撞和预警计时一致。
       else {
         this.speedAcc += this.userSpeed;
         const steps = Math.floor(this.speedAcc);
@@ -272,7 +276,7 @@ export class BattleScene implements Scene {
     }
 
     // 待处理事件：升级 / 宝箱 / 死亡 / 胜利
-    if (!game.dialogs.length) {
+    if (!game.dialogs.length && !this.speedAdPending) {
       if (b.won) {
         this.wonT += dt;
         if (this.wonT > 2.2) this.finish(true);
@@ -356,6 +360,28 @@ export class BattleScene implements Scene {
     ui.ctx.globalAlpha = Math.min(1, this.tipT / 0.4);
     guideHint(ui, this.tipText, ui.H * 0.56);
     ui.ctx.globalAlpha = 1;
+  }
+
+  private async toggleDoubleSpeed() {
+    if (this.speedAdPending || this.paused || game.dialogs.length || this.battle.dead || this.battle.won) return;
+    if (!this.doubleSpeedUnlocked) {
+      this.speedAdPending = true;
+      this.joyId = null;
+      try {
+        const ok = await getPlatform().showRewardedAd('battle_speed_2x');
+        if (game.scene !== this) return;
+        if (!ok) { game.ui.toast('看完视频即可解锁本局 2 倍速'); return; }
+        this.doubleSpeedUnlocked = true;
+        progressTask('ad', 1);
+      } catch {
+        if (game.scene === this) game.ui.toast('视频暂时无法播放，请再试一次');
+        return;
+      } finally {
+        this.speedAdPending = false;
+      }
+    }
+    this.doubleSpeedActive = !this.doubleSpeedActive;
+    game.ui.toast(this.doubleSpeedActive ? '已开启 2 倍速' : `已切回 ${this.normalSpeed} 倍速`);
   }
 
   get label(): string {
@@ -483,6 +509,9 @@ export class BattleScene implements Scene {
     const b = this.battle;
     const top = ui.safeTop + 8 * u;
     const g = ui.ctx;
+    const canSpeed = !this.chapter.tutorial && !this.weekly;
+    const showDouble = IS_WEB && canSpeed;
+    const clockX = ui.W / 2 - (showDouble ? 32 * u : 0);
     // 经验条
     const bw = ui.W - 32 * u;
     ui.bar(16 * u, top, bw, 30 * u, b.exp / b.expNeed, '#2ce8f5', '#1a2236');
@@ -493,23 +522,23 @@ export class BattleScene implements Scene {
       ui.text(`每周挑战 · ${this.weekly.name} · 最佳 ${save.weekly.best}`, ui.W / 2, top + 108 * u, 20, '#dc9be9');
     } else if (this.chapter.endless) {
       // 无尽模式：正计时，显示最佳记录
-      ui.text(fmtTime(b.t), ui.W / 2, top + 70 * u, 40, b.t > save.endlessBest && save.endlessBest > 0 ? C.gold : '#fff');
-      ui.text(`无尽战场 · 最佳 ${fmtTime(save.endlessBest)}`, ui.W / 2, top + 108 * u, 20, C.textDim);
+      ui.text(fmtTime(b.t), clockX, top + 70 * u, 40, b.t > save.endlessBest && save.endlessBest > 0 ? C.gold : '#fff');
+      ui.text(`无尽战场 · 最佳 ${fmtTime(save.endlessBest)}`, clockX, top + 108 * u, 20, C.textDim);
     } else if (b.def) {
       // 守城：剩余时间 + 城池血条
       const d = b.def;
-      ui.text(IS_WEB && b.finalBoss ? '击败攻城主将' : fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 64 * u, 38, '#fff');
-      const cw = ui.W * 0.44, cx0 = ui.W / 2 - cw / 2, cy0 = top + 90 * u;
+      ui.text(IS_WEB && b.finalBoss ? '击败攻城主将' : fmtTime(Math.max(0, this.chapter.duration - b.t)), clockX, top + 64 * u, 38, '#fff');
+      const cw = ui.W * (showDouble ? 0.35 : 0.44), cx0 = clockX - cw / 2, cy0 = top + 90 * u;
       ui.bar(cx0, cy0, cw, 28 * u, d.cityHp / d.cityMax, d.cityHp < d.cityMax * 0.3 ? '#e43b44' : '#63c74d', '#2a1414');
       if (d.cityFlash > 0) { ui.ctx.globalAlpha = 0.5; ui.pixRect(cx0, cy0, cw, 28 * u, '#ffffff'); ui.ctx.globalAlpha = 1; }
-      ui.text(`城池 ${fmtNum(Math.ceil(d.cityHp))}/${fmtNum(d.cityMax)}`, ui.W / 2, cy0 + 14 * u, 18, '#fff');
+      ui.text(`城池 ${fmtNum(Math.ceil(d.cityHp))}/${fmtNum(d.cityMax)}`, clockX, cy0 + 14 * u, 18, '#fff');
     } else {
       const remain = b.finalBoss ? 0 : this.chapter.duration - b.t;
       const bossTimeLeft = b.finalBossTimeLeft;
       const timer = bossTimeLeft !== null ? '斩将 ' + fmtTime(Math.ceil(bossTimeLeft))
         : b.finalBoss ? '击败敌将' : fmtTime(Math.max(0, remain));
-      ui.text(timer, ui.W / 2, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
-      ui.text(this.label, ui.W / 2, top + 108 * u, 20, this.diff.id ? this.diff.color : C.textDim);
+      ui.text(timer, clockX, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
+      ui.text(this.label, clockX, top + 108 * u, 20, this.diff.id ? this.diff.color : C.textDim);
     }
     // 击杀与金币
     ui.icon('kills', 36 * u, top + 62 * u, 32 * u);
@@ -522,12 +551,23 @@ export class BattleScene implements Scene {
     if (ui.clicked('pause', px, py, ps, ps)) game.openDialog(new PauseDialog(this));
     ui.panel(px, py, ps, ps, 'dark');
     ui.icon('pause', px + ps / 2, py + ps / 2, 30 * u);
-    // 加速：1 倍 / 2 倍（新手试炼和每周挑战不提供）
-    if (!this.chapter.tutorial && !this.weekly) {
-      const sx = px - ps - 12 * u;
-      if (ui.clicked('speed', sx, py, ps, ps)) { this.userSpeed = this.userSpeed === 1 ? 1.5 : 1; ui.toast(this.userSpeed > 1 ? '已开启 1.5 倍速' : '恢复正常速度'); }
+    if (canSpeed) {
+      const step = ps + 12 * u, sx = px - (showDouble ? 2 : 1) * step;
+      if (ui.clicked('speed', sx, py, ps, ps) && !this.speedAdPending) {
+        if (this.doubleSpeedActive) this.doubleSpeedActive = false;
+        else this.normalSpeed = this.normalSpeed === 1 ? 1.5 : 1;
+        ui.toast(this.normalSpeed === 1.5 ? '已开启 1.5 倍速' : '恢复正常速度');
+      }
       ui.panel(sx, py, ps, ps, 'dark');
-      ui.text(this.userSpeed > 1 ? '×1.5' : '×1', sx + ps / 2, py + ps / 2, this.userSpeed > 1 ? 24 : 30, this.userSpeed > 1 ? C.gold : '#fff');
+      ui.text('×' + this.normalSpeed, sx + ps / 2, py + ps / 2, this.normalSpeed === 1.5 ? 24 : 30, this.userSpeed === 1.5 ? C.gold : '#fff');
+      if (showDouble) {
+        const x = px - step;
+        if (ui.clicked('speed2', x, py, ps, ps)) void this.toggleDoubleSpeed();
+        ui.panel(x, py, ps, ps, 'dark');
+        const sub = this.doubleSpeedActive ? '使用中' : this.doubleSpeedUnlocked ? '' : '看广告';
+        ui.text('×2', x + ps / 2, py + ps * (sub ? 0.32 : 0.5), 30, this.doubleSpeedActive ? C.gold : '#fff');
+        if (sub) ui.text(sub, x + ps / 2, py + ps * 0.72, 17, this.doubleSpeedActive ? C.gold : '#fff');
+      }
     }
     // 直取敌将：没有敌将在场时常驻，确认（看一次广告）后跳过小兵直接挑战敌将
     if (b.canRush() && !b.dead && !b.won) {
@@ -637,7 +677,7 @@ export class BattleScene implements Scene {
     const y = ui.H * 0.5;
     const kind = nextAutoUnit(d);
     const un = UNITS[kind];
-    const full = soldiers(d) >= MAX_ALLIES;
+    const count = soldiers(d), full = count >= MAX_ALLIES;
     ui.pixRect(x, y, bw, bh, 'rgba(10,6,8,0.62)');
     ui.icon('p_ration', x + 24 * u, y + 24 * u, 30 * u);
     ui.text(`${Math.floor(d.grain)}`, x + 46 * u, y + 18 * u, 22, '#fee761', 'left');
@@ -648,7 +688,7 @@ export class BattleScene implements Scene {
     const k = Math.min(1, d.grain / un.cost);
     ui.pixRect(x + 56 * u, y + 90 * u, bw - 68 * u, 10 * u, '#231917');
     ui.pixRect(x + 56 * u, y + 90 * u, (bw - 68 * u) * k, 10 * u, full ? '#6b5a4a' : '#9be37a');
-    ui.text(`兵力 ${soldiers(d)}/${MAX_ALLIES}`, x + bw / 2, y + 128 * u, 16, '#d9c6a0');
+    ui.text(IS_WEB ? `兵力 ${count} 人` : `兵力 ${count}/${MAX_ALLIES}`, x + bw / 2, y + 128 * u, 16, '#d9c6a0');
     // 城池不在屏幕里：屏幕边缘画一个指向城池的箭头（城墙挨打时变红闪烁）
     const [sx, sy] = this.renderer.worldToScreen(0, -8);
     const scx = sx, scy = sy;

@@ -1,4 +1,5 @@
 import { rand, TAU, weighted } from '../core/math';
+import { SpatialGrid } from '../core/grid';
 import { IS_WEB } from '../data/platformConfig';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
@@ -26,6 +27,8 @@ export interface Ally {
   dashT: number; dvx: number; dvy: number; dashHit?: Set<number>;
   /** 没有敌人时回到的驻守点 */
   ox: number; oy: number;
+  target?: Enemy | null;
+  seekT?: number;
 }
 
 /** 飞行中的箭（我方弓兵、弩车、角楼），到达时结算 */
@@ -47,6 +50,7 @@ export interface DefenseState {
   cityHp: number; cityMax: number; cityBase: number; cityFlash: number;
   grain: number;
   allies: Ally[];
+  allyGrid: SpatialGrid<Ally>;
   arrows: AllyArrow[];
   logs: Log[];
   orders: Partial<Record<OrderId, number>>;
@@ -85,7 +89,7 @@ export function createDefense(b: Battle, heroes: Record<string, HeroInfo>): Defe
   b.player.x = 0; b.player.y = CITY_R + 24;
   return {
     cityHp: cityBase, cityMax: cityBase, cityBase, cityFlash: 0, grain: 120,
-    allies: [], arrows: [], logs: [], orders: {}, links: new Set(), heroes, heroCd: {}, nextUnit: 0,
+    allies: [], allyGrid: new SpatialGrid<Ally>(32), arrows: [], logs: [], orders: {}, links: new Set(), heroes, heroCd: {}, nextUnit: 0,
     towerT: [0.5, 0.7, 0.9, 1.1], spikeT: 0.5, logT: 7, waveIdx: 0, nextWave: 12, trickleT: 1, midDone: false, bossDone: false,
     downT: 0, lost: false, allyKills: 0, breakT: 10, dmgBy: {}, builds: [],
   };
@@ -138,9 +142,8 @@ export function spawnSquad(b: Battle, kind: UnitKind): number {
   const d = b.def!;
   const u = UNITS[kind];
   const st = unitStats(b, kind);
-  const room = MAX_ALLIES - soldiers(d);
-  if (room <= 0) return 0;
-  const n = Math.min(room, st.count);
+  const n = IS_WEB ? st.count : Math.min(MAX_ALLIES - soldiers(d), st.count);
+  if (n <= 0) return 0;
   const a0 = nearestGate(b.player.x, b.player.y) * (TAU / 4);
   for (let i = 0; i < n; i++) {
     const a = a0 + rand(-0.6, 0.6);
@@ -156,11 +159,12 @@ export function spawnSquad(b: Battle, kind: UnitKind): number {
   return n;
 }
 
-/** 粮草攒够就自动出下一队（兵力满了先存着） */
+/** 粮草足够就编成下一整队；积攒多队时按战斗步逐队出发。 */
 function autoProduce(b: Battle) {
   const d = b.def!;
+  if (d.grain < UNITS.spear.cost) return;
   const kind = nextAutoUnit(d);
-  if (d.grain < UNITS[kind].cost || soldiers(d) >= MAX_ALLIES) return;
+  if (d.grain < UNITS[kind].cost) return;
   if (spawnSquad(b, kind) > 0) { d.grain -= UNITS[kind].cost; d.nextUnit++; }
 }
 
@@ -361,15 +365,22 @@ export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: 
   if (!siege) {
     const heroUp = d.downT <= 0;
     if (e.boss) return heroUp ? { x: p.x, y: p.y, ally: null, city: false } : { x: 0, y: 0, ally: null, city: true };
-    if (heroUp && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 90 * 90) return { x: p.x, y: p.y, ally: null, city: false };
-    let best: Ally | null = null, bd = 70 * 70;
-    for (const a of d.allies) {
+    const heroDistance = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
+    const heroNear = heroUp && heroDistance < 90 * 90;
+    const specialist = e.def?.skill === 'fireVolley' || e.def?.skill === 'breaker';
+    if (!IS_WEB && heroNear) return { x: p.x, y: p.y, ally: null, city: false };
+    const reach = e.def?.skill === 'fireVolley' ? 155 : 70;
+    let best: Ally | null = null, bd = IS_WEB && heroNear && !specialist ? Math.min(reach * reach, heroDistance) : reach * reach;
+    // 铁壁阵有嘲讽权重，查询范围也要覆盖它实际能吸引的距离。
+    const near = IS_WEB ? d.allyGrid.query(e.x, e.y, reach * (d.links.has('l_iron') ? 1.5 : 1), nearbyAllies) : d.allies;
+    for (const a of near) {
       if (a.dead) continue;
       const taunt = a.kind === 'shield' && d.links.has('l_iron') ? 2.2 : 1;
       const dd = ((a.x - e.x) ** 2 + (a.y - e.y) ** 2) / (taunt * taunt);
       if (dd < bd) { bd = dd; best = a; }
     }
     if (best) return { x: best.x, y: best.y, ally: best, city: false };
+    if (heroNear) return { x: p.x, y: p.y, ally: null, city: false };
   }
   return { x: 0, y: 0, ally: null, city: true };
 }
@@ -396,10 +407,8 @@ export function enemyContact(b: Battle, e: Enemy, tgt: { ally: Ally | null; city
     const a = tgt.ally;
     if ((a.x - e.x) ** 2 + (a.y - e.y) ** 2 < (a.r + e.r) ** 2 && e.atkCd <= 0) {
       e.atkCd = 1.1;
-      a.hp -= e.dmg;
-      a.flash = 0.12;
+      hurtAlly(b, a, e.dmg);
       if (a.kind === 'shield' && d.links.has('l_iron')) b.allyDamage(e, e.dmg * 0.5 + a.atk * 0.5);
-      if (a.hp <= 0) killAlly(b, a);
     }
     return true;
   }
@@ -425,6 +434,26 @@ function killAlly(b: Battle, a: Ally) {
   b.fx.push({ kind: 'puff', x: a.x, y: a.y, t: 0, dur: 0.3 });
 }
 
+export function hurtAlly(b: Battle, a: Ally, dmg: number) {
+  if (a.dead || b.won || b.def!.lost) return;
+  a.hp -= dmg;
+  a.flash = 0.12;
+  if (a.hp <= 0) killAlly(b, a);
+}
+
+const nearbyAllies: Ally[] = [];
+const nearbyEnemies: Enemy[] = [];
+
+/** 飞弹打到第一个友军就消耗。坐标换算到士兵中身，与玩家受击点一致。 */
+export function shotHitsAlly(b: Battle, x: number, y: number, r: number, dmg: number): boolean {
+  for (const a of b.def!.allyGrid.query(x, y + 6, r + 10, nearbyAllies)) {
+    if (a.dead || (x - a.x) ** 2 + (y + 6 - a.y) ** 2 > (a.r + r) ** 2) continue;
+    hurtAlly(b, a, dmg);
+    return true;
+  }
+  return false;
+}
+
 /** 城池失守后看广告「死守」：城池恢复一半，震开城下敌人 */
 export function reviveCity(b: Battle) {
   const d = b.def!;
@@ -445,7 +474,8 @@ export function reviveCity(b: Battle) {
 
 function nearestEnemy(b: Battle, x: number, y: number, maxD: number, fromCity = ARENA_R + 16): Enemy | null {
   let best: Enemy | null = null, bd = maxD * maxD;
-  for (const e of b.enemies) {
+  const candidates = IS_WEB ? b.grid.query(x, y, maxD + 12, nearbyEnemies) : b.enemies;
+  for (const e of candidates) {
     if (e.dead) continue;
     // 太远的（还在城外老远）不追，免得士兵跑散
     if (e.x * e.x + e.y * e.y > fromCity * fromCity) continue;
@@ -497,7 +527,13 @@ function updateAllies(b: Battle, dt: number) {
       continue;
     }
     // 只迎击主城附近的敌人（远程兵多算一点射程）
-    const e = nearestEnemy(b, a.x, a.y, a.kind === 'archer' || a.kind === 'xbow' ? 220 : 180, ALLY_LEASH + (a.range > 60 ? a.range * 0.6 : 25));
+    // 不必每帧让每名士兵重选目标。错开寻敌时间，目标阵亡则立刻重选。
+    a.seekT = (a.seekT || 0) - dt;
+    if (!IS_WEB || a.seekT <= 0 || a.target?.dead) {
+      a.target = nearestEnemy(b, a.x, a.y, a.range > 60 ? 220 : 180, ALLY_LEASH + (a.range > 60 ? a.range * 0.6 : 25));
+      a.seekT = 0.18 + (a.anim % 1) * 0.08;
+    }
+    const e = a.target;
     let mx = 0, my = 0;
     if (!e) {
       const dx = a.ox - a.x, dy = a.oy - a.y, dist = Math.hypot(dx, dy);
@@ -539,18 +575,22 @@ function updateAllies(b: Battle, dt: number) {
     const cd = Math.hypot(a.x, a.y + 8);
     if (cd < CITY_R + a.r) { const k = (CITY_R + a.r) / (cd || 1); a.x *= k; a.y = (a.y + 8) * k - 8; }
   }
-  // 士兵之间轻微分开
+  // 只比较相邻的士兵。新兵力规则下逐对比较会随人数平方增长。
+  const grid = d.allyGrid;
+  if (IS_WEB) grid.clear();
   for (let i = 0; i < d.allies.length; i++) {
     const a = d.allies[i];
     if (a.dead) continue;
-    for (let j = i + 1; j < d.allies.length; j++) {
-      const o = d.allies[j];
+    const candidates = IS_WEB ? grid.query(a.x, a.y, a.r + 12, nearbyAllies) : d.allies;
+    for (let j = IS_WEB ? 0 : i + 1; j < candidates.length; j++) {
+      const o = candidates[j];
       if (o.dead) continue;
       const dx = a.x - o.x, dy = a.y - o.y, rr = a.r + o.r, dd = dx * dx + dy * dy;
       if (dd < rr * rr && dd > 0.01) { const dl = Math.sqrt(dd), push = (rr - dl) / dl * 0.25; a.x += dx * push; a.y += dy * push; o.x -= dx * push; o.y -= dy * push; }
     }
+    if (IS_WEB) grid.insert(a);
   }
-  if (d.allies.length > 40 || (b.t % 2 < dt && d.allies.some((a) => a.dead))) d.allies = d.allies.filter((a) => !a.dead);
+  if (b.t % 1 < dt && d.allies.some(a => a.dead)) d.allies = d.allies.filter(a => !a.dead);
 }
 
 function attack(b: Battle, a: Ally, e: Enemy, nx: number, ny: number) {
@@ -713,7 +753,8 @@ const eliteOf = (b: Battle) => (b.chapter.events.find((e) => e.type === 'elite')
 export function updateDefenseSpawner(b: Battle, dt: number) {
   const d = b.def!;
   const t = b.t;
-  if (t >= DEFENSE_DURATION) return;
+  // 网页守城须斩将才结束，加时期间双方都有补给，避免拖着主将无压力囤兵。
+  if (t >= DEFENSE_DURATION && (!IS_WEB || !b.finalBoss)) return;
   const bossAlive = !!(b.finalBoss || b.midBoss);
   // 零散敌人
   d.trickleT -= dt;
@@ -743,6 +784,12 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     if (w >= 3) for (let i = 0; i < 1 + Math.floor((w - 3) / 2); i++) spawnAround(b, 'siege_ram', ss[i % ss.length], 0.3);
     if (w >= 2) for (let i = 0; i < 2 + Math.floor(w / 2); i++) spawnAround(b, 'siege_ladder', ss[i % ss.length], 0.4);
     if (w >= 5) for (let i = 0; i < 1 + Math.floor((w - 5) / 3); i++) spawnAround(b, 'siege_cata', ss[i % ss.length], 0.3);
+    if (IS_WEB && w >= 2) {
+      // 先让玩家看懂一支火矢，再逐步组成破阵小队。
+      spawnAround(b, 'siege_firebow', ss[0]);
+      if (w >= 4) spawnAround(b, 'siege_breaker', ss[ss.length - 1]);
+      if (w >= 7 && b.chapter.id >= 3) spawnAround(b, 'siege_firebow', ss[ss.length - 1]);
+    }
     if (w === 4 || w === 7 || w === 10 || w === 12) for (let i = 0; i < Math.min(3, 1 + Math.floor(w / 5)); i++) spawnAround(b, eliteOf(b), ss[i % ss.length], 0.3, { elite: true });
     b.hooks.banner(`第 ${w} 波 · 敌军从${ss.map((s) => DIRS[s]).join('、')}面攻城！`, '#e43b44');
     b.hooks.sfx('boss');

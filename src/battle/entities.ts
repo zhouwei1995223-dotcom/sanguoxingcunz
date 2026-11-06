@@ -33,6 +33,7 @@ export interface Enemy {
   /** 正贴着玩家（刚贴上时先蓄力再出手） */
   touching: boolean;
   shootT: number;
+  troopSkillAt?: number;
   dead: boolean;
   /** 冲锋类（骑兵冲阵）：固定方向移动 */
   fixedDir: boolean;
@@ -188,7 +189,7 @@ export interface Breakable {
 export interface Fx {
   kind: 'thrust' | 'spark' | 'puff' | 'explo' | 'ring' | 'slash' | 'text' | 'num' | 'warn' | 'beam' | 'levelring' | 'corpse' | 'ghost' | 'lightning' | 'drum' | 'volley' | 'blade'
     // 大招特效（发光叠加）：粒子、冲击波、放射光、光柱、流星、龙形轨迹、八卦阵
-    | 'particle' | 'shock' | 'rays' | 'pillar' | 'meteor' | 'dragon' | 'bagua';
+    | 'particle' | 'shock' | 'rays' | 'pillar' | 'meteor' | 'dragon' | 'bagua' | 'tether';
   x: number;
   y: number;
   t: number;
@@ -218,7 +219,7 @@ export interface Fx {
   g?: number;
 }
 
-/** 首领技能预警 */
+/** 敌方技能预警 */
 export interface Warning {
   /** circle：半径 r 的椭圆；line：从 (x,y) 沿角度 a 长 len、宽 r；fan：半径 len、半张角 r 的扇形 */
   kind: 'circle' | 'line' | 'fan';
@@ -229,10 +230,17 @@ export interface Warning {
   len: number;
   t: number;
   dur: number;
+  /** 环形攻击的内圈是安全区。 */
+  innerR?: number;
+  caster?: Enemy;
   /** 预警结束时玩家还在范围内就受到的伤害（不填则只是提示） */
   dmg?: number;
+  /** 破阵兵对士兵的范围伤害。未单列时与武将承受的基础伤害相同。 */
+  allyDmg?: number;
+  /** 守城投石车瞄准城墙时，命中该落点的城防伤害。 */
+  cityDmg?: number;
   /** 命中时的特效 */
-  hitFx?: 'explo' | 'slash' | 'blade';
+  hitFx?: 'explo' | 'slash' | 'blade' | 'arrows';
 }
 
 export function newEnemy(): Enemy {

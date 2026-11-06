@@ -1,5 +1,6 @@
 import { PixelImage, art } from '../pixel';
 import { chest, coinFrames, yuanbao, bun, magnet, bomb } from './items';
+import { IS_WEB } from '../../data/platformConfig';
 
 // UI 图标（约 14x14，界面中整数倍放大显示）
 
@@ -809,6 +810,35 @@ const ICONS: Record<string, () => PixelImage> = {
     '..yyy..',
   ]),
 };
+
+if (IS_WEB) {
+  const hookIcon = (edge: string, rope: string) => {
+    const p = new PixelImage(15, 15);
+    p.ring(4, 10, 3, rope); p.line(4, 13, 11, 6, rope);
+    p.line(7, 7, 12, 2, edge); p.line(12, 2, 13, 5, edge); p.line(13, 5, 11, 7, edge);
+    p.line(7, 7, 6, 4, edge); p.line(6, 4, 8, 2, edge);
+    return p.outline();
+  };
+  const shieldIcon = (rim: string, face: string) => {
+    const p = new PixelImage(15, 15);
+    p.rect(2, 2, 11, 6, rim);
+    for (let i = 0; i < 5; i++) p.rect(2 + i, 8 + i, 11 - 2 * i, 1, rim);
+    p.rect(3, 3, 9, 5, face);
+    for (let i = 0; i < 4; i++) p.rect(3 + i, 8 + i, 9 - 2 * i, 1, face);
+    p.line(7, 3, 7, 10, rim); p.rect(5, 5, 5, 2, rim);
+    return p.outline();
+  };
+  ICONS.w_hook = () => hookIcon('S', 'u');
+  ICONS.w_hook_evo = () => hookIcon('Y', 'B');
+  ICONS.w_warshield = () => shieldIcon('S', 'b');
+  ICONS.w_warshield_evo = () => shieldIcon('Y', 'd');
+  ICONS.p_binding = () => art([
+    '.uuuuuuu.', 'uq....pqu', 'uq.gg.pqu', 'uqg..gpqu', 'uq.gg.pqu', 'uqg..gpqu', 'uq.gg.pqu', 'uq....pqu', '.uuuuuuu.',
+  ]);
+  ICONS.p_guardmanual = () => art([
+    '.SSSSSSS.', 'bBBBBBBBs', 'bBYYYBBBs', 'bBYBYYBBs', 'bBYYYBBBs', 'bBBYBBBBs', 'bBBBBBBBs', 'bppppppps', '.NNNNNNN.',
+  ]);
+}
 
 export const ICON_NAMES = Object.keys(ICONS);
 export function iconImage(name: string): PixelImage {

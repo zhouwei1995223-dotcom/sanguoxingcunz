@@ -894,7 +894,9 @@ export class HomeScene implements Scene {
     const gy = top + panelH + 16 * u;
     const gh = this.contentBottom(ui) - gy - 10 * u;
     ui.panel(16 * u, gy, ui.W - 32 * u, gh, 'dark');
-    const items = save.items.slice().sort((a, b) => b.q - a.q || (EQUIP_BY_ID[a.tid].slot < EQUIP_BY_ID[b.tid].slot ? -1 : 1) || b.lv - a.lv);
+    const items = save.items.slice().sort((a, b) =>
+      b.q - a.q || EQUIP_BY_ID[a.tid].slot.localeCompare(EQUIP_BY_ID[b.tid].slot) ||
+      (IS_WEB ? b.lv - a.lv : 0) || a.uid - b.uid);
     const cols = 5, cell = (ui.W - 32 * u - 40 * u) / cols;
     const rows = Math.ceil(items.length / cols);
     const contentH = rows * cell + 30 * u;

@@ -277,7 +277,16 @@ export class WorldRenderer {
       const k = w.t / w.dur;
       g.globalAlpha = 0.25 + 0.25 * Math.sin(w.t * 20);
       g.fillStyle = '#e43b44';
-      if (w.kind === 'circle') {
+      if (w.kind === 'circle' && w.innerR) {
+        g.save();
+        g.translate(Math.round(w.x - this.camX), Math.round(w.y - this.camY));
+        g.scale(1, 0.8);
+        g.beginPath(); g.arc(0, 0, w.r, 0, TAU); g.arc(0, 0, w.innerR, TAU, 0, true);
+        g.globalAlpha = 0.25 + 0.3 * k; g.fill();
+        g.strokeStyle = '#ff8a80'; g.globalAlpha = 0.9; g.lineWidth = 2;
+        for (const r of [w.r, w.innerR]) { g.beginPath(); g.arc(0, 0, r, 0, TAU); g.stroke(); }
+        g.restore();
+      } else if (w.kind === 'circle') {
         this.ellipse(w.x, w.y, w.r, w.r * 0.8);
         g.globalAlpha = 0.6;
         this.ellipse(w.x, w.y, w.r * k, w.r * 0.8 * k);
@@ -358,7 +367,7 @@ export class WorldRenderer {
     }
 
     // 同屏敌人很多时不画脚下影子（挤成一团时看不出来，能少一半贴图调用）
-    this.crowded = pooled > 120;
+    this.crowded = pooled + (b.def?.allies.length || 0) > 120;
     this.list.sort((a, c) => a.y - c.y);
     for (const d of this.list) { if (d.e) this.drawEnemy(d.e, b); else d.draw!(); }
 
@@ -644,6 +653,19 @@ export class WorldRenderer {
         g.globalAlpha = 0.55 * (1 - k);
         this.blit(sprite(f.sprite! + (f.sprite!.endsWith('_L') ? 'W' : '_W')), f.x, f.y);
         g.globalAlpha = 1;
+        break;
+      }
+      case 'tether': {
+        g.save();
+        g.translate(Math.round(f.x - this.camX), Math.round(f.y - this.camY));
+        g.rotate(f.a!);
+        g.globalAlpha = 1 - k;
+        const len = f.len!;
+        g.strokeStyle = f.color!;
+        g.lineWidth = 2;
+        g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(len / 2, 8 * k, len, 0);
+        g.lineTo(len - 3, -4); g.stroke();
+        g.restore();
         break;
       }
       case 'beam': {
@@ -1106,7 +1128,8 @@ export class WorldRenderer {
       for (let i = 0; i < towers; i++) this.blit(sprite(`u_shu_archer_${Math.floor(b.t * 3 + i) % 4}${TOWERS[i][0] < 0 ? '_L' : ''}`), TOWERS[i][0], TOWERS[i][1] - 12);
     } });
     for (const a of d.allies) {
-      if (a.dead) continue;
+      if (a.dead || a.x < this.camX - 32 || a.x > this.camX + this.w + 32 ||
+          a.y < this.camY - 16 || a.y > this.camY + this.h + 48) continue;
       this.list.push({ y: a.y, draw: () => {
         if (!this.crowded) this.blit(sprite(a.kind === 'hero' ? 'shadow_l' : 'shadow_s'), a.x, a.y + 1);
         if (a.kind === 'hero') g.globalAlpha = a.life < 3 ? 0.5 + 0.5 * Math.sin(b.t * 20) : 1;

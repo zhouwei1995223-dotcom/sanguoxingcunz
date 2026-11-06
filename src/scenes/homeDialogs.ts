@@ -12,11 +12,11 @@ import {
   collectPatrol, itemStats, isEquipped, equip, unequip, upgradeItem, mergeCandidates, mergeItem, grantReward, progressTask,
 } from '../meta/ops';
 import {
-  SIGNIN, DAILY_TASKS, ACTIVITY_REWARDS, PATROL, EQUIP_BY_ID, QUALITY_NAMES, QUALITY_COLORS, QUALITY_MAX_LV, STAT_NAMES,
+  SIGNIN, DAILY_TASKS, ACTIVITY_REWARDS, PATROL, EQUIP_BY_ID, QUALITY_NAMES, QUALITY_COLORS, QUALITY_MAX_LV, MAX_EQUIP_QUALITY, STAT_NAMES,
   PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES, adStep,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
-import { isCleared, getBest, chapterOpen, chapterStars, defenseOpen, defenseStars, starRating, STAR_BOSS_SEC, recommendedPower, powerGuideText } from '../meta/run';
+import { isCleared, getBest, chapterOpen, chapterStars, defenseOpen, defenseStars, starRating, STAR_BOSS_SEC, recommendedPower, powerGuideText, firstClearQuality } from '../meta/run';
 import type { RunResult } from '../meta/run';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
@@ -326,7 +326,7 @@ export class ItemDialog implements Dialog {
     }
     // 合成信息
     const mats = mergeCandidates(it);
-    if (it.q < 5) ui.text(`合成：3件同部位${QUALITY_NAMES[it.q]}装备 → ${QUALITY_NAMES[it.q + 1]}（拥有${mats.length + 1}/3）`, x, y, 20, '#dc9be9', 'left');
+    if (it.q < MAX_EQUIP_QUALITY) ui.text(`合成：3件同部位${QUALITY_NAMES[it.q]}装备 → ${QUALITY_NAMES[it.q + 1]}（拥有${mats.length + 1}/3）`, x, y, 20, '#dc9be9', 'left');
     y += 50 * u;
     // 按钮
     const bw = (w - 128 * u) / 4, bh = 96 * u;
@@ -349,7 +349,7 @@ export class ItemDialog implements Dialog {
       if (!n && lastErr) ui.toast(lastErr);
       else if (n) { if (save.guide === 2) save.guide = 3; playSfx('levelup'); ui.toast(`连升 ${n} 级`); flushSave(true); }
     }
-    if (ui.button('it_merge', f.x + 95 * u + bw * 3, by, bw, bh, '合成', C.btnPurple, { size: 26, disabled: mats.length < 2 || it.q >= 5 })) {
+    if (ui.button('it_merge', f.x + 95 * u + bw * 3, by, bw, bh, '合成', C.btnPurple, { size: 26, disabled: mats.length < 2 || it.q >= MAX_EQUIP_QUALITY })) {
       const err = mergeItem(it);
       if (err) ui.toast(err); else { playSfx('evolve'); ui.toast(`合成成功！品质提升为${QUALITY_NAMES[it.q]}`); flushSave(true); }
     }
@@ -731,19 +731,20 @@ export class CampaignDurationDialog implements Dialog {
   constructor(private chapter: number, private difficulty: number, private start: (minutes: 5 | 10) => void) {}
   draw(ui: UI) {
     const u = ui.u, w = ui.W - 80 * u;
-    const f = dialogFrame(ui, w, 605 * u, '选择征战时长', this.t, 'duration_close');
+    const f = dialogFrame(ui, w, 640 * u, '选择征战时长', this.t, 'duration_close');
     if (f.close) return false;
-    ui.text(`主将登场后限时${FINAL_BOSS_LIMIT_SEC}秒，超时战败`, ui.W / 2, f.y + 116 * u, 24, C.textDim);
+    ui.text(`两档均可三星 · 全局不复活且${STAR_BOSS_SEC}秒内击败主将`, ui.W / 2, f.y + 99 * u, 23, C.textDim);
+    ui.text(`从主将登场计时，超过${FINAL_BOSS_LIMIT_SEC}秒判负`, ui.W / 2, f.y + 136 * u, 21, C.textDim);
     for (const [i, minutes] of ([5, 10] as const).entries()) {
       const short = minutes === 5;
       const need = recommendedPower(CHAPTERS[this.chapter - 1], DIFFICULTIES[this.difficulty], minutes);
-      const y = f.y + (162 + i * 206) * u;
+      const y = f.y + (180 + i * 206) * u;
       if (ui.button('duration_' + minutes, f.x + 50 * u, y, w - 100 * u, 124 * u,
-        minutes + ' 分钟', short ? C.btnBlue : C.btnRed, { size: 38, sub: need === null ? '极限挑战' : '推荐战力 ' + powerGuideText(need) })) {
+        short ? '5 分钟 · 速攻' : '10 分钟 · 长战', short ? C.btnBlue : C.btnRed, { size: 38, sub: need === null ? '极限挑战' : '推荐战力 ' + powerGuideText(need) })) {
         this.start(minutes);
         return false;
       }
-      ui.text(short ? '最高二星 · 不复活通关' : `最高三星 · 不复活且${STAR_BOSS_SEC}秒内击败主将`, ui.W / 2, y + 151 * u, 21, C.textDim);
+      ui.text(short ? '主将更早登场，适合快速推关' : '实战超过5分钟，基础军饷、玄铁逐步增至1.8倍', ui.W / 2, y + 151 * u, 21, C.textDim);
     }
   }
 }
@@ -776,12 +777,11 @@ export class ChapterStoryDialog implements Dialog {
       ui.text(IS_WEB ? (i ? '倒计时结束登场' : '战斗过半登场') : `${fmtTime(at)} 出现`, x + 180 * u, y + 126 * u, 18, '#ff8a80', 'left');
     });
     y += 200 * u;
-    const qn = ['普通', '优良', '精良', '史诗', '传说', '神话'];
-    const q = Math.min(5, [1, 2, 2, 3, 3, 3, 4, 4, 4, 5][ch.id - 1] + this.d);
+    const q = firstClearQuality(ch.id, this.d);
     const heroGift: Record<number, string> = { 2: '关羽', 4: '黄忠', 6: '姜维' };
     const extra = this.d === 0 && heroGift[ch.id] ? ` + 武将${heroGift[ch.id]}` : ch.id >= 3 || this.d > 0 ? ` + 武将碎片×${10 + this.d * 5}` : '';
-    ui.text(`首通奖励：元宝×${100 * ch.id * (1 + this.d)} + ${qn[q]}装备${extra}`, ui.W / 2, y, 22, isCleared(this.d, ch.id) ? '#888' : '#9be37a');
-    ui.text(IS_WEB ? '五分钟最高二星，十分钟最高三星，击败主将通关' : `坚守${Math.round(ch.duration / 60)}分钟并击败敌军主将即可通关`, ui.W / 2, y + 50 * u, 22, C.textDim);
+    ui.text(`首通奖励：元宝×${100 * ch.id * (1 + this.d)} + ${QUALITY_NAMES[q]}装备${extra}`, ui.W / 2, y, 22, isCleared(this.d, ch.id) ? '#888' : '#9be37a');
+    ui.text(IS_WEB ? `两档均可三星 · 不复活且${STAR_BOSS_SEC}秒内击败最终主将` : `坚守${Math.round(ch.duration / 60)}分钟并击败敌军主将即可通关`, ui.W / 2, y + 50 * u, 22, C.textDim);
   }
 }
 

@@ -1,4 +1,5 @@
 // 敌人数据。外观在 gfx/art/roster.ts，按 sprite 字段关联。
+import { IS_WEB } from './platformConfig';
 
 export type EnemyAI = 'chase' | 'ranged' | 'charger' | 'boss' | 'siege';
 
@@ -15,6 +16,7 @@ export interface EnemyDef {
   mass?: number; // 越大越难击退（1 为普通）
   range?: number; // 远程：保持距离
   shootCd?: number;
+  skill?: 'thrust' | 'shieldBash' | 'volley' | 'fireVolley' | 'breaker';
   proj?: string;
   scale?: number; // 绘制放大倍数（整数）
 }
@@ -49,11 +51,19 @@ export const ENEMIES: Record<string, EnemyDef> = {
   elite_guard: { id: 'elite_guard', name: '魏军精锐', sprite: 'elite_guard', hp: 120, speed: 24, dmg: 14, radius: 8, exp: 8, ai: 'chase', mass: 6 },
 };
 
+if (IS_WEB) {
+  ENEMIES.siege_firebow = { id: 'siege_firebow', name: '火矢手', sprite: 'siege_firebow', ai: 'ranged', hp: 38, speed: 27, dmg: 10, radius: 7, exp: 4, range: 125, shootCd: 4.2, proj: 'arrow', skill: 'fireVolley' };
+  ENEMIES.siege_breaker = { id: 'siege_breaker', name: '破阵力士', sprite: 'siege_breaker', ai: 'chase', hp: 100, speed: 30, dmg: 14, radius: 9, exp: 6, mass: 6, skill: 'breaker' };
+  for (const id of ['wei_spear', 'gy_spear', 'qiang_spear', 'yuan_spear', 'wu_spear']) ENEMIES[id].skill = 'thrust';
+  for (const id of ['wei_shield', 'gy_shield', 'yuan_shield', 'wu_shield', 'xl_heavy']) ENEMIES[id].skill = 'shieldBash';
+  for (const id of ['wei_archer', 'gy_archer', 'yuan_archer', 'wu_archer']) ENEMIES[id].skill = 'volley';
+}
+
 /**
  * 首领技能。charge 冲锋、spin 旋风、throw 扇形飞射、slam 跳劈、summon 召唤、ring 环射；
  * 1.0.3 新增（都有红色预警，躲开就不掉血）：fan 扇形横扫、rain 箭雨 / 落石、cross 十字刀气、nova 震地。
  */
-export type BossSkill = 'charge' | 'spin' | 'throw' | 'slam' | 'summon' | 'ring' | 'fan' | 'rain' | 'cross' | 'nova';
+export type BossSkill = 'charge' | 'spin' | 'throw' | 'slam' | 'summon' | 'ring' | 'fan' | 'rain' | 'cross' | 'nova' | 'encircle';
 /** 新手试炼的敌将只用这些基础技能 */
 export const BASIC_BOSS_SKILLS: BossSkill[] = ['charge', 'spin', 'throw', 'slam', 'summon', 'ring'];
 
@@ -100,3 +110,5 @@ export const BOSSES: Record<string, BossDef> = {
   simayi: { id: 'simayi', name: '司马懿', title: '魏国太尉', sprite: 'simayi', hp: 1100000, speed: 38, dmg: 210, radius: 15, skills: ['ring', 'summon', 'cross', 'slam', 'rain', 'throw', 'nova', 'charge'], shield: true, summon: 'elite_guard', proj: 'fork', quote: '死诸葛……竟吓走活仲达？' },
   caozhen: { id: 'caozhen', name: '曹真', title: '魏国大都督', sprite: 'caozhen', hp: 140000, speed: 36, dmg: 52, radius: 15, skills: ['ring', 'summon', 'cross', 'charge', 'slam', 'rain'], shield: true, summon: 'elite_guard', proj: 'arrow', quote: '撤军……速速撤军！' },
 };
+
+if (IS_WEB) for (const id of ['zhanghe', 'luxun', 'simayi']) BOSSES[id].skills.splice(1, 0, 'encircle');

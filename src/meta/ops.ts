@@ -2,7 +2,7 @@ import { getPlatform } from '../platform';
 import { save, markDirty, tickStamina } from './save';
 import type { EquipItem } from './save';
 import {
-  HERO, heroLevelCost, EQUIPS, EQUIP_BY_ID, QUALITY_MAX_LV, QUALITY_STAT_MUL, StatBlock, equipUpgradeCost,
+  HERO, heroLevelCost, EQUIPS, EQUIP_BY_ID, QUALITY_MAX_LV, QUALITY_STAT_MUL, MAX_EQUIP_QUALITY, StatBlock, equipUpgradeCost,
   TALENTS, talentCost, Reward, STAMINA, PATROL, CHESTS, ChestDef, DAILY_TASKS, TaskKind, ACTIVITY_REWARDS, SIGNIN, Slot, SLOTS, QUALITY_NAMES,
 } from '../data/meta';
 import { dayKey, weighted, pick } from '../core/math';
@@ -131,7 +131,7 @@ export function canAfford(gold: number, iron = 0, yuanbao = 0) {
 }
 
 export function upgradeItem(it: EquipItem): string | null {
-  if (it.lv >= QUALITY_MAX_LV[it.q]) return '已达当前品质等级上限，合成提升品质';
+  if (it.lv >= QUALITY_MAX_LV[it.q]) return it.q === MAX_EQUIP_QUALITY ? '已达最高强化等级' : '已达当前品质等级上限，合成提升品质';
   const c = equipUpgradeCost(it.lv);
   if (save.gold < c.gold) return '金币不足';
   if (save.iron < c.iron) return '玄铁不足';
@@ -143,14 +143,14 @@ export function upgradeItem(it: EquipItem): string | null {
   return null;
 }
 
-/** 3 件同名同品质 → 1 件高一品质（保留主件等级，素材件等级返还玄铁） */
+/** 3 件同部位同品质 → 1 件高一品质（保留主件等级，素材件等级返还玄铁） */
 export function mergeCandidates(it: EquipItem): EquipItem[] {
   const slot = EQUIP_BY_ID[it.tid].slot;
   return save.items.filter((o) => o.uid !== it.uid && o.q === it.q && EQUIP_BY_ID[o.tid].slot === slot);
 }
 
 export function mergeItem(it: EquipItem): string | null {
-  if (it.q >= 5) return '已是最高品质';
+  if (it.q >= MAX_EQUIP_QUALITY) return '已是最高品质';
   const mats = mergeCandidates(it).sort((a, b) => (isEquipped(a) ? 1 : 0) - (isEquipped(b) ? 1 : 0) || (a.tid === it.tid ? 0 : 1) - (b.tid === it.tid ? 0 : 1) || a.lv - b.lv).slice(0, 2);
   if (mats.length < 2) return '需要3件同部位同品质的装备';
   let refund = 0;
@@ -168,7 +168,7 @@ export function mergeItem(it: EquipItem): string | null {
 /** 一键合成：从低品质开始合成所有可合成的装备 */
 export function mergeAll(): number {
   let count = 0;
-  for (let q = 0; q < 5; q++) {
+  for (let q = 0; q < MAX_EQUIP_QUALITY; q++) {
     let changed = true;
     while (changed) {
       changed = false;

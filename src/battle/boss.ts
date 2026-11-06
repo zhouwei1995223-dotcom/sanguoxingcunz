@@ -5,7 +5,7 @@ import type { Enemy } from './entities';
 // 首领 AI：追击 → 预警 → 释放技能 → 休整，循环技能表
 
 /** 1.0.3 新增的范围技能：预警结束时按范围结算伤害（battle.fireWarning），这里只负责摆预警 */
-const AREA_SKILLS = ['fan', 'rain', 'cross', 'nova'];
+const AREA_SKILLS = ['fan', 'rain', 'cross', 'nova', 'encircle'];
 
 export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: number, d: number) {
   const boss = e.boss!;
@@ -132,6 +132,11 @@ function startSkill(b: Battle, e: Enemy, skill: string, dx: number, dy: number) 
       callout(b, e, '刀气纵横');
       break;
     }
+    case 'encircle':
+      e.stateT = 1.6;
+      b.warnings.push({ kind: 'circle', x: e.x, y: e.y, r: 92, innerR: 38, a: 0, len: 0, t: 0, dur: e.stateT, dmg: e.dmg * 1.3, caster: e });
+      callout(b, e, '八门锁阵');
+      break;
     case 'nova':
       // 震地：以敌将为中心的大圆，赶紧跑出去
       e.stateT = 1.2;

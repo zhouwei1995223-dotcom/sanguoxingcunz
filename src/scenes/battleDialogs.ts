@@ -765,6 +765,7 @@ export class RushConfirmDialog implements Dialog {
     ui.text(`直接迎战「${b.nextBossName()}」`, ui.W / 2, y, 32, C.gold);
     y += 60 * u;
     ui.text('跳过的部分只补一半经验，锦囊照常发放', ui.W / 2, y, 22, C.textDim);
+    if (b.chapter.campaignMinutes === 10) ui.text('长战材料加成只累计实际打过的波次', ui.W / 2, y + 34 * u, 21, C.textDim);
     y += 80 * u;
     const bw = (w - 140 * u) / 2;
     if (ui.button('rush_no', f.x + 50 * u, y, bw, 96 * u, '再等等', C.btnGray)) return false;
@@ -838,7 +839,7 @@ export class ResultDialog implements Dialog {
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless
         ? settleEndless(b.t, b.coins, b.kills, b.bossKills, b.equipDrops)
-        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec, b.chapter.campaignMinutes));
+        : settleRun(b.chapter, scene.diff, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, runStars(win, b.reviveCount, b.finalBossSec), b.skippedSeconds);
     }
     if (scene.videoPath) scene.videoPath.then((p) => { this.video = p; });
     if (save.guide === 0) save.guide = 1;
@@ -872,7 +873,7 @@ export class ResultDialog implements Dialog {
         const on = !!(st & (1 << i));
         const cx = f.x + 40 * u + sw * i + sw / 2;
         ui.icon('star', cx, y + 10 * u, 52 * u, on ? 1 : 0.2);
-        ui.text(i === 2 && b.chapter.campaignMinutes === 5 ? '十分钟模式可得' : label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
+        ui.text(label, cx, y + 54 * u, 18, on ? C.gold : '#7a6a5a');
       });
       y += 92 * u;
       const tip = this.res.starBonus ? `集齐三星！额外元宝×${this.res.starBonus}` : !this.res.defense && starCount(st) < 3 ? '集齐三星可额外领取元宝' : '';
@@ -891,7 +892,9 @@ export class ResultDialog implements Dialog {
     ui.ctx.fillStyle = C.borderDark;
     ui.ctx.fillRect(f.x + 40 * u, y, w - 80 * u, 3 * u);
     y += 40 * u;
-    ui.text(this.doubled ? '奖励（已翻倍）' : '战利品', ui.W / 2, y, 28, C.gold);
+    const lootTitle = this.doubled ? '奖励（已翻倍）' : '战利品';
+    const factor = this.res.materialMultiplier ?? 1;
+    ui.text(factor > 1 ? `${lootTitle} · 基础军饷、玄铁 ×${factor.toFixed(2)}` : lootTitle, ui.W / 2, y, factor > 1 ? 24 : 28, C.gold);
     y += 40 * u;
     const mul = this.doubled ? 2 : 1;
     const entries = rewardEntries({ gold: this.res.gold * mul, iron: this.res.iron * mul, yuanbao: this.res.yuanbao, hero: this.res.heroReward, shards: this.res.shardReward }, this.res.items);

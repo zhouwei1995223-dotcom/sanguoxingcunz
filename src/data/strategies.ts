@@ -1,5 +1,6 @@
 // 锦囊妙计：每局在固定时间点三选一，获得改变打法的计策
 // 良策 = 稳定的数值提升；妙计 = 改变规则；神机 = 很少出现，能决定整局打法
+import { IS_WEB } from './platformConfig';
 
 export type StratTier = 0 | 1 | 2;
 
@@ -9,7 +10,8 @@ export type StratId =
   // 妙计
   | 'beishui' | 'kurou' | 'caochuan' | 'lianhuan' | 'jinchan' | 'huoshao' | 'shimian' | 'chenhuo' | 'guohe'
   // 神机
-  | 'wanjian' | 'jiedao' | 'qixing' | 'wolong' | 'bazhen' | 'taoyuan' | 'yiqi';
+  | 'wanjian' | 'jiedao' | 'qixing' | 'wolong' | 'bazhen' | 'taoyuan' | 'yiqi'
+  | 'qingnang' | 'yunchou' | 'chuanyang' | 'tanlu' | 'chengsheng' | 'jincheng' | 'yizhan' | 'pozhen' | 'juliang' | 'jianbi';
 
 export interface StratDef {
   id: StratId;
@@ -49,6 +51,19 @@ export const STRATS: StratDef[] = [
   { id: 'taoyuan', tier: 2, name: '桃园结义', desc: '立即使所有技能和兵法提升1级' },
   { id: 'yiqi', tier: 2, name: '一骑当千', desc: '选择后每击败100名敌人，伤害永久+4%' },
 ];
+
+if (IS_WEB) STRATS.push(
+  { id: 'qingnang', tier: 0, name: '青囊急救', desc: '立即回复30%生命，并重置金疮药冷却' },
+  { id: 'yunchou', tier: 0, name: '运筹帷幄', desc: '升级免费刷新次数+2，封禁次数+1' },
+  { id: 'chuanyang', tier: 0, name: '百步穿杨', desc: '暴击率+8%，暴击伤害+20%' },
+  { id: 'tanlu', tier: 0, name: '轻骑探路', desc: '移动速度+10%，拾取范围+35%' },
+  { id: 'chengsheng', tier: 1, name: '乘胜追击', desc: '当前连斩达到20时，伤害提高22%' },
+  { id: 'jincheng', tier: 1, name: '金城汤池', desc: '每次使用金疮药后，无敌2秒' },
+  { id: 'yizhan', tier: 1, name: '以战养战', desc: '选取后每击败50名敌人，金疮药剩余冷却缩短5秒' },
+  { id: 'pozhen', tier: 1, name: '摧锋破阵', desc: '对剩余生命低于30%的敌人，伤害提高25%' },
+  { id: 'juliang', tier: 2, name: '鸣金聚粮', desc: '每18秒吸取战场上所有经验与军饷' },
+  { id: 'jianbi', tier: 2, name: '坚壁拒矢', desc: '每12秒击落身边飞弹，每枚回复2%生命，单次最多回复10%' },
+);
 
 export const STRAT_BY_ID = {} as Record<StratId, StratDef>;
 STRATS.forEach((s) => (STRAT_BY_ID[s.id] = s));

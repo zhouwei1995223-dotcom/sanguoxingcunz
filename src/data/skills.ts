@@ -5,10 +5,10 @@ import type { HeroDef } from './heroes';
 export type WeaponId =
   | 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd'
   | 'rock' | 'knife' | 'catapult' | 'thunder' | 'caltrop' | 'drum'
-  | 'bow' | 'lance' | 'chakram' | 'ji' | 'meteor';
+  | 'bow' | 'lance' | 'chakram' | 'ji' | 'meteor' | 'hook' | 'warshield';
 export type PassiveId =
   | 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal'
-  | 'map' | 'mirror' | 'wine' | 'ration' | 'horn' | 'whetstone';
+  | 'map' | 'mirror' | 'wine' | 'ration' | 'horn' | 'whetstone' | 'binding' | 'guardmanual';
 export type SkillId = WeaponId | PassiveId;
 
 export interface WeaponLevel {
@@ -373,6 +373,33 @@ WEAPONS.thunder.links = [
   { hero: 'jiangwei', name: '天水麒麟', desc: '姜维专属：六道天雷，连锁十八人并长时间麻痹', evo: { count: 6, pierce: 18, stun: 0.6, dmg: 12 } },
 ];
 
+if (IS_WEB) Object.assign(WEAPONS, {
+  hook: {
+    id: 'hook', name: '飞钩索', icon: 'w_hook', evoName: '锁江铁索', evoIcon: 'w_hook_evo', evoPassive: 'binding', unlockCh: 3,
+    intro: '钩住射程内较远的敌人，使其减速，并将小兵和精英拉近',
+    levels: [
+      { dmg: 2, cd: 2.3, count: 1, area: 48, knock: 95, slow: 0.25, duration: 1.5, desc: '掷钩牵敌，使其减速' },
+      { dmg: 2.4, cd: 2.3, count: 1, area: 60, knock: 105, slow: 0.3, duration: 1.6, desc: '钩索更远，减速更强' },
+      { dmg: 2.4, cd: 2.2, count: 2, area: 60, knock: 105, slow: 0.3, duration: 1.6, desc: '同时钩住两个目标' },
+      { dmg: 2.9, cd: 2.1, count: 2, area: 72, knock: 115, slow: 0.35, duration: 1.8, desc: '伤害和牵引距离提升' },
+      { dmg: 3.1, cd: 2, count: 3, area: 80, knock: 125, slow: 0.35, duration: 1.8, desc: '钩索增至三道，冷却缩短' },
+    ],
+    evo: { dmg: 5, cd: 1.8, count: 4, area: 96, knock: 145, slow: 0.5, duration: 2, desc: '四索齐出，强力牵引并减速' },
+  },
+  warshield: {
+    id: 'warshield', name: '虎贲盾', icon: 'w_warshield', evoName: '玄武铁壁', evoIcon: 'w_warshield_evo', evoPassive: 'guardmanual', unlockCh: 4,
+    intro: '朝面向挥盾，击退敌人并挡下范围内的敌方飞弹',
+    levels: [
+      { dmg: 1.9, cd: 2, count: 1, area: 60, arc: 1.05, knock: 75, desc: '正面盾击，可挡一枚飞弹' },
+      { dmg: 2.4, cd: 2, count: 1, area: 70, arc: 1.15, knock: 90, desc: '盾击范围、伤害和击退提升' },
+      { dmg: 2.4, cd: 1.8, count: 2, area: 70, arc: 1.25, knock: 90, desc: '每次可挡两枚飞弹' },
+      { dmg: 3.1, cd: 1.8, count: 2, area: 80, arc: 1.4, knock: 110, desc: '盾击更重，格挡角度扩大' },
+      { dmg: 3.4, cd: 1.65, count: 3, area: 86, arc: 1.57, knock: 115, desc: '护住前方半圆，可挡三枚飞弹' },
+    ],
+    evo: { dmg: 5.2, cd: 1.5, count: 4, area: 94, arc: Math.PI, knock: 135, desc: '环身盾击，每击可挡四枚飞弹' },
+  },
+} satisfies Partial<Record<WeaponId, WeaponDef>>);
+
 // 进化形态整体伤害系数：进化后约为满级的 1.5 倍，避免后期一边倒
 export const EVO_DMG = 0.75;
 for (const d of Object.values(WEAPONS)) {
@@ -490,7 +517,7 @@ export interface PassiveDef {
   unlockCh?: number;
 }
 
-export const PASSIVES: Record<PassiveId, PassiveDef> = {
+export const PASSIVES = {
   horseshoe: { id: 'horseshoe', name: '战马', icon: 'p_horseshoe', desc: '移动速度+8%' },
   armor: { id: 'armor', name: '铁甲', icon: 'p_armor', desc: '受到伤害-6%' },
   book: { id: 'book', name: '兵书', icon: 'p_book', desc: '技能冷却-6%' },
@@ -506,7 +533,12 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   whetstone: { id: 'whetstone', name: '磨刀石', icon: 'p_whetstone', desc: '对精英与首领伤害+15%', unlockCh: 2 },
   mirror: { id: 'mirror', name: '护心镜', icon: 'p_mirror', desc: '每隔一段时间抵挡一次伤害（每级冷却-2秒）', unlockCh: 3 },
   ration: { id: 'ration', name: '军粮', icon: 'p_ration', desc: '每击败50名敌人回复1%生命', unlockCh: 3 },
-};
+} as Record<PassiveId, PassiveDef>;
+
+if (IS_WEB) Object.assign(PASSIVES, {
+  binding: { id: 'binding', name: '缚敌诀', icon: 'p_binding', desc: '对已减速或眩晕的敌人伤害+6%', unlockCh: 3 },
+  guardmanual: { id: 'guardmanual', name: '守势篇', icon: 'p_guardmanual', desc: '受到敌方飞弹的伤害-6%', unlockCh: 4 },
+} satisfies Partial<Record<PassiveId, PassiveDef>>);
 
 export const SKILLS_BY_ID = { ...WEAPONS, ...PASSIVES };
 

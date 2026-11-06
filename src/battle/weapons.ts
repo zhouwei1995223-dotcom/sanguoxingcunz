@@ -43,6 +43,8 @@ export function updateWeapons(b: Battle, dt: number) {
       case 'chakram': chakram(b, w, L, dt); break;
       case 'ji': ji(b, w, L, dt); break;
       case 'meteor': meteor(b, w, L, dt); break;
+      case 'hook': hook(b, w, L, dt); break;
+      case 'warshield': warshield(b, w, L, dt); break;
     }
   }
 }
@@ -316,6 +318,47 @@ function sweep(b: Battle, cx: number, cy: number, R: number, dir: number, arc: n
   }
   b.hitBreakables(cx + Math.cos(dir) * R * 0.6, cy + Math.sin(dir) * R * 0.6, R * 0.5);
   return hits;
+}
+
+function hook(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player, reach = (70 + L.area) * b.areaMul;
+  const distance = (e: Enemy) => (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+  const targets = b.grid.query(p.x, p.y, reach, near).filter(e => !e.dead && b.canHit(e) && distance(e) <= reach * reach);
+  targets.sort((a, z) => distance(z) - distance(a));
+  for (const e of targets.slice(0, L.count)) {
+    const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+    b.fx.push({ kind: 'tether', x: p.x, y: p.y - 8, a: Math.atan2(dy, dx), len: d, t: 0, dur: 0.24, color: w.evo ? '#fee761' : '#c0cbdc' });
+    if (!b.damage(e, L.dmg * b.base.atk, -dx / d, -dy / d, L.knock)) {
+      if (e.slow < 1) {
+        e.slow = Math.max(e.slow, L.slow! * (e.boss ? 0.5 : 1));
+        e.slowT = Math.max(e.slowT, L.duration! * b.durMul);
+      }
+    }
+  }
+  if (targets.length) b.hooks.sfx('thrust');
+}
+
+function warshield(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
+  w.t -= dt;
+  if (w.t > 0) return;
+  w.t = L.cd * b.cdMul;
+  const p = b.player, y = p.y - 8, r = L.area * b.areaMul;
+  const a = Math.atan2(p.dirY, p.dirX), arc = L.arc!;
+  sweep(b, p.x, y, r, a, arc, L.dmg * b.base.atk, L.knock!);
+  let blocked = 0;
+  for (let i = b.shots.length - 1; i >= 0 && blocked < L.count; i--) {
+    const shot = b.shots[i], dx = shot.x - p.x, dy = shot.y - y;
+    const d = Math.hypot(dx, dy);
+    if (d > r || dx * p.dirX + dy * p.dirY < Math.cos(arc) * d) continue;
+    b.fx.push({ kind: 'spark', x: shot.x, y: shot.y, t: 0, dur: 0.2 });
+    b.shots.splice(i, 1);
+    blocked++;
+  }
+  b.fx.push({ kind: 'slash', x: p.x, y, a, r, w: arc, t: 0, dur: 0.26, color: w.evo ? '#fee761' : '#8be9ff' });
+  if (blocked) b.hooks.sfx('hit');
 }
 
 /** 关羽：青龙偃月刀半月横扫 */

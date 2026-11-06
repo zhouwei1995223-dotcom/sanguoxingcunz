@@ -1,7 +1,7 @@
 import type { Platform } from './types';
 import { createWebPlatform } from './web';
 import { createMiniGamePlatform } from './minigame';
-import { NO_ADS } from '../data/platformConfig';
+import { IS_WEB, NO_ADS } from '../data/platformConfig';
 import { pauseForAd } from '../audio/sound';
 import { save } from '../meta/save';
 
@@ -30,10 +30,13 @@ export function getPlatform(): Platform {
     if (adBusy && now - adBusy < 90000) return Promise.resolve(false);
     adBusy = now;
     if (!NO_ADS) pauseForAd(true);
-    return raw(placement).then((ok) => {
-      adBusy = 0;
-      if (!NO_ADS) pauseForAd(false);
-      // idx：今天这个点位的第几次（看完才算）
+    // 网页视频加载失败时也走未看完的收尾，避免锁住下一次请求或一直静音。
+    const request = IS_WEB ? Promise.resolve().then(() => raw(placement)).catch(() => false) : raw(placement);
+    return request.then((ok) => {
+      if (!IS_WEB || adBusy === now) {
+        adBusy = 0;
+        if (!NO_ADS) pauseForAd(false);
+      }
       const c = (save.daily.adCount = save.daily.adCount || {});
       if (ok) c[placement] = (c[placement] || 0) + 1;
       p.report('ad_reward', { placement, ok: ok ? 1 : 0, idx: c[placement] || 0, src: save.src || '' });
