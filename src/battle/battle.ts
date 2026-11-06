@@ -839,6 +839,7 @@ export class Battle {
   screenFill = 0.1;
 
   private get fixedCampaign() { return IS_WEB && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense; }
+  get isWebCampaignOrDefense() { return IS_WEB && !this.chapter.endless && !this.chapter.tutorial; }
 
   private get bossPowerHpFactor() {
     const ch = this.chapter;
@@ -899,6 +900,17 @@ export class Battle {
     return ch.endless || ch.tutorial || ch.defense ? this.t : this.t * 600 / ch.duration;
   }
 
+  private addEnemy(e: Enemy) {
+    // 在所有关卡倍率、精英血量封顶及攻城加成之后按类别调整一次。
+    if (this.isWebCampaignOrDefense) {
+      const factor = e.boss ? 1.30 : e.elite ? 1.20 : 1.10;
+      e.hp = e.maxHp = Math.round(e.maxHp * factor);
+      e.dmg *= factor;
+      if (e.boss) e.speed *= 1.08;
+    }
+    this.enemies.push(e);
+  }
+
   spawnEnemy(id: string, x: number, y: number, opts: { elite?: boolean; hpMul?: number } = {}): Enemy {
     const d = ENEMIES[id];
     const e = newEnemy();
@@ -940,7 +952,7 @@ export class Battle {
     e.born = this.t;
     e.scale = opts.elite ? 2 : 1;
     if (opts.elite) e.r = d.radius * 1.8;
-    this.enemies.push(e);
+    this.addEnemy(e);
     return e;
   }
 
@@ -969,7 +981,7 @@ export class Battle {
     e.state = 'move';
     e.stateT = 2;
     e.bskills = this.chapter.tutorial ? d.skills.filter((s) => BASIC_BOSS_SKILLS.includes(s)) : d.skills.slice();
-    this.enemies.push(e);
+    this.addEnemy(e);
     if (isFinal) this.finalBoss = e; else this.midBoss = e;
     this.hooks.bossAppear(d);
     return e;
@@ -1235,6 +1247,7 @@ export class Battle {
   }
 
   private breakShield(e: Enemy) {
+    e.bossWarning = undefined;
     this.statShield[0]++;
     e.shield = 0;
     e.shieldT = 0;
@@ -2185,6 +2198,11 @@ export class Battle {
       const w = this.warnings[i];
       w.t += dt;
       const cancelled = w.caster && (w.caster.dead || (w.caster.boss ? w.caster.state === 'rest' : w.caster.slow >= 1));
+      // 跳劈要等敌将实际落地才判定。低帧率下蓄力、腾空可能比预估时间多一帧。
+      if (!cancelled && w.kind === 'circle' && w.caster?.bossWarning === w) {
+        w.t = Math.min(w.t, w.dur);
+        continue;
+      }
       if (cancelled || w.t >= w.dur) {
         this.warnings.splice(i, 1);
         if (w.caster?.state === 'troopWindup') w.caster.state = 'move';
@@ -2194,7 +2212,7 @@ export class Battle {
   }
 
   /** 预警结束：放出特效，玩家还在范围里就受伤 */
-  private fireWarning(w: Warning) {
+  fireWarning(w: Warning) {
     const p = this.player;
     if (w.hitFx === 'arrows') {
       for (const a of [w.a - w.r, w.a, w.a + w.r]) this.enemyShoot(w.x, w.y - 8, Math.cos(a), Math.sin(a) * 0.85, 110, w.dmg!, 'arrow', w.len / 110);

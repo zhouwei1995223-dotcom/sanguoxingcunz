@@ -1,11 +1,12 @@
 import { rand, TAU } from '../core/math';
 import type { Battle } from './battle';
-import type { Enemy } from './entities';
+import type { Enemy, Warning } from './entities';
 
 // 首领 AI：追击 → 预警 → 释放技能 → 休整，循环技能表
 
 /** 1.0.3 新增的范围技能：预警结束时按范围结算伤害（battle.fireWarning），这里只负责摆预警 */
 const AREA_SKILLS = ['fan', 'rain', 'cross', 'nova', 'encircle'];
+const CHARGE_DURATION = 0.65, CHARGE_SPEED = 7.5;
 
 export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: number, d: number) {
   const boss = e.boss!;
@@ -35,7 +36,7 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
       if (skill === 'spin') { e.x += dx * spd * 0.3 * dt; e.y += dy * spd * 0.3 * dt; }
       if (e.stateT <= 0) {
         e.state = 'act';
-        if (skill === 'charge') { e.stateT = 0.65; }
+        if (skill === 'charge') { e.stateT = CHARGE_DURATION; }
         else if (skill === 'spin') { e.stateT = 1.8; e.life = 0; }
         else if (skill === 'slam') { e.stateT = 0.35; e.vx = e.x; e.vy = e.y; }
         else if (skill === 'throw') { e.stateT = 1.05; e.life = 0; }
@@ -55,9 +56,14 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
         if (skill === 'slam') {
           b.hooks.shake(4);
           b.hooks.sfx('explode');
-          b.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.4, r: 46, color: '#feae34' });
-          if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 46 * 46) b.hurtPlayer(e.dmg * 1.5);
+          if (e.bossWarning) {
+            b.fireWarning({ ...e.bossWarning, dmg: e.dmg * 1.5 });
+          } else {
+            b.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.4, r: 46, color: '#feae34' });
+            if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 46 * 46) b.hurtPlayer(e.dmg * 1.5);
+          }
         }
+        e.bossWarning = undefined;
       }
       break;
     case 'rest':
@@ -82,18 +88,31 @@ function startSkill(b: Battle, e: Enemy, skill: string, dx: number, dy: number) 
     case 'charge': {
       e.stateT = 0.8;
       e.tx = dx; e.ty = dy;
-      b.warnings.push({ kind: 'line', x: e.x, y: e.y, r: 14, a: Math.atan2(dy, dx), len: 200, t: 0, dur: 0.8 });
+      const w: Warning = { kind: 'line', x: e.x, y: e.y, r: 14, a: Math.atan2(dy, dx), len: 200, t: 0, dur: e.stateT };
+      if (b.isWebCampaignOrDefense) {
+        w.len = e.speed * CHARGE_SPEED * CHARGE_DURATION;
+        w.r = e.r * 2;
+        w.caster = e;
+        e.bossWarning = w;
+      }
+      b.warnings.push(w);
       break;
     }
     case 'spin':
       e.stateT = 0.7;
       b.warnings.push({ kind: 'circle', x: e.x, y: e.y, r: 44, a: 0, len: 0, t: 0, dur: 0.7 });
       break;
-    case 'slam':
+    case 'slam': {
       e.stateT = 0.9;
       e.tx = p.x; e.ty = p.y;
-      b.warnings.push({ kind: 'circle', x: p.x, y: p.y, r: 46, a: 0, len: 0, t: 0, dur: 1.25 });
+      const w: Warning = { kind: 'circle', x: e.tx, y: e.ty, r: 46, a: 0, len: 0, t: 0, dur: 1.25 };
+      if (b.isWebCampaignOrDefense) {
+        w.caster = e;
+        e.bossWarning = w;
+      }
+      b.warnings.push(w);
       break;
+    }
     case 'throw':
     case 'ring':
       e.stateT = 0.5;
@@ -150,12 +169,25 @@ function act(b: Battle, e: Enemy, skill: string, dt: number, dx: number, dy: num
   const boss = e.boss!;
   const p = b.player;
   switch (skill) {
-    case 'charge':
-      e.x += e.tx * e.speed * 7.5 * dt;
-      e.y += e.ty * e.speed * 7.5 * dt;
+    case 'charge': {
+      const path = e.bossWarning;
+      if (path) {
+        // 锁定起手速度，最后一帧只走剩余时间。逐步移动让守城的山林碰撞继续生效。
+        const activeDt = Math.min(dt, e.stateT + dt);
+        const step = path.len * activeDt / CHARGE_DURATION;
+        const dx = Math.cos(path.a), dy = Math.sin(path.a);
+        const along = (e.x - path.x) * dx + (e.y - path.y) * dy;
+        const advance = Math.min(step, Math.max(0, path.len - along));
+        e.x += dx * advance;
+        e.y += dy * advance;
+      } else {
+        e.x += e.tx * e.speed * CHARGE_SPEED * dt;
+        e.y += e.ty * e.speed * CHARGE_SPEED * dt;
+      }
       e.left = e.tx < 0;
       if (Math.random() < 0.5) b.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 });
       break;
+    }
     case 'spin': {
       e.x += dx * e.speed * 1.3 * dt;
       e.y += dy * e.speed * 1.3 * dt;

@@ -49,7 +49,17 @@ export default async function ({ page }) {
     // 先锋阵亡应保留其他城门的攻城部队。
     const ram = b.spawnEnemy('siege_ram', 210, 0);
     b.killEnemy(b.spawnBoss(b.chapter.midBoss, -160, 0, false));
-    return { army, grain, beforeImpact, afterImpact, afterCancel, ramAlive: !ram.dead };
+    // 枪兵原本向北攻城。铁壁盾兵在东侧144像素，属于70×2.2的嘲讽范围。
+    b.enemies.length = 0;
+    b.grid.clear();
+    const spear = b.spawnEnemy('wei_spear', 0, 80);
+    d.allyGrid.clear();
+    d.allies = [front];
+    Object.assign(front, { kind: 'shield', x: 144, y: 80 });
+    d.allyGrid.insert(front);
+    d.links.add('l_iron');
+    b.updateEnemies(0.01);
+    return { army, grain, beforeImpact, afterImpact, afterCancel, ramAlive: !ram.dead, movedToShield: spear.x > 0 };
   });
   assert.equal(result.army, 120);
   assert.ok(result.grain >= 0 && result.grain < 40);
@@ -58,4 +68,5 @@ export default async function ({ page }) {
   assert.equal(result.afterImpact[2], 1000);
   assert.deepEqual(result.afterCancel, result.afterImpact);
   assert.ok(result.ramAlive);
+  assert.ok(result.movedToShield);
 }

@@ -372,10 +372,11 @@ export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: 
     const reach = e.def?.skill === 'fireVolley' ? 155 : 70;
     let best: Ally | null = null, bd = IS_WEB && heroNear && !specialist ? Math.min(reach * reach, heroDistance) : reach * reach;
     // 铁壁阵有嘲讽权重，查询范围也要覆盖它实际能吸引的距离。
-    const near = IS_WEB ? d.allyGrid.query(e.x, e.y, reach * (d.links.has('l_iron') ? 1.5 : 1), nearbyAllies) : d.allies;
+    const shieldTaunt = d.links.has('l_iron') ? 2.2 : 1;
+    const near = IS_WEB ? d.allyGrid.query(e.x, e.y, reach * shieldTaunt, nearbyAllies) : d.allies;
     for (const a of near) {
       if (a.dead) continue;
-      const taunt = a.kind === 'shield' && d.links.has('l_iron') ? 2.2 : 1;
+      const taunt = a.kind === 'shield' ? shieldTaunt : 1;
       const dd = ((a.x - e.x) ** 2 + (a.y - e.y) ** 2) / (taunt * taunt);
       if (dd < bd) { bd = dd; best = a; }
     }

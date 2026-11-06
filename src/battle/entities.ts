@@ -49,6 +49,8 @@ export interface Enemy {
   skillIdx: number;
   tx: number;
   ty: number;
+  /** 冲锋路线或跳劈落点，起手后保持锁定。 */
+  bossWarning?: Warning;
   /** 本场用的技能表（新手试炼只用基础技能） */
   bskills: string[];
   /** 护盾：剩余量 / 总量 / 剩余时间；shieldDone 表示这场已经开过盾 */

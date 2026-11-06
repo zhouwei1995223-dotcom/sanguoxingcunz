@@ -335,7 +335,7 @@ export class BattleScene implements Scene {
     const b = this.battle;
     // 新手局开头的操作提示还在显示时先不弹
     if (save.guide === 0 && this.tutorialT < 9) return;
-    if (b.warnings.length) this.tip('boss_warn', '地上的红圈是敌将的技能范围，快躲开！', true);
+    if (b.warnings.length) this.tip('boss_warn', IS_WEB ? '敌人即将出招，快躲开地上的红色区域！' : '地上的红圈是敌将的技能范围，快躲开！', true);
     this.tipCheckT -= dt;
     if (this.tipCheckT > 0) return;
     this.tipCheckT = 0.5;
@@ -564,9 +564,11 @@ export class BattleScene implements Scene {
         const x = px - step;
         if (ui.clicked('speed2', x, py, ps, ps)) void this.toggleDoubleSpeed();
         ui.panel(x, py, ps, ps, 'dark');
-        const sub = this.doubleSpeedActive ? '使用中' : this.doubleSpeedUnlocked ? '' : '看广告';
-        ui.text('×2', x + ps / 2, py + ps * (sub ? 0.32 : 0.5), 30, this.doubleSpeedActive ? C.gold : '#fff');
-        if (sub) ui.text(sub, x + ps / 2, py + ps * 0.72, 17, this.doubleSpeedActive ? C.gold : '#fff');
+        const cx = x + ps / 2, subY = py + ps * 0.72;
+        const hasSubtitle = !this.doubleSpeedUnlocked || this.doubleSpeedActive;
+        ui.text('×2', cx, py + ps * (hasSubtitle ? 0.32 : 0.5), 30, this.doubleSpeedActive ? C.gold : '#fff');
+        if (!this.doubleSpeedUnlocked) ui.icon('video', cx, subY, 32 * u);
+        else if (this.doubleSpeedActive) ui.text('使用中', cx, subY, 17, C.gold);
       }
     }
     // 直取敌将：没有敌将在场时常驻，确认（看一次广告）后跳过小兵直接挑战敌将
