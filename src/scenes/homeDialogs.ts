@@ -3,6 +3,7 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries, itemSlot, RewardEntry } from '../ui/widgets';
 import { guidePointer } from '../ui/guide';
+import { EvoTableDialog } from './evoTableDialog';
 import { save, markDirty, flushSave, staminaNextSeconds, preparationPresetsFor, selectedPreparationStage } from '../meta/save';
 import type { EquipItem } from '../meta/save';
 import {
@@ -682,9 +683,13 @@ export class PreparationDialog implements Dialog {
       ui.ctx.fillRect(x + innerW + 5 * u, listY + thumbY, 4 * u, thumbH);
     }
     ui.wrapText(note, ui.W / 2, footerY - noteH, innerW, 22, skipped.length ? '#983e20' : C.textDim, 1.3, 'center');
-    const clearW = 170 * u;
-    if (ui.button('prep_clear', x, footerY + 12 * u, clearW, 88 * u, '清空此预设', C.btnGray, { size: 24, disabled: !selected.length })) selected.length = 0;
-    if (ui.button('prep_save', x + clearW + 14 * u, footerY + 12 * u, innerW - clearW - 14 * u, 88 * u, '保存并启用预设' + (this.slot + 1), C.btnRed, { size: 29 })) {
+    const by = footerY + 12 * u, smallW = 154 * u, gap = 12 * u;
+    if (ui.button('prep_clear', x, by, smallW, 88 * u, '清空此预设', C.btnGray, { size: 23, disabled: !selected.length })) selected.length = 0;
+    if (ui.button('prep_evo', x + smallW + gap, by, smallW, 88 * u, '进化表', C.btnBlue, { size: 27 })) {
+      game.openDialog(new EvoTableDialog({ hero: this.hero, skillPool: this.pool, defense: this.stage.defense, selected: effective, preset: this.slot + 1 }));
+    }
+    const saveX = x + 2 * (smallW + gap);
+    if (ui.button('prep_save', saveX, by, x + innerW - saveX, 88 * u, '保存并启用预设' + (this.slot + 1), C.btnRed, { size: 29 })) {
       const stored = preparationPresetsFor(this.hero.id);
       stored.slots[this.slot] = fitPreparation(selected, this.fullPool, [this.hero.weapon]);
       stored.active = this.slot;

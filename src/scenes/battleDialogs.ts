@@ -2,11 +2,12 @@ import { game, Dialog } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries } from '../ui/widgets';
+import { EvoTableDialog } from './evoTableDialog';
 import type { BattleScene } from './battleScene';
 import { choiceInfo } from './battleScene';
 import { Battle } from '../battle/battle';
 import type { Choice } from '../battle/battle';
-import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, WeaponId } from '../data/skills';
+import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
 import type { BossDef } from '../data/enemies';
 import { save, markDirty, flushSave } from '../meta/save';
 import { settleRun, settleEndless, settleDefense, settleWeeklyRun, settleTutorial, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
@@ -947,58 +948,5 @@ export class ResultDialog implements Dialog {
   }
   private get canRecommend() {
     return this.win && !this.res.endless && getPlatform().supportsRecommend();
-  }
-}
-
-/** 局内进化表：本局可用武器的进化配方，专属联动高亮 */
-export class EvoTableDialog implements Dialog {
-  t?: number;
-  constructor(private b: Battle) {}
-  draw(ui: UI) {
-    const u = ui.u;
-    const b = this.b;
-    const w = ui.W - 50 * u, h = Math.min(ui.H - 200 * u - ui.safeTop, 1300 * u);
-    const f = dialogFrame(ui, w, h, '进化表', this.t, 'evo_close');
-    if (f.close) return false;
-    const defense = IS_WEB && !!b.def;
-    ui.text(defense ? '守城武器升满级即可进化' : '武器升满级 + 拥有对应兵法，开宝箱即可进化', ui.W / 2, f.y + 80 * u, 22, '#9be37a');
-    const ids = IS_WEB ? b.skillPool.weapons.slice() : weaponsForHero(b.hero.id, b.cleared);
-    // 专属武器与联动排在前面
-    const rank = (id: WeaponId) => (WEAPONS[id].hero ? 0 : weaponLink(id, b.hero.id) ? 1 : 2);
-    ids.sort((a, c) => rank(a) - rank(c));
-    const rh = 120 * u;
-    const top = f.y + 110 * u, vh = h - 140 * u;
-    const off = ui.beginScroll('evo_table', f.x + 20 * u, top, w - 40 * u, vh, ids.length * (rh + 10 * u));
-    ids.forEach((id, i) => {
-      const d = WEAPONS[id];
-      const link = weaponLink(id, b.hero.id);
-      const y = top + i * (rh + 10 * u) + off;
-      if (y + rh < top || y > top + vh) return;
-      const own = b.weapon(id);
-      ui.pixRect(f.x + 24 * u, y, w - 48 * u, rh, link || d.hero ? '#4a3418' : '#2a2030');
-      const isz = 84 * u, iy = y + (rh - isz) / 2;
-      let x = f.x + 40 * u;
-      const cell = (icon: string, name: string, col: string, active: boolean) => {
-        ui.qualityFrame(x, iy, isz, active ? '#feae34' : '#5a6988');
-        ui.icon(icon, x + isz / 2, iy + isz / 2, isz * 0.66, active ? 1 : 0.7);
-        ui.text(name, x + isz / 2, iy + isz + 2 * u, 16, col);
-        x += isz;
-      };
-      cell(d.icon, d.name, '#fff4d6', !!own);
-      if (!defense) {
-        ui.text('+', x + 22 * u, iy + isz / 2, 34, C.gold);
-        x += 44 * u;
-        cell(PASSIVES[d.evoPassive].icon, PASSIVES[d.evoPassive].name, '#fff4d6', b.passiveLv(d.evoPassive) > 0);
-      }
-      ui.text('→', x + 26 * u, iy + isz / 2, 34, C.gold);
-      x += 52 * u;
-      cell(d.evoIcon, '', '#fff', !!own?.evo);
-      const tx = x + 20 * u;
-      ui.text(link ? link.name : d.evoName, tx, iy + 20 * u, 28, link ? '#fee761' : '#fff4d6', 'left');
-      const missing = IS_WEB && !defense && !b.skillPool.passives.includes(d.evoPassive);
-      const sub = missing ? '本章缺少' + PASSIVES[d.evoPassive].name : link ? '★' + b.hero.name + '专属联动' : d.hero ? '★专属武器' : own?.evo ? '已进化' : own ? `已拥有 Lv.${own.lv}` : '';
-      ui.text(sub, tx, iy + 60 * u, 20, link || d.hero ? '#feae34' : '#9be37a', 'left');
-    });
-    ui.endScroll();
   }
 }

@@ -57,6 +57,19 @@ export default async function ({ page, wait, shot }) {
   await click('prep_skill_aura');
   const edited = await page.evaluate(() => window.__game.dialogs.at(-1).presets.slots[1]);
   assert.ok(edited.includes('aura') && !edited.includes('knife'));
+  await click('prep_evo');
+  const evo = () => page.evaluate(() => {
+    const table = window.__game.dialogs.at(-1);
+    return { ids: table.ids, view: table.source };
+  });
+  const table = await evo();
+  assert.equal(table.ids.length, 6);
+  assert.equal(table.view.preset, 2);
+  assert.deepEqual(table.view.selected, edited, '进化表应读取尚未保存的选择');
+  await wait(1800); await shot('prep_evolution');
+  await click('evo_close');
+  assert.deepEqual(await page.evaluate(() => window.__game.dialogs.at(-1).presets.slots[1]), edited);
+  assert.deepEqual((await presets()).slots[1], custom, '仅查看进化表不应保存预设');
   await click('prep_slot_2'); await click('prep_skill_aura'); await click('prep_close');
   assert.deepEqual(await presets(), { active: 1, slots: [legacy, custom, []] }, '取消编辑不应修改预设');
   await click('start_battle'); await click('duration_5');
@@ -78,4 +91,7 @@ export default async function ({ page, wait, shot }) {
   await click('mode_defense'); await click('side_prepare');
   assert.deepEqual(await pool(), { weapons: ['spear', 'sword', 'horse'], passives: [] });
   assert.ok(!await page.evaluate(() => window.__game.ui.prevRegions.some(r => r.id === 'prep_passives')));
+  await click('prep_evo');
+  assert.equal((await evo()).view.defense, true);
+  assert.deepEqual((await evo()).ids, ['spear', 'sword', 'horse']);
 }
