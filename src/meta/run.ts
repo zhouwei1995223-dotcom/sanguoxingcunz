@@ -1,5 +1,6 @@
 import { skillsUnlockedAt } from '../data/skills';
-import { ChapterDef, DifficultyDef, CHAPTERS } from '../data/chapters';
+import { ChapterDef, DifficultyDef, CHAPTERS, WEB_CAMPAIGN_POWER } from '../data/chapters';
+import { IS_WEB } from '../data/platformConfig';
 import { weighted } from '../core/math';
 import { save, markDirty } from './save';
 import { newItem, randomItemTemplate, progressTask, grantHero, grantShards, randomShardHero } from './ops';
@@ -264,11 +265,18 @@ export function settleWeeklyRun(t: number, coins: number, kills: number, bossKil
   return { win: true, firstClear: false, gold, iron, yuanbao: 0, items, newBest: false };
 }
 
-/**
- * 推荐战力：普通难度按章节配置；困难/噩梦按难度倍率换算，章节越往后倍率略增（每章 +3.5%）。
- * 用模拟器校准：达到推荐战力时胜率约 65%～75%，只有 70% 战力时约 20%～30%。
- */
-export function recommendedPower(ch: ChapterDef, diff: DifficultyDef): number {
+export function legacyChapterPower(ch: ChapterDef, diff: DifficultyDef): number {
   const k = diff.id > 0 ? 1 + 0.035 * (ch.id - 1) : 1;
   return Math.round((ch.power * diff.power * k) / 100) * 100;
+}
+
+/** 网页征战区分时长，其余平台沿用原有推荐值。 */
+export function recommendedPower(ch: ChapterDef, diff: DifficultyDef, minutes = ch.campaignMinutes ?? 5): number | null {
+  if (IS_WEB && !ch.defense && !ch.endless && !ch.tutorial) return WEB_CAMPAIGN_POWER[minutes][diff.id][ch.id - 1];
+  return legacyChapterPower(ch, diff);
+}
+
+export function powerGuideText(value: number | null): string {
+  if (value === null) return '极限挑战';
+  return value < 10000 ? String(value) : `${+(value / 10000).toFixed(2)}万`;
 }

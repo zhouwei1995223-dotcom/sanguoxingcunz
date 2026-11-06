@@ -5,15 +5,18 @@ import path from 'node:path';
 
 const watch = process.argv.includes('--watch');
 const sim = process.argv.includes('--sim');
+const campaignSim = process.argv.includes('--campaign-sim');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 // 平台 AppID（微信公众平台 → 开发管理 → 开发设置；抖音开发者后台）
 const WX_APPID = 'wx483a0ed3065a3de6';
 const TT_APPID = 'testappid';
 
-if (sim) {
-  await build({ entryPoints: ['tools/sim.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/sim.js', logLevel: 'error' });
-  await build({ entryPoints: ['tools/dps.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/dps.js', logLevel: 'error' });
+if (sim || campaignSim) {
+  await build({ entryPoints: ['tools/sim.ts'], bundle: true, platform: 'node',
+    define: campaignSim ? { 'process.env.TARGET': '"web"' } : {},
+    outfile: campaignSim ? 'dist/sim/campaign.js' : 'dist/sim/sim.js', logLevel: 'error' });
+  if (sim) await build({ entryPoints: ['tools/dps.ts'], bundle: true, platform: 'node', outfile: 'dist/sim/dps.js', logLevel: 'error' });
   process.exit(0);
 }
 

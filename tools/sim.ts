@@ -1,17 +1,23 @@
 // 无界面战斗模拟：自动走位 + 自动选技能，用于检验数值平衡与稳定性
 // 用法：npm run sim -- [章节] [攻击] [生命] [次数]
 import { Battle } from '../src/battle/battle';
-import { CHAPTERS, DIFFICULTIES, ENDLESS } from '../src/data/chapters';
+import { CHAPTERS, DIFFICULTIES, ENDLESS, campaignChapter } from '../src/data/chapters';
 import { resetSpawner } from '../src/battle/spawner';
-import type { HeroStats } from '../src/meta/ops';
+import { combatPower, type HeroStats } from '../src/meta/ops';
 import { weaponLink } from '../src/data/skills';
 import { HERO_BY_ID } from '../src/data/heroes';
+import { IS_WEB } from '../src/data/platformConfig';
+import { campaignProfile } from './campaign-profile';
 
 const args = process.argv.slice(2).map(Number);
-const chId = Number.isNaN(args[0]) ? 1 : args[0];
+const chId = Number.isInteger(args[0]) ? args[0] : 1;
 const atk = args[1] || 20;
 const hp = args[2] || 120;
 const runs = args[3] || 3;
+const target = Number(process.env.TARGET_POWER);
+const chapter = chId === 0 ? ENDLESS : IS_WEB ? campaignChapter(chId, process.env.MINUTES === '10' ? 10 : 5) : CHAPTERS[chId - 1];
+if (target && (!IS_WEB || chId === 0)) throw new Error('TARGET_POWER 用于 --campaign-sim 构建的征战章节');
+const profile = target ? campaignProfile(process.env.HERO || 'zhaoyun', target, Number(process.env.UNLOCK ?? 10)) : null;
 
 // POWER=0.7 表示按章节推荐战力的 70% 换算攻击与生命（按武将攻血比例）
 function powerStats(): { atk: number; hp: number } {
@@ -31,9 +37,13 @@ function stats(): HeroStats {
 // 按分钟汇总（所有局平均）：一击秒杀比例、击杀耗时、每分钟受到伤害（占生命上限的百分比）
 const per: { n: number; one: number; kills: number; age: number; dmg: number; alive: number }[] = [];
 for (let r = 0; r < runs; r++) {
+  if (process.env.SEED !== undefined) {
+    let seed = Number(process.env.SEED) + r;
+    Math.random = () => ((seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296);
+  }
   let mk = 0, mo = 0, md = 0;
   resetSpawner();
-  const b = new Battle(chId === 0 ? ENDLESS : CHAPTERS[chId - 1], stats(), Number(process.env.VW || 308), Number(process.env.VH || 667));
+  const b = new Battle(chapter, profile || stats(), Number(process.env.VW || 308), Number(process.env.VH || 667));
   const D = DIFFICULTIES[Number(process.env.DIFF || 0)];
   b.enemyHpMul *= D.hp; b.enemyDmgMul *= D.dmg;
   if (chId === 0) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
@@ -82,7 +92,7 @@ for (let r = 0; r < runs; r++) {
       }
       lateNear += near; lateScreen += onScreen; lateN++;
     }
-    if (b.rageFull) b.castUlt();
+    if (b.rageFull && !(b.finalBoss && process.env.FINALULT === 'off')) b.castUlt();
     // 金疮药：血量低于 40% 时喝（NOPOTION=1 模拟不会用药的玩家）
     if (!process.env.NOPOTION && b.player.hp < b.player.maxHp * 0.4) b.usePotion();
     maxEnemies = Math.max(maxEnemies, b.enemies.length);
@@ -121,9 +131,10 @@ for (let r = 0; r < runs; r++) {
       mk = b.statKills; mo = b.statOneShots; md = b.statDmgTaken;
     }
     if (Math.floor(b.t) % 60 === 0 && Math.floor(b.t - dt) % 60 !== 0) log.push(`${b.t.toFixed(0)}s fill${b.screenFill.toFixed(2)} dens${Math.round(b.targetDensity)} dir${b.director.toFixed(2)} lv${b.level} hp${Math.round(b.player.hp)}/${b.player.maxHp} kills${b.kills} enemies${b.enemies.filter(e=>!e.dead).length}`);
-    if (b.dead && b.revives > 0) { b.revives--; b.revive(); log.push(`${b.t.toFixed(0)}s 复活`); }
+    if (b.dead && !b.bossTimedOut && b.revives > 0) { b.revives--; b.revive(); log.push(`${b.t.toFixed(0)}s 复活`); }
   }
   console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 破盾/狂暴=${b.statShield.join("/")} 敌将战=${b.statBossSec.toFixed(0)}s 受伤=${Math.round(b.statDmgTaken)} 耗时${Date.now() - t0}ms`);
+  if (profile) console.log('CAL', JSON.stringify({ chapter: chId, diff: D.id, minutes: chapter.duration / 60, hero: b.hero.id, target, power: combatPower(profile), win: b.won, bossSec: b.finalBossSec, timeout: b.bossTimedOut }));
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));
 }

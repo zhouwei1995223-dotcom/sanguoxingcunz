@@ -16,7 +16,7 @@ import {
   CHESTS, ChestDef, SHOP_DAILY, QUALITY_NAMES, QUALITY_COLORS, adStep, CHEST_AD_BONUS,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
-import { settleRun, settleDefense, RunResult, defenseOpen, chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, THREE_STARS, starRating, chapterStars, defenseStars } from '../meta/run';
+import { settleRun, settleDefense, RunResult, defenseOpen, chapterOpen, diffOpen, isCleared, getBest, endlessOpen, ENDLESS_UNLOCK, recommendedPower, legacyChapterPower, powerGuideText, THREE_STARS, starRating, chapterStars, defenseStars } from '../meta/run';
 import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
@@ -658,7 +658,15 @@ export class HomeScene implements Scene {
     const cleared = isCleared(d, ch.id);
     const info = cleared ? `${diff.name}已通关 ${starRating(chapterStars(d, ch.id))}` : best ? `最佳坚守 ${fmtTime(best)}` : '尚未挑战';
     const power = combatPower();
-    const need = recommendedPower(ch, diff);
+    const short = recommendedPower(ch, diff, 5), long = recommendedPower(ch, diff, 10);
+    // 碾压直接获三星，两个可选时长都要达到碾压门槛。
+    const need = short === null || long === null ? null : Math.max(short, long);
+    let powerLabel = '推荐战力 ' + powerGuideText(short);
+    if (short === null && long === null) powerLabel = '极限挑战';
+    else if (short !== null && long !== null && short !== long) {
+      powerLabel = `推荐 ${powerGuideText(Math.min(short, long))}～${powerGuideText(need)}`;
+    } else if (short !== long) powerLabel = `推荐 ${powerGuideText(short ?? long)}起 · 含极限`;
+    else if (!IS_WEB && need !== null) powerLabel = '推荐战力 ' + fmtNum(need);
     // 进度与推荐战力放在同一行
     if (NEW_UI) {
       const barW = cw - 96 * u, barH = 34 * u, barX = cx + 48 * u, barY = oy + 124 * u;
@@ -668,7 +676,7 @@ export class HomeScene implements Scene {
       ctx.strokeRect(barX + 1, barY + 1, barW - 2, barH - 2);
     }
     ui.text(info, ui.W / 2 - 14 * u, oy + 141 * u, 20, cleared ? '#9be37a' : '#e6d3b3', 'right', NEW_UI ? null : undefined);
-    ui.text(`推荐战力 ${fmtNum(need)}`, ui.W / 2 + 14 * u, oy + 141 * u, 20, power >= need ? '#9be37a' : '#ff8a80', 'left', NEW_UI ? null : undefined);
+    ui.text(powerLabel, ui.W / 2 + 14 * u, oy + 141 * u, 20, need !== null && power >= need ? '#9be37a' : '#ff8a80', 'left', NEW_UI ? null : undefined);
     ui.pixRect(ui.W / 2 - 1 * u, oy + 131 * u, 2 * u, 20 * u, '#8c663b');
     if (!unlocked) {
       ui.ctx.fillStyle = 'rgba(20,16,12,0.58)';
@@ -687,7 +695,7 @@ export class HomeScene implements Scene {
     const bw = 400 * u, bh = L.bh;
     const by = L.by;
     // 战力碾压：战力达到推荐的 SWEEP_K 倍，可以不打直接拿胜利奖励（出征按钮让出一半位置）
-    const canSweep = unlocked && power >= need * SWEEP_K;
+    const canSweep = unlocked && power >= (need ?? legacyChapterPower(ch, diff)) * SWEEP_K;
     if (canSweep) {
       if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
       if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: IS_WEB ? '三星通关' : '免挑战' })) {
@@ -811,7 +819,7 @@ export class HomeScene implements Scene {
 
   private chooseCampaign(id: number, diff: number) {
     if (IS_WEB) {
-      game.openDialog(new CampaignDurationDialog(picked => this.startBattle(id, diff, picked)));
+      game.openDialog(new CampaignDurationDialog(id, diff, picked => this.startBattle(id, diff, picked)));
     } else this.startBattle(id, diff);
   }
 

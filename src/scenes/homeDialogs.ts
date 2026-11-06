@@ -16,7 +16,7 @@ import {
   PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES, adStep,
 } from '../data/meta';
 import { CHAPTERS, DIFFICULTIES, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
-import { isCleared, getBest, chapterOpen, chapterStars, defenseOpen, defenseStars, starRating, STAR_BOSS_SEC } from '../meta/run';
+import { isCleared, getBest, chapterOpen, chapterStars, defenseOpen, defenseStars, starRating, STAR_BOSS_SEC, recommendedPower, powerGuideText } from '../meta/run';
 import type { RunResult } from '../meta/run';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
@@ -728,19 +728,22 @@ export class PreparationDialog implements Dialog {
 
 export class CampaignDurationDialog implements Dialog {
   t?: number;
-  constructor(private start: (minutes: 5 | 10) => void) {}
+  constructor(private chapter: number, private difficulty: number, private start: (minutes: 5 | 10) => void) {}
   draw(ui: UI) {
     const u = ui.u, w = ui.W - 80 * u;
-    const f = dialogFrame(ui, w, 550 * u, '选择征战时长', this.t, 'duration_close');
+    const f = dialogFrame(ui, w, 605 * u, '选择征战时长', this.t, 'duration_close');
     if (f.close) return false;
     ui.text(`主将登场后限时${FINAL_BOSS_LIMIT_SEC}秒，超时战败`, ui.W / 2, f.y + 116 * u, 24, C.textDim);
     for (const [i, minutes] of ([5, 10] as const).entries()) {
       const short = minutes === 5;
-      if (ui.button('duration_' + minutes, f.x + 50 * u, f.y + (172 + i * 162) * u, w - 100 * u, 136 * u,
-        minutes + ' 分钟', short ? C.btnBlue : C.btnRed, { size: 38, sub: short ? '最高二星 · 不复活通关' : `最高三星 · 不复活且${STAR_BOSS_SEC}秒内击败主将` })) {
+      const need = recommendedPower(CHAPTERS[this.chapter - 1], DIFFICULTIES[this.difficulty], minutes);
+      const y = f.y + (162 + i * 206) * u;
+      if (ui.button('duration_' + minutes, f.x + 50 * u, y, w - 100 * u, 124 * u,
+        minutes + ' 分钟', short ? C.btnBlue : C.btnRed, { size: 38, sub: need === null ? '极限挑战' : '推荐战力 ' + powerGuideText(need) })) {
         this.start(minutes);
         return false;
       }
+      ui.text(short ? '最高二星 · 不复活通关' : `最高三星 · 不复活且${STAR_BOSS_SEC}秒内击败主将`, ui.W / 2, y + 151 * u, 21, C.textDim);
     }
   }
 }

@@ -6,7 +6,7 @@ import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
 import { THEMES } from '../gfx/art/env';
-import { endlessHpMul, endlessDmgMul, recommendedPower } from '../meta/run';
+import { endlessHpMul, endlessDmgMul, legacyChapterPower } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../meta/goals';
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
@@ -126,7 +126,7 @@ export class BattleScene implements Scene {
     infoHero = this.battle.hero.id;
     infoBattle = this.battle;
     // 敌将血量跟玩家战力挂钩：战力 ÷ 推荐战力
-    if (!this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense) this.battle.powerRatio = combatPower(stats) / Math.max(1, recommendedPower(this.chapter, this.diff));
+    if (!IS_WEB && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense) this.battle.powerRatio = combatPower(stats) / Math.max(1, legacyChapterPower(this.chapter, this.diff));
     if (this.weekly) {
       this.battle.mods = this.weekly;
       if (this.weekly.enemyHp) this.battle.enemyHpMul *= this.weekly.enemyHp;

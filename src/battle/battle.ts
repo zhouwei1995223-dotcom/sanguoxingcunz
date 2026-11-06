@@ -176,10 +176,12 @@ export class Battle {
   /** 平衡统计：护盾 [打破次数, 狂暴次数]；敌将战总秒数 */
   statShield = [0, 0];
   statBossSec = 0;
-  /** 玩家战力 ÷ 推荐战力（场景里算好传进来，敌将血量用） */
+  /** 旧版征战的敌将血量系数输入；网页版征战按关卡定血量。 */
   powerRatio = 1;
   /** 当前这场敌将战打了多久（spawner 用：前 50 秒不刷小怪） */
   bossFightT = 0;
+  private kiteSeconds = 0;
+  private nextInterceptAt = 0;
   reinforced = false;
   finalBoss: Enemy | null = null;
   midBoss: Enemy | null = null;
@@ -658,6 +660,7 @@ export class Battle {
       if (Math.abs(mx) > 0.1) p.left = mx < 0;
       p.anim += dt * 10;
     } else p.anim = 0;
+    if (this.fixedCampaign) this.updateIntercept(dt, mx * spd, my * spd);
     p.iframe = Math.max(0, p.iframe - dt);
     if (this.mirrorT > 0) this.mirrorT -= dt;
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
@@ -787,6 +790,32 @@ export class Battle {
   /** 身边敌人 / 目标数量（平滑） */
   screenFill = 0.1;
 
+  private get fixedCampaign() { return IS_WEB && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense; }
+
+  private get bossPowerHpFactor() {
+    const ch = this.chapter;
+    if (IS_WEB || ch.tutorial || ch.endless || ch.defense) return 1;
+    return Math.pow(Math.max(1, this.powerRatio), ch.id === 1 ? 0.4 : BOSS_POWER_EXP);
+  }
+
+  private updateIntercept(dt: number, vx: number, vy: number) {
+    const boss = this.finalBoss;
+    if (!boss) return;
+    const p = this.player;
+    if (!p.moving || this.ult || Math.hypot(boss.x - p.x, boss.y - p.y) < 100) {
+      this.kiteSeconds = 0;
+      return;
+    }
+    this.kiteSeconds += dt;
+    if (this.kiteSeconds < 5 || this.t < this.nextInterceptAt) return;
+    this.kiteSeconds = 0;
+    this.nextInterceptAt = this.t + 10;
+    // 锁定玩家一秒后的预计位置，落点在预警期间固定，转向即可躲开。
+    this.warnings.push({ kind: 'circle', x: p.x + vx, y: p.y + vy, r: 34, a: 0, len: 0,
+      t: 0, dur: 1, dmg: boss.dmg * 1.8, hitFx: 'explo' });
+    this.hooks.banner('敌将截击，变向躲避！', '#ff8a80');
+  }
+
   private updateDirector(dt: number) {
     this.directorT -= dt;
     if (this.directorT > 0) return;
@@ -802,6 +831,7 @@ export class Battle {
     this.expRate += (this.expRaw - this.expRate) * 0.1;
     this.expRaw = 0;
     this.dominantT = this.screenFill < 0.08 && this.recentDmg < this.player.maxHp * 0.04 ? this.dominantT + 1 : 0;
+    if (this.fixedCampaign) return;
     if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(1.35, this.director + 0.02);
     else if (this.screenFill > 0.06) this.director = Math.max(1, this.director - 0.02);
   }
@@ -843,10 +873,8 @@ export class Battle {
       const bossId = ch.endless ? 'xiahouen' : (this.midBossDown ? ch.boss : (ch.midBoss || ch.boss));
       const bDef = bossId ? BOSSES[bossId] : undefined;
       if (bDef) {
-        const normal = !ch.tutorial && !ch.endless && !ch.defense;
-        const over = normal ? Math.pow(Math.max(1, this.powerRatio), ch.id > 1 ? BOSS_POWER_EXP : 0.4) : 1;
         const bScale = ch.endless ? ch.hpMul * grow * (0.75 + minute * 0.08) : 1;
-        const bossHp = Math.round(bDef.hp * this.enemyHpMul * bScale * this.stratHpMul * (ch.tutorial ? 1 : BOSS_HP) * over);
+        const bossHp = Math.round(bDef.hp * this.enemyHpMul * bScale * this.stratHpMul * (ch.tutorial ? 1 : BOSS_HP) * this.bossPowerHpFactor);
         const capRatio = ch.endless ? 0.32 : (this.midBossDown ? 0.22 : 0.30);
         e.maxHp = e.hp = Math.min(e.maxHp, Math.max(80, Math.round(bossHp * capRatio)));
       }
@@ -878,9 +906,7 @@ export class Battle {
     const ch = this.chapter;
     const strong = ch.tutorial ? 1 : BOSS_HP;
     const normal = !ch.tutorial && !ch.endless && !ch.defense;
-    // 第 1 章也按战力加血，但幅度小一些（新手友好）
-    const over = normal ? Math.pow(Math.max(1, this.powerRatio), ch.id > 1 ? BOSS_POWER_EXP : 0.4) : 1;
-    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong * over);
+    e.maxHp = e.hp = Math.round(d.hp * this.enemyHpMul * hpScale * this.stratHpMul * strong * this.bossPowerHpFactor);
     e.born = this.t;
     if (normal) e.minTime = ch.id === 1 ? (isFinal ? BOSS_MIN_TIME.ch1Final : BOSS_MIN_TIME.ch1Mid) : isFinal ? BOSS_MIN_TIME.final : BOSS_MIN_TIME.mid;
     e.speed = d.speed;
