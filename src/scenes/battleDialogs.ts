@@ -27,7 +27,7 @@ import { ORDERS, ORDER_IDS, LINKS, BUILD_KINDS, BUILDS } from '../data/defense';
 import { buildLevel } from '../battle/defense';
 
 /** 每局可看广告刷新技能的次数 */
-const LEVELUP_AD_LIMIT = 5;
+const LEVELUP_AD_LIMIT = IS_WEB ? Infinity : 5;
 /** 每局最多看广告复活几次 */
 const AD_REVIVE_MAX = 3;
 
@@ -264,7 +264,6 @@ export class LevelUpDialog implements Dialog {
   private banishTip = false;
   private offerPreparedRefresh: boolean;
   private adBusy = false;
-  private usedPreparedAd = false;
   closed = false;
   constructor(private scene: BattleScene, private choices: Choice[]) {
     this.offerPreparedRefresh = scene.hasPreparation && scene.autoPick && !scene.skipPreparedPrompts
@@ -282,13 +281,13 @@ export class LevelUpDialog implements Dialog {
     this.t = 0.2;
     if (this.scene.hasPreparation && this.scene.autoPick) {
       this.closed = this.scene.autoChooseUpgrade(this.choices);
-      if (!this.closed) game.ui.toast('刷新后仍无备战技能，请手选');
+      if (!this.closed) game.ui.toast('未刷到备战技能，可继续刷新或手选');
     }
   }
 
   private async watchRefreshAd() {
     const b = this.scene.battle;
-    if (this.adBusy || this.closed || this.usedPreparedAd || b.adRerolls >= LEVELUP_AD_LIMIT) return;
+    if (this.adBusy || this.closed || b.adRerolls >= LEVELUP_AD_LIMIT) return;
     this.adBusy = true;
     try {
       const ok = await getPlatform().showRewardedAd('levelup_reroll');
@@ -299,7 +298,6 @@ export class LevelUpDialog implements Dialog {
       }
       b.adRerolls++;
       progressTask('ad', 1);
-      this.usedPreparedAd = this.scene.hasPreparation && this.scene.autoPick;
       this.reroll();
     } catch {
       game.ui.toast('广告暂时无法播放，保留原选项');
@@ -317,7 +315,7 @@ export class LevelUpDialog implements Dialog {
       this.reroll();
       return;
     }
-    if (adButton(ui, 'prep_ad', hasFree ? right : (ui.W - w) / 2, y, w, h, '看广告刷新一次', { size: 26 })) {
+    if (adButton(ui, 'prep_ad', hasFree ? right : (ui.W - w) / 2, y, w, h, '刷新', { size: 26, sub: '不限次数' })) {
       void this.watchRefreshAd();
       return;
     }
@@ -351,7 +349,7 @@ export class LevelUpDialog implements Dialog {
     }
     const titleY = IS_WEB ? Math.max(ui.safeTop + 45 * u, Math.min(ui.H * 0.18, (ui.H - ch - 590 * u) / 2)) : ui.H * 0.2;
     ui.ribbon(ui.W / 2, titleY, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
-    const instruction = this.offerPreparedRefresh ? '本次没有备战技能，要看广告刷新一次吗？'
+    const instruction = this.offerPreparedRefresh ? '本次没有备战技能，要刷新选项吗？'
       : this.banishMode && IS_WEB ? '选择要封禁的新技能' : '选择一项强化';
     ui.text(instruction, ui.W / 2, titleY + 64 * u, 26, C.textDim);
     const cardTop = titleY + 110 * u;
@@ -405,7 +403,7 @@ export class LevelUpDialog implements Dialog {
       }
     } else {
       const left = LEVELUP_AD_LIMIT - b.adRerolls;
-      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0 || this.usedPreparedAd, sub: this.usedPreparedAd ? '本次已刷新' : `本局剩余${Math.max(0, left)}次` })) {
+      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: IS_WEB ? '不限次数' : `本局剩余${Math.max(0, left)}次` })) {
         void this.watchRefreshAd();
         return;
       }
