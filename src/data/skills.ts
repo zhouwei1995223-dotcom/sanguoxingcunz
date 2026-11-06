@@ -504,6 +504,7 @@ export const SKILLS_BY_ID = { ...WEAPONS, ...PASSIVES };
 export function expToNext(level: number): number {
   const base = level < 20 ? 5 + (level - 1) * 10 : level < 40 ? 195 + (level - 20) * 13 : 455 + (level - 40) * 16;
   // 1.0.6：每级所需经验再乘 1 + 4%×(级-1)（16 级起封顶 ×1.6）：开局几级照样快，中后期升级间隔拉长
-  // 章节一局从 40~46 级降到 33~37 级；嫌选得勤可以打开「自动选择」
-  return Math.round(base * Math.min(1.6, 1 + 0.04 * (level - 1))) * (IS_WEB ? 2 : 1);
+  const originalNeed = Math.round(base * Math.min(1.6, 1 + 0.04 * (level - 1)));
+  // 网页版每份经验推进原版的 80%，对应升级门槛为原来的 1.25 倍。
+  return IS_WEB ? originalNeed * 1.25 : originalNeed;
 }
