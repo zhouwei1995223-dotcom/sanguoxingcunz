@@ -7,7 +7,10 @@ export default async function ({ page }) {
     await page.evaluate(() => window.__game.closeAll());
   }
   async function click(id) {
-    await page.waitForFunction(id => window.__game.ui.prevRegions.some(r => r.id === id), id);
+    await page.waitForFunction(id => {
+      const ui = window.__game.ui, r = ui.prevRegions.find(r => r.id === id);
+      return r && ui.hit(r.x + r.w / 2, r.y + r.h / 2)?.id === id;
+    }, id);
     const [x, y] = await page.evaluate(id => {
       const ui = window.__game.ui, r = ui.prevRegions.find(r => r.id === id);
       const c = document.querySelector('canvas').getBoundingClientRect();
