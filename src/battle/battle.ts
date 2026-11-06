@@ -260,7 +260,6 @@ export class Battle {
   // 局内派生属性
   dmgMul = 1;
   cdMul = 1;
-  heroEvoCdMul = 1;
   areaMul = 1;
   durMul = 1;
   hero: HeroDef;
@@ -327,18 +326,18 @@ export class Battle {
     return this.weapons.find((w) => w.id === id);
   }
 
-  /** 两套冷却规则共用装备、武将和计策，按各版本的兵书系数与缩减上限分别结算。 */
-  private cooldownMultiplier(wechatEvolution: boolean): number {
+  /** 网页测试版所有武器沿用微信 1.0.6 的兵书系数、叠加顺序及冷却下限。 */
+  private cooldownMultiplier(): number {
     const gear = 1 - this.base.cd / 100;
-    const book = 1 - this.passiveLv('book') * (wechatEvolution ? 0.06 : 0.045);
-    let factor = Math.max(wechatEvolution ? 0.35 : 0.58, gear * book);
+    const book = 1 - this.passiveLv('book') * (IS_WEB ? 0.06 : 0.045);
+    let factor = Math.max(IS_WEB ? 0.35 : 0.58, gear * book);
     if (this.hero.id === 'zhuge') factor *= 0.9;
     if (this.hero.id === 'sunshangxiang') factor *= 0.92;
     if (this.frenzy) factor *= 0.5;
     if (this.hasStrat('shensu')) factor *= 0.92;
     if (this.hasStrat('wolong')) factor *= 0.85;
-    factor = Math.max(wechatEvolution ? 0.30 : 0.58, factor);
-    if (this.qiyu === 'dunjia') factor = Math.max(wechatEvolution ? 0.30 : 0.55, factor * 0.9);
+    factor = Math.max(IS_WEB ? 0.30 : 0.58, factor);
+    if (this.qiyu === 'dunjia') factor = Math.max(IS_WEB ? 0.30 : 0.55, factor * 0.9);
     return factor;
   }
 
@@ -347,8 +346,7 @@ export class Battle {
     const b = this.base;
     const auraEvo = this.weapon('aura')?.evo;
     this.dmgMul = 1 + b.dmg / 100 + 0.1 * P('tiger');
-    this.cdMul = this.cooldownMultiplier(false);
-    this.heroEvoCdMul = IS_WEB ? this.cooldownMultiplier(true) : this.cdMul;
+    this.cdMul = this.cooldownMultiplier();
     this.areaMul = 1 + b.area / 100 + 0.06 * P('flag');
     this.durMul = 1 + 0.12 * P('pouch');
     const hid = this.hero.id;
