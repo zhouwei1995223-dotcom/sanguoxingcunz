@@ -1,6 +1,6 @@
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
-import { ChapterDef } from '../data/chapters';
+import { ChapterDef, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
 import { IS_WEB } from '../data/platformConfig';
 import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
@@ -204,6 +204,11 @@ export class Battle {
   reviveCount = 0;
   /** 最终敌将从登场到被击败用了多少秒（-1 表示没打下来） */
   finalBossSec = -1;
+  bossTimedOut = false;
+  get finalBossTimeLeft(): number | null {
+    if (!IS_WEB || !this.chapter.campaignMinutes || !this.finalBoss) return null;
+    return Math.max(0, this.finalBoss.born + FINAL_BOSS_LIMIT_SEC - this.t);
+  }
   /** 1.0.4：看广告复活第 2 / 3 次给的本局加成 */
   reviveDmg = 0;
   reviveSpd = 0;
@@ -616,8 +621,10 @@ export class Battle {
     if (this.dead || this.won) return;
     const p = this.player;
     let dt = rawDt;
+    const bossTimeLeft = this.finalBossTimeLeft;
     // 大招期间：赵云正常速度冲杀，其余一切慢动作
     if (this.ult) dt = rawDt * this.updateUlt(rawDt);
+    if (bossTimeLeft !== null) dt = Math.min(dt, bossTimeLeft);
     this.t += dt;
     // 每周挑战 / 新手试炼：坚持到时间即胜利
     if ((this.chapter.endless || (!IS_WEB && this.chapter.tutorial)) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
@@ -674,6 +681,13 @@ export class Battle {
     this.updateBreakables(dt);
     this.updateJiedao();
     this.updateFx(dt, rawDt);
+
+    // 最后一帧仍可命中；到期后主将还在场，直接结束战斗。
+    if (bossTimeLeft !== null && dt >= bossTimeLeft && this.finalBoss) {
+      this.bossTimedOut = true;
+      this.dead = true;
+      return;
+    }
 
     // 清理
     if (this.enemies.length > 0 && this.t % 1 < dt) this.enemies = this.enemies.filter((e) => !e.dead);
@@ -2280,6 +2294,7 @@ export class Battle {
   }
 
   revive(adRevive = 0) {
+    if (this.bossTimedOut) return;
     const p = this.player;
     this.dead = false;
     this.reviveCount++;

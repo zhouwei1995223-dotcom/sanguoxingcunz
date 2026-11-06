@@ -9,6 +9,7 @@ import { Battle } from '../battle/battle';
 import type { Choice } from '../battle/battle';
 import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
 import type { BossDef } from '../data/enemies';
+import { FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
 import { save, markDirty, flushSave } from '../meta/save';
 import { settleRun, settleEndless, settleDefense, settleWeeklyRun, settleTutorial, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
 import { settleWeekly } from '../meta/goals';
@@ -857,6 +858,7 @@ export class ResultDialog implements Dialog {
     else if (this.res.defense) ui.text(this.win ? (this.res.firstClear ? `首次守住${b.chapter.name}！${b.chapter.id < 10 ? '下一关已解锁' : ''}` : this.res.defense.dailyFirst ? '城池守住了！今日首胜碎片翻倍' : '城池守住了！') : `城池失守 · 守到第 ${this.res.defense.waves} 波${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 30, this.win ? C.gold : '#fff4d6');
     else if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
     else if (this.res.endless) ui.text(this.res.newBest ? `新纪录！坚持 ${fmtTime(b.t)}` : `最佳纪录 ${fmtTime(this.res.best || 0)}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
+    else if (b.bossTimedOut) ui.text(`斩将超时 · ${FINAL_BOSS_LIMIT_SEC}秒内未击败主将`, ui.W / 2, y, 30, '#ff8a80');
     else ui.text(b.t >= b.chapter.duration * 0.5 ? '虽败犹荣' : '胜败乃兵家常事', ui.W / 2, y, 30, '#fff4d6');
     y += 60 * u;
     ui.text(this.scene.label, ui.W / 2, y, 26, this.scene.diff.id ? this.scene.diff.color : C.textDim);

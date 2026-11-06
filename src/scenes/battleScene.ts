@@ -275,7 +275,9 @@ export class BattleScene implements Scene {
     if (!game.dialogs.length) {
       if (b.won) {
         this.wonT += dt;
-        if (this.wonT > 2.2 && !this.resultShown) { this.resultShown = true; this.finish(true); }
+        if (this.wonT > 2.2) this.finish(true);
+      } else if (b.bossTimedOut) {
+        this.finish(false);
       } else if (b.dead) {
         if (!this.reviveShown) {
           this.reviveShown = true;
@@ -448,6 +450,8 @@ export class BattleScene implements Scene {
   }
 
   finish(win: boolean) {
+    if (this.resultShown) return;
+    this.resultShown = true;
     const b = this.battle;
     playBgm(null);
     playSfx(win ? 'victory' : 'defeat');
@@ -501,7 +505,10 @@ export class BattleScene implements Scene {
       ui.text(`城池 ${fmtNum(Math.ceil(d.cityHp))}/${fmtNum(d.cityMax)}`, ui.W / 2, cy0 + 14 * u, 18, '#fff');
     } else {
       const remain = b.finalBoss ? 0 : this.chapter.duration - b.t;
-      ui.text(b.finalBoss ? '击败敌将' : fmtTime(Math.max(0, remain)), ui.W / 2, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
+      const bossTimeLeft = b.finalBossTimeLeft;
+      const timer = bossTimeLeft !== null ? '斩将 ' + fmtTime(Math.ceil(bossTimeLeft))
+        : b.finalBoss ? '击败敌将' : fmtTime(Math.max(0, remain));
+      ui.text(timer, ui.W / 2, top + 70 * u, 40, b.finalBoss ? C.red : '#fff');
       ui.text(this.label, ui.W / 2, top + 108 * u, 20, this.diff.id ? this.diff.color : C.textDim);
     }
     // 击杀与金币

@@ -383,7 +383,7 @@ for (const d of Object.values(WEAPONS)) {
 export const AREA_SCALE = 0.65;
 export const CD_SCALE = 1.35;
 // 上面已还原微信 1.0.6 的进化系数及其取整。网页版在此基础上只乘一次伤害倍率。
-const WEB_WEAPON_DAMAGE = 0.8;
+const WEB_WEAPON_DAMAGE = 0.9;
 for (const [wid, d] of Object.entries(WEAPONS)) {
   for (const lv of d.levels) {
     lv.area = Math.min(56, Math.max(12, Math.round(lv.area * AREA_SCALE)));

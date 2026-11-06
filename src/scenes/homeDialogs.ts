@@ -15,7 +15,7 @@ import {
   SIGNIN, DAILY_TASKS, ACTIVITY_REWARDS, PATROL, EQUIP_BY_ID, QUALITY_NAMES, QUALITY_COLORS, QUALITY_MAX_LV, STAT_NAMES,
   PERCENT_STATS, StatBlock, equipUpgradeCost, STAMINA, SIDEBAR_REWARD, Reward, SLOT_NAMES, adStep,
 } from '../data/meta';
-import { CHAPTERS, DIFFICULTIES } from '../data/chapters';
+import { CHAPTERS, DIFFICULTIES, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
 import { isCleared, getBest, chapterOpen, chapterStars, defenseOpen, defenseStars, starRating, STAR_BOSS_SEC } from '../meta/run';
 import type { RunResult } from '../meta/run';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
@@ -733,7 +733,7 @@ export class CampaignDurationDialog implements Dialog {
     const u = ui.u, w = ui.W - 80 * u;
     const f = dialogFrame(ui, w, 550 * u, '选择征战时长', this.t, 'duration_close');
     if (f.close) return false;
-    ui.text('倒计时结束时主将登场，击败主将才能通关', ui.W / 2, f.y + 116 * u, 24, C.textDim);
+    ui.text(`主将登场后限时${FINAL_BOSS_LIMIT_SEC}秒，超时战败`, ui.W / 2, f.y + 116 * u, 24, C.textDim);
     for (const [i, minutes] of ([5, 10] as const).entries()) {
       const short = minutes === 5;
       if (ui.button('duration_' + minutes, f.x + 50 * u, f.y + (172 + i * 162) * u, w - 100 * u, 136 * u,

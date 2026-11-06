@@ -1,4 +1,5 @@
 // 章节与刷怪时间轴
+export const FINAL_BOSS_LIMIT_SEC = 90;
 
 export interface WaveSeg {
   from: number; // 秒
