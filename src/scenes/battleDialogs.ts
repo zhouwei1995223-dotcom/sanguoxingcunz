@@ -468,7 +468,11 @@ export class QiyuDialog implements Dialog {
       this.t = 0.15;
       playSfx('click');
     }
-    if (this.firstTime) guideHint(ui, '每局开始选一个奇遇，效果持续整局', y + bh + 60 * u);
+    const unavailable = this.scene.unavailablePreparedNames;
+    if (unavailable.length) {
+      ui.wrapText('备战中本局不会出现：' + unavailable.join('、'), ui.W / 2, y + bh + 26 * u,
+        ui.W - 90 * u, 25, '#ffd49b', 1.35, 'center', '#241911');
+    } else if (this.firstTime) guideHint(ui, '每局开始选一个奇遇，效果持续整局', y + bh + 60 * u);
   }
   private card(ui: UI, id: string, qid: QiyuId, x: number, y: number, w: number, h: number): boolean {
     const u = ui.u;

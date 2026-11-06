@@ -1,5 +1,6 @@
 // 局内技能：武器（主动）与兵法（被动）。所有数值都在这里调整。
 import { IS_WEB } from './platformConfig';
+import type { HeroDef } from './heroes';
 
 export type WeaponId =
   | 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd'
@@ -416,6 +417,13 @@ export function heroLinks(hero: string): { weapon: WeaponId; link: WeaponLink }[
 /** 武将可用的武器：通用武器 + 自己的专属武器 */
 export function weaponsForHero(hero: string, cleared = 99): WeaponId[] {
   return (Object.keys(WEAPONS) as WeaponId[]).filter((id) => (!WEAPONS[id].hero || WEAPONS[id].hero === hero) && (WEAPONS[id].unlockCh || 0) <= cleared);
+}
+
+/** 守城只出当前武将的主武器及已解锁的专属联动武器。 */
+export function defenseWeaponsForHero(hero: Pick<HeroDef, 'id' | 'weapon'>, cleared: number): WeaponId[] {
+  const can = new Set(weaponsForHero(hero.id, cleared));
+  return [hero.weapon, ...heroLinks(hero.id).map(link => link.weapon)]
+    .filter((id, i, ids) => ids.indexOf(id) === i && (id === hero.weapon || can.has(id)));
 }
 
 export function passivesFor(cleared = 99): PassiveId[] {

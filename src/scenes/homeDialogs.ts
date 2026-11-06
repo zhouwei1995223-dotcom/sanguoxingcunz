@@ -24,7 +24,7 @@ import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_WEB } from '../data/plat
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
-import { weaponsForHero, passivesFor, WEAPONS, PASSIVES } from '../data/skills';
+import { weaponsForHero, passivesFor, defenseWeaponsForHero, SkillId, WEAPONS, PASSIVES } from '../data/skills';
 import { setOf, redeem } from '../meta/goals';
 import { getEquipped } from '../meta/ops';
 import { SLOTS } from '../data/meta';
@@ -580,7 +580,8 @@ export class PreparationDialog implements Dialog {
   private readonly hero = save.hero;
   private selected = preparedSkillsFor(this.hero);
   private tab: 'weapons' | 'passives' = 'weapons';
-  private readonly weapons = weaponsForHero(this.hero, save.maxCleared).map(id => WEAPONS[id]);
+  private readonly weapons = weaponsForHero(this.hero).map(id => WEAPONS[id]);
+  private readonly defenseWeapons = new Set<SkillId>(defenseWeaponsForHero(HERO_BY_ID[this.hero], save.maxCleared));
   private readonly passives = passivesFor(save.maxCleared).map(id => PASSIVES[id]);
 
   draw(ui: UI) {
@@ -593,16 +594,17 @@ export class PreparationDialog implements Dialog {
     const tabW = (innerW - 12 * u) / 2;
     for (const [i, tab] of (['weapons', 'passives'] as const).entries()) {
       const count = this[tab].filter(skill => this.selected.includes(skill.id)).length;
-      const title = (tab === 'weapons' ? '武器' : '兵法') + (count ? ` · ${count}` : '');
+      const title = (tab === 'weapons' ? '武器' : '兵法') + `  ${count}/${this[tab].length}`;
       if (ui.button('prep_' + tab, x + i * (tabW + 12 * u), f.y + 116 * u, tabW, 74 * u, title, this.tab === tab ? C.btnRed : C.btnGray, { size: 28 })) {
         this.tab = tab;
         ui.resetScroll('prep_list');
       }
     }
     const listY = f.y + 214 * u, footerY = f.y + h - 132 * u;
-    const listH = footerY - listY - 50 * u, rowH = 140 * u;
+    const listH = footerY - listY - 50 * u, rowH = 172 * u;
     const skills = this[this.tab];
-    const dy = ui.beginScroll('prep_list', x, listY, innerW, listH, Math.ceil(skills.length / 2) * rowH);
+    const listContentH = Math.ceil(skills.length / 2) * rowH;
+    const dy = ui.beginScroll('prep_list', x, listY, innerW, listH, listContentH);
     skills.forEach((skill, i) => {
       const cx = x + (i % 2) * (tabW + 12 * u);
       const cy = listY + Math.floor(i / 2) * rowH + dy;
@@ -621,12 +623,24 @@ export class PreparationDialog implements Dialog {
         ui.text(String(rank + 1), cx + tabW - 28 * u, cy + 25 * u, 20, '#fbf4e4', 'center', null);
       }
       ui.wrapText('intro' in skill ? skill.intro : skill.desc, cx + 14 * u, cy + 67 * u, tabW - 28 * u, 21, C.textDim, 1.2);
+      const locked = (skill.unlockCh ?? 0) > save.maxCleared;
+      const restriction = locked ? `通关普通第${skill.unlockCh}章解锁`
+        : save.homeMode === 'defense' && !this.defenseWeapons.has(skill.id) ? '守城模式不出现' : '';
+      if (restriction) ui.text(restriction, cx + 14 * u, cy + rowH - 31 * u, 20, '#993c22', 'left', null);
       if (ui.clicked('prep_skill_' + skill.id, cx, cy, tabW, rowH - 10 * u)) {
-        if (rank < 0) this.selected.push(skill.id);
-        else this.selected.splice(rank, 1);
+        if (rank < 0) {
+          this.selected.push(skill.id);
+          if (restriction) ui.toast(`本局抽不到${skill.name}，${restriction}`);
+        } else this.selected.splice(rank, 1);
       }
     });
     ui.endScroll();
+    if (listContentH > listH) {
+      const thumbH = listH * listH / listContentH;
+      const thumbY = Math.max(0, Math.min(listH - thumbH, -dy * listH / listContentH));
+      ui.ctx.fillStyle = '#917b61';
+      ui.ctx.fillRect(x + innerW + 5 * u, listY + thumbY, 4 * u, thumbH);
+    }
     ui.text(`已选 ${this.selected.length} 项 · ${save.homeMode === 'defense' ? '守城仅匹配可用武器' : '未命中时可手选或刷新'}`, ui.W / 2, footerY - 23 * u, 22, C.textDim, 'center', null);
     const clearW = 170 * u;
     if (ui.button('prep_clear', x, footerY + 12 * u, clearW, 88 * u, '清空', C.btnGray, { disabled: !this.selected.length })) this.selected = [];

@@ -115,7 +115,8 @@ export interface SaveData {
   lastLogin: number;
 }
 
-const KEY = 'sgxc_save_v1';
+const STANDARD_KEY = 'sgxc_save_v1';
+const KEY = DEBUG.webPlaytest ? 'sgxc_web_playtest_v1' : STANDARD_KEY;
 const VERSION = 1;
 
 function freshDaily(): DailyState {
@@ -197,12 +198,14 @@ let dirty = false;
 export function preparedSkillsFor(hero: string): SkillId[] {
   const stored = save.preparedSkills?.[hero];
   if (!Array.isArray(stored)) return [];
-  const available = new Set<SkillId>([...weaponsForHero(hero, save.maxCleared), ...passivesFor(save.maxCleared)]);
+  const available = new Set<SkillId>([...weaponsForHero(hero), ...passivesFor(save.maxCleared)]);
   return [...new Set(stored.filter(id => available.has(id)))];
 }
 
 export function loadSave() {
-  const raw = getPlatform().getItem(KEY);
+  const platform = getPlatform();
+  // 第一次进入测试档时沿用原有进度和备战方案，之后分别保存。
+  const raw = platform.getItem(KEY) ?? (DEBUG.webPlaytest ? platform.getItem(STANDARD_KEY) : null);
   if (raw) {
     try {
       const data = JSON.parse(raw);
@@ -236,12 +239,34 @@ export function loadSave() {
     }
   }
   if (DEBUG.reset) save = freshSave();
-  if (DEBUG.rich) { save.gold = Math.max(save.gold, 999999); save.yuanbao = Math.max(save.yuanbao, 99999); save.iron = Math.max(save.iron, 9999); save.stamina = Math.max(save.stamina, 99); }
+  applyTestResources();
   if (DEBUG.chapter) save.maxCleared = Math.max(save.maxCleared, DEBUG.chapter - 1);
   if (DEBUG.skipGuide) { save.guide = 99; save.agreedPrivacy = true; }
-  if (DEBUG.allHeroes) for (const id in save.heroes) if (!save.heroes[id].owned) { save.heroes[id].owned = true; save.heroes[id].star = 1; }
   rolloverDaily();
   tickStamina();
+}
+
+function applyTestResources() {
+  if (DEBUG.webPlaytest) {
+    // 货币没有库存上限。测试档只在读档时补给，购买、养成和结算仍走正常逻辑。
+    const balance = 100_000_000;
+    save.gold = Math.max(save.gold, balance);
+    save.yuanbao = Math.max(save.yuanbao, balance);
+    save.iron = Math.max(save.iron, balance);
+    save.stamina = Math.max(save.stamina, STAMINA.max);
+  } else if (DEBUG.rich) {
+    save.gold = Math.max(save.gold, 999999);
+    save.yuanbao = Math.max(save.yuanbao, 99999);
+    save.iron = Math.max(save.iron, 9999);
+    save.stamina = Math.max(save.stamina, 99);
+  }
+  if (DEBUG.webPlaytest || DEBUG.allHeroes) {
+    for (const hero of Object.values(save.heroes)) {
+      hero.owned = true;
+      hero.star = Math.max(hero.star || 0, 1);
+      if (DEBUG.webPlaytest) hero.shards = Math.max(hero.shards || 0, 9999);
+    }
+  }
 }
 
 export function markDirty() {
@@ -309,5 +334,6 @@ export function staminaNextSeconds(): number {
 
 export function resetSave() {
   save = freshSave();
+  if (DEBUG.webPlaytest) applyTestResources();
   flushSave(true);
 }

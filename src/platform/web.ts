@@ -27,6 +27,7 @@ class WebSound implements SoundHandle {
 }
 
 export function createWebPlatform(): Platform {
+  const cloudKey = DEBUG.webPlaytest ? 'sgxc_web_playtest_cloud' : 'sgxc_cloud';
   const canvas = document.createElement('canvas');
   document.body.style.margin = '0';
   document.body.style.background = '#000';
@@ -177,10 +178,10 @@ export function createWebPlatform(): Platform {
     // 浏览器：?cloud=1 时用另一个本地键模拟云存档，方便测试同步逻辑
     cloudReady() { return /cloud=1/.test(location.search); },
     cloudLoad() {
-      try { const v = localStorage.getItem('sgxc_cloud'); return Promise.resolve(v ? JSON.parse(v) : null); } catch (e) { return Promise.resolve(null); }
+      try { const v = localStorage.getItem(cloudKey); return Promise.resolve(v ? JSON.parse(v) : null); } catch (e) { return Promise.resolve(null); }
     },
     cloudSave(data, updatedAt) {
-      try { localStorage.setItem('sgxc_cloud', JSON.stringify({ data, updatedAt })); } catch (e) {}
+      try { localStorage.setItem(cloudKey, JSON.stringify({ data, updatedAt })); } catch (e) {}
       return Promise.resolve(true);
     },
     report(event, data) {

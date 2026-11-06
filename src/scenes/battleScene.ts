@@ -11,7 +11,7 @@ import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../me
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
 import type { SkillId, WeaponId } from '../data/skills';
-import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../data/skills';
+import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, passivesFor } from '../data/skills';
 import { BossDef } from '../data/enemies';
 import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
 import { computeStats, combatPower } from '../meta/ops';
@@ -53,6 +53,7 @@ export class BattleScene implements Scene {
   private autoGoldT = 0;
   private runAutoPick = false;
   private preparedSkills: SkillId[] = [];
+  unavailablePreparedNames: string[] = [];
   skipPreparedPrompts = false;
   paused = false;
 
@@ -156,8 +157,11 @@ export class BattleScene implements Scene {
     this.battle.showDamage = save.settings.dmgNum;
     if (IS_WEB && !this.chapter.tutorial) {
       const skills = preparedSkillsFor(this.battle.hero.id);
-      const defenseWeapons = this.battle.def ? new Set<SkillId>(this.battle.defenseWeapons()) : null;
-      this.preparedSkills = defenseWeapons ? skills.filter(id => defenseWeapons.has(id)) : skills;
+      const b = this.battle;
+      const available = new Set<SkillId>(b.def ? b.defenseWeapons() : [...weaponsForHero(b.hero.id, b.cleared), ...passivesFor(b.cleared)]);
+      this.preparedSkills = skills.filter(id => available.has(id));
+      const defs = { ...WEAPONS, ...PASSIVES };
+      this.unavailablePreparedNames = skills.filter(id => !available.has(id)).map(id => defs[id].name);
       this.runAutoPick = this.hasPreparation;
     }
     this.battle.hooks = {

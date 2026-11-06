@@ -1,6 +1,6 @@
 // 调试参数（仅浏览器生效）：?speed=4 战斗加速；?rich=1 资源充足；?ch=3 解锁到第3章；?skip=1 跳过新手引导；?heroes=1 解锁全部武将
 declare const location: any;
-import { IS_H5 } from './data/platformConfig';
+import { IS_WEB } from './data/platformConfig';
 
 function param(name: string): string | null {
   try {
@@ -15,6 +15,7 @@ function param(name: string): string | null {
 }
 
 export const DEBUG = {
+  webPlaytest: IS_WEB && param('playtest') !== '0',
   speed: Number(param('speed') || 1),
   rich: param('rich') === '1',
   chapter: Number(param('ch') || 0),

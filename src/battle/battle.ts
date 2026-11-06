@@ -6,7 +6,7 @@ import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
-  WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, heroLinks, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
+  WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, defenseWeaponsForHero, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
@@ -2083,8 +2083,7 @@ export class Battle {
    */
   /** 守城能用的武器：专属武器 + 专属联动的武器（已解锁的） */
   defenseWeapons(): WeaponId[] {
-    const can = new Set(weaponsForHero(this.hero.id, this.cleared));
-    return [this.hero.weapon, ...heroLinks(this.hero.id).map((x) => x.weapon)].filter((id, i, a) => a.indexOf(id) === i && (id === this.hero.weapon || can.has(id)));
+    return defenseWeaponsForHero(this.hero, this.cleared);
   }
 
   private defenseChoicePool() {

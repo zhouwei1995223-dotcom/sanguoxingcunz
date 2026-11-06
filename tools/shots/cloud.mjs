@@ -1,4 +1,7 @@
 export default async function ({ page, wait }) {
+  const url = new URL(page.url());
+  url.searchParams.set('playtest', '0');
+  await page.goto(url.href);
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(500);
   // 第一台设备：有进度并上传
