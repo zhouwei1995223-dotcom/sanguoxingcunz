@@ -27,6 +27,7 @@ import { buildLevel } from '../battle/defense';
 const LEVELUP_AD_LIMIT = 5;
 /** 每局最多看广告复活几次 */
 const AD_REVIVE_MAX = 3;
+const UPGRADE_PANEL_FILL = 'rgba(255, 245, 222, 0.10)';
 
 interface CardExtra {
   /** 推荐选择 */
@@ -175,9 +176,8 @@ function drawSkillColumn(ui: UI, id: string, info: ReturnType<typeof choiceInfo>
   const top = y + (ui.isPressed(id) ? 3 * u : 0);
   const accent = ex.banish === 'yes' ? '#a92f24' : ex.rec ? '#32633d' : '#776447';
   const g = ui.ctx;
-  g.fillStyle = 'rgba(255, 245, 222, 0.70)';
+  g.fillStyle = UPGRADE_PANEL_FILL;
   g.fillRect(x, top, w, h);
-  ui.markPaper(x, top, w, h);
   g.strokeStyle = accent;
   g.lineWidth = Math.max(1, (ex.rec ? 4 : 2) * u);
   g.strokeRect(x + 2 * u, top + 2 * u, w - 4 * u, h - 4 * u);
@@ -189,17 +189,17 @@ function drawSkillColumn(ui: UI, id: string, info: ReturnType<typeof choiceInfo>
     ui.text(badge, x + 3 * u + bw / 2, top + 19 * u, 20, '#fbf4e4', 'center', null);
   }
   ui.icon(info.icon, cx, top + 81 * u, 78 * u);
-  ui.text(info.name, cx, top + 153 * u, 30, '#251c16', 'center', null);
+  ui.text(info.name, cx, top + 153 * u, 30, '#fbf4e4');
   const state = [ex.link ? '专属' : '', info.evo ? '进化' : info.isNew ? '新' : '', info.max ? `${info.lv}/${info.max}级` : '', ex.evoReady ? '可进化' : ''].filter(Boolean).join(' · ');
-  ui.text(state, cx, top + 193 * u, 20, accent, 'center', null);
+  ui.text(state, cx, top + 193 * u, 20, '#f5ead4');
   g.fillStyle = accent;
   g.fillRect(x + pad, top + 217 * u, w - 2 * pad, Math.max(1, u));
-  ui.wrapText(info.desc, x + pad, top + 231 * u, w - 2 * pad, 24, '#271f18', 1.3);
+  ui.wrapText(info.desc, x + pad, top + 231 * u, w - 2 * pad, 24, '#fbf4e4', 1.3, 'left', '#29231b');
   if (ex.recipe) {
     const lineH = 21 * u * 1.25;
     const lines = ui.wrapLines(ex.recipe, w - 2 * pad, 21);
     lines.forEach((line, i) => ui.text(line, x + pad, top + h - pad - (lines.length - i - 0.5) * lineH,
-      21, ex.recipeOk ? '#174825' : '#493b2d', 'left', null, false));
+      21, ex.recipeOk ? '#b8f4ad' : '#f5ead4', 'left', '#29231b', false));
   }
   return ui.clicked(id, x, y, w, h);
 }
@@ -224,16 +224,27 @@ function drawOwnedSkills(ui: UI, groups: ReturnType<typeof ownedSkillGroups>, x:
   const rows = groups.reduce((n, group) => n + Math.max(1, Math.ceil(group.items.length / 3)), 0);
   const bodyH = Math.min(5, rows) * rowH;
   const h = 66 * u + bodyH;
+  const g = ui.ctx;
+  const rim = Math.max(3, 8 * u);
+  g.fillStyle = UPGRADE_PANEL_FILL;
+  g.fillRect(x + rim, y + rim, w - 2 * rim, h - 2 * rim);
+  // 只绘制原宣纸面板的边框，内侧透出战场。
+  g.save();
+  g.beginPath();
+  g.rect(x, y, w, h);
+  g.rect(x + rim, y + rim, w - 2 * rim, h - 2 * rim);
+  g.clip('evenodd');
   ui.panel(x, y, w, h, 'paper');
-  ui.text('本局已获得', x + 20 * u, y + 29 * u, 26, '#36271c', 'left', null);
+  g.restore();
+  ui.text('本局已获得', x + 20 * u, y + 29 * u, 26, '#fbf4e4', 'left');
   const listY = y + 52 * u;
   const offset = ui.beginScroll('lv_owned', x, listY, w, bodyH, rows * rowH);
   let lineY = listY + offset + rowH / 2;
   for (const group of groups) {
-    ui.text(group.name, x + 20 * u, lineY, 22, '#765132', 'left', null);
+    ui.text(group.name, x + 20 * u, lineY, 22, '#f5ead4', 'left');
     const items = group.items.length ? group.items : ['暂无'];
     items.forEach((item, i) => ui.text(item, x + 94 * u + (i % 3) * (w - 106 * u) / 3,
-      lineY + Math.floor(i / 3) * rowH, 22, '#36271c', 'left', null));
+      lineY + Math.floor(i / 3) * rowH, 22, '#fbf4e4', 'left'));
     lineY += Math.ceil(items.length / 3) * rowH;
   }
   ui.endScroll();
