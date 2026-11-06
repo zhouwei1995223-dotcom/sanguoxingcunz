@@ -699,7 +699,8 @@ export class HomeScene implements Scene {
     const canSweep = unlocked && power >= (need ?? legacyChapterPower(ch, diff)) * SWEEP_K;
     if (canSweep) {
       if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
-      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: IS_WEB ? '三星通关' : '免挑战' })) {
+      const sweepLabel = IS_WEB ? (chapterStars(d, ch.id) === THREE_STARS ? '仅领材料' : '三星领元宝') : '免挑战';
+      if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) {
         this.sweep(() => settleRun(ch, diff, true, IS_WEB ? null : ch.duration, 150, 1500, 2, 2, THREE_STARS), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
       }
     } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
@@ -793,7 +794,8 @@ export class HomeScene implements Scene {
     const bw = 400 * u, bh = L.bh, by = L.by;
     if (open && power >= ch.power * SWEEP_K) {
       if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
-      if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: IS_WEB ? '三星通关' : '免挑战' })) this.sweep(() => settleDefense(lv, true, ch.duration, 120, 1200, 2, 1, 12, IS_WEB ? THREE_STARS : undefined), `守城 · ${ch.name}`, 'defense', lv, 0);
+      const sweepLabel = IS_WEB ? (defenseStars(lv) === THREE_STARS ? '仅领材料' : '三星领元宝') : '免挑战';
+      if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) this.sweep(() => settleDefense(lv, true, IS_WEB ? null : ch.duration, 120, 1200, 2, 1, 12, IS_WEB ? THREE_STARS : undefined), `守城 · ${ch.name}`, 'defense', lv, 0);
     } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     const ew = 150 * u;

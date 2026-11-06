@@ -851,7 +851,10 @@ export class SweepDialog implements Dialog {
     const outcome = IS_WEB && r.stars !== undefined ? (r.firstClear ? '首次通关' : '三星通关') + '  ' + starRating(r.stars)
       : r.firstClear ? '兵锋所指，一战而定！（首次通关）' : '兵锋所指，一战而定！';
     ui.text(outcome, ui.W / 2, f.y + 140 * u, 24, C.gold);
-    if (IS_WEB && r.starBonus) ui.text(`含首次三星奖励 · 元宝×${r.starBonus}`, ui.W / 2, f.y + 186 * u, 20, C.textDim);
+    if (IS_WEB) {
+      const tip = r.starBonus ? `含首次三星奖励 · 元宝×${r.starBonus}` : r.yuanbao ? '首次达到三星，获得通关元宝' : '本关已有三星，本次碾压仅领材料';
+      ui.text(tip, ui.W / 2, f.y + 186 * u, 20, C.textDim);
+    }
     rewardRow(ui, rewardEntries({ gold: r.gold, iron: r.iron, yuanbao: r.yuanbao, hero: r.heroReward, shards: r.shardReward }, r.items), ui.W / 2, f.y + 230 * u, 110 * u, this.t || 1);
     if (ui.button('sweep_ok', ui.W / 2 - 150 * u, f.y + h - 140 * u, 300 * u, 90 * u, '收下', C.btnGold, { size: 30 })) return false;
   }

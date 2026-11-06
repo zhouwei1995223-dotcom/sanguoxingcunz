@@ -116,16 +116,21 @@ export function settleTutorial(win: boolean, coins: number, kills: number): RunR
   return { win, firstClear: false, gold, iron: 0, yuanbao, items, newBest: false };
 }
 
-/** t 为 null 表示免战碾压，发完整通关奖励，不计入手动坚守时长。 */
+/** 网页版 t 为 null 表示碾压：首次达到三星正常发奖，已有三星只给物资。 */
 export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, stars = 0, skippedSeconds = 0, captured = 0): RunResult {
   const d = diff.id;
+  const key = ck(d, ch.id);
+  const oldStars = chapterStars(d, ch.id);
+  const sweep = t === null;
+  if (sweep && win) stars = THREE_STARS;
+  const paysYuanbao = win && (!sweep || oldStars !== THREE_STARS);
   const progress = t === null ? 1 : Math.min(1, t / ch.duration);
   // 前五分钟按标准发放。后五分钟的材料加成只累计实际战斗波次，不计跳过的波次或主将加时。
   const waveSeconds = Math.min(t ?? 0, ch.duration) - skippedSeconds;
   const materialMultiplier = ch.campaignMinutes === 10 ? 1 + 0.8 * Math.max(0, Math.min(1, (waveSeconds - 300) / 300)) : 1;
   let gold = Math.round(ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1) * diff.reward * materialMultiplier + coins * 2);
   const iron = Math.round((ch.id * 2 + progress * 6 * ch.id + (win ? 4 * ch.id : 0)) * diff.reward * materialMultiplier);
-  let yuanbao = win ? Math.round(20 * ch.id * diff.reward) : 0;
+  let yuanbao = paysYuanbao ? Math.round(20 * ch.id * diff.reward) : 0;
   let convoyLoot: RunResult['convoyLoot'];
   if (IS_WEB && ch.campaignMinutes && t !== null && captured > 0) {
     const count = Math.min(3, Math.floor(captured));
@@ -136,12 +141,11 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   }
   const items: EquipItem[] = [];
   for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(ch.id, diff.qShift)));
-  let firstClear = false;
-  if (win && !isCleared(d, ch.id)) {
-    firstClear = true;
+  const firstClear = win && !isCleared(d, ch.id);
+  if (firstClear) {
     save.clears[ck(d, ch.id)] = true;
     if (d === 0) save.firstClear[ch.id] = true;
-    yuanbao += 100 * ch.id * (1 + d);
+    if (paysYuanbao) yuanbao += 100 * ch.id * (1 + d);
     // 第一章首通必得兵器，引导玩家体验装备系统
     items.push(newItem(ch.id === 1 && d === 0 ? 'yajiao' : randomItemTemplate(), firstClearQuality(ch.id, d)));
   }
@@ -162,17 +166,16 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
     shardReward = { hero: d > 0 || ch.id >= 4 ? 'lvbu' : 'zhuge', n: 10 + d * 5 };
     grantShards(shardReward.hero, shardReward.n);
   }
-  const key = ck(d, ch.id);
   // 三星：第一次集齐三颗星送元宝
-  const oldStars = save.stars[key] || 0;
   // 网页征战按单局最佳保留星级，避免两种模式的不同条件拼出三星。
   const allStars = ch.campaignMinutes
     ? (starCount(stars) > starCount(oldStars) ? stars : oldStars)
     : oldStars | stars;
   let starBonus = 0;
-  if (allStars !== oldStars) {
-    save.stars[key] = allStars;
-    if (starCount(allStars) === 3 && starCount(oldStars) < 3) { starBonus = (50 + 20 * ch.id) * (1 + d); yuanbao += starBonus; }
+  if (allStars !== oldStars) save.stars[key] = allStars;
+  if (win && allStars === THREE_STARS && oldStars !== THREE_STARS) {
+    starBonus = (50 + 20 * ch.id) * (1 + d);
+    yuanbao += starBonus;
   }
   // 记录封顶在章节时长：打赢后敌将战还在走时间，不封顶比较的话每次打赢都会显示「新纪录」
   const capped = Math.min(ch.duration, Math.floor(t ?? 0));
@@ -199,17 +202,21 @@ export function defenseOpen(level: number): boolean {
  * 守城模式结算：金币玄铁按关卡和坚守时间；胜利送元宝和碎片，每天第一次胜利碎片翻倍；
  * 第一次守住某一关额外送 80×关卡 元宝和碎片。
  */
-export function settleDefense(level: number, win: boolean, t: number, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number, stars?: number): RunResult {
+export function settleDefense(level: number, win: boolean, t: number | null, coins: number, kills: number, bossKills: number, equipDrops: number, waves: number, stars?: number): RunResult {
   const ch = CHAPTERS[Math.max(0, Math.min(CHAPTERS.length - 1, level - 1))];
   const dfs = (save.defense = save.defense || { best: 0, wins: 0, day: '', cleared: 0 });
-  const progress = Math.min(1, t / 300);
+  const oldStars = defenseStars(level);
+  const sweep = t === null;
+  if (sweep && win) stars = THREE_STARS;
+  const progress = t === null ? 1 : Math.min(1, t / 300);
   const today = new Date().toISOString().slice(0, 10);
   const dailyFirst = win && dfs.day !== today;
   const firstClear = win && level > (dfs.cleared || 0);
   const gold = Math.round(ch.goldBase * (0.2 + progress * 0.8) * (win ? 1.5 : 1) + coins * 2);
   const iron = Math.round(level * 2 + progress * 5 * level + (win ? 3 * level : 0));
-  let yuanbao = win ? 20 + 4 * level : 0;
-  if (firstClear) yuanbao += 80 * level;
+  const paysYuanbao = win && (!sweep || oldStars !== THREE_STARS);
+  let yuanbao = paysYuanbao ? 20 + 4 * level : 0;
+  if (paysYuanbao && firstClear) yuanbao += 80 * level;
   const items: EquipItem[] = [];
   for (let i = 0; i < equipDrops; i++) items.push(newItem(randomItemTemplate(), dropQuality(level, 0)));
   let shardReward: { hero: string; n: number } | undefined;
@@ -217,7 +224,7 @@ export function settleDefense(level: number, win: boolean, t: number, coins: num
   if (sn) { shardReward = { hero: randomShardHero(true), n: sn }; grantShards(shardReward.hero, sn); }
   const newBest = waves > dfs.best;
   if (newBest) dfs.best = waves;
-  if (win && stars !== undefined && starCount(stars) > starCount(defenseStars(level))) {
+  if (win && stars !== undefined && starCount(stars) > starCount(oldStars)) {
     (dfs.stars ??= {})[level] = stars;
   }
   if (win) { dfs.wins++; dfs.day = today; if (firstClear) dfs.cleared = level; }
