@@ -17,10 +17,11 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
-import { NO_ADS, NO_ADS_PRICE, IS_H5, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
+import { NO_ADS, NO_ADS_PRICE, IS_H5, IS_WEB, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
-import { ORDERS, LINKS } from '../data/defense';
+import { ORDERS, ORDER_IDS, LINKS, BUILD_KINDS, BUILDS } from '../data/defense';
+import { buildLevel } from '../battle/defense';
 
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = 5;
@@ -167,6 +168,78 @@ function choiceCard(ui: UI, id: string, c: Choice, x: number, y: number, w: numb
   return ui.clicked(id, x, y, w, h);
 }
 
+/** 竖卡共用同一行高，较长的说明、进化配方也能完整换行。 */
+function drawSkillColumn(ui: UI, id: string, info: ReturnType<typeof choiceInfo>, ex: CardExtra,
+  x: number, y: number, w: number, h: number) {
+  const u = ui.u, cx = x + w / 2, pad = 16 * u;
+  const top = y + (ui.isPressed(id) ? 3 * u : 0);
+  const accent = ex.banish === 'yes' ? '#a92f24' : ex.rec ? '#32633d' : '#776447';
+  const g = ui.ctx;
+  g.fillStyle = 'rgba(255, 245, 222, 0.70)';
+  g.fillRect(x, top, w, h);
+  ui.markPaper(x, top, w, h);
+  g.strokeStyle = accent;
+  g.lineWidth = Math.max(1, (ex.rec ? 4 : 2) * u);
+  g.strokeRect(x + 2 * u, top + 2 * u, w - 4 * u, h - 4 * u);
+  const badge = ex.banish ? (ex.banish === 'yes' ? '点击封禁' : '不可封禁') : ex.rec ? '推荐' : '';
+  if (badge) {
+    const bw = ui.measure(badge, 20) + 20 * u;
+    g.fillStyle = accent;
+    g.fillRect(x + 3 * u, top + 3 * u, bw, 32 * u);
+    ui.text(badge, x + 3 * u + bw / 2, top + 19 * u, 20, '#fbf4e4', 'center', null);
+  }
+  ui.icon(info.icon, cx, top + 81 * u, 78 * u);
+  ui.text(info.name, cx, top + 153 * u, 30, '#251c16', 'center', null);
+  const state = [ex.link ? '专属' : '', info.evo ? '进化' : info.isNew ? '新' : '', info.max ? `${info.lv}/${info.max}级` : '', ex.evoReady ? '可进化' : ''].filter(Boolean).join(' · ');
+  ui.text(state, cx, top + 193 * u, 20, accent, 'center', null);
+  g.fillStyle = accent;
+  g.fillRect(x + pad, top + 217 * u, w - 2 * pad, Math.max(1, u));
+  ui.wrapText(info.desc, x + pad, top + 231 * u, w - 2 * pad, 24, '#271f18', 1.3);
+  if (ex.recipe) {
+    const lineH = 21 * u * 1.25;
+    const lines = ui.wrapLines(ex.recipe, w - 2 * pad, 21);
+    lines.forEach((line, i) => ui.text(line, x + pad, top + h - pad - (lines.length - i - 0.5) * lineH,
+      21, ex.recipeOk ? '#174825' : '#493b2d', 'left', null, false));
+  }
+  return ui.clicked(id, x, y, w, h);
+}
+
+function ownedSkillGroups(b: Battle) {
+  const groups = [{ name: '武器', items: b.weapons.map(w => {
+    const def = WEAPONS[w.id];
+    return w.evo ? (weaponLink(w.id, b.hero.id)?.name || def.evoName) + ' ★' : def.name + ' Lv.' + w.lv;
+  }) }];
+  const d = b.def;
+  if (d) {
+    groups.push({ name: '军令', items: ORDER_IDS.filter(id => d.orders[id]).map(id => ORDERS[id].name + ' Lv.' + d.orders[id]) });
+    const buildings = BUILD_KINDS.filter(k => buildLevel(d, k)).map(k => BUILDS[k].name + ' Lv.' + buildLevel(d, k));
+    if (buildings.length) groups.push({ name: '城防', items: buildings });
+    if (d.links.size) groups.push({ name: '联动', items: Array.from(d.links, id => LINKS[id].name) });
+  } else groups.push({ name: '兵法', items: b.passives.map(p => PASSIVES[p.id].name + ' Lv.' + p.lv) });
+  return groups;
+}
+
+function drawOwnedSkills(ui: UI, groups: ReturnType<typeof ownedSkillGroups>, x: number, y: number, w: number) {
+  const u = ui.u, rowH = 42 * u;
+  const rows = groups.reduce((n, group) => n + Math.max(1, Math.ceil(group.items.length / 3)), 0);
+  const bodyH = Math.min(5, rows) * rowH;
+  const h = 66 * u + bodyH;
+  ui.panel(x, y, w, h, 'paper');
+  ui.text('本局已获得', x + 20 * u, y + 29 * u, 26, '#36271c', 'left', null);
+  const listY = y + 52 * u;
+  const offset = ui.beginScroll('lv_owned', x, listY, w, bodyH, rows * rowH);
+  let lineY = listY + offset + rowH / 2;
+  for (const group of groups) {
+    ui.text(group.name, x + 20 * u, lineY, 22, '#765132', 'left', null);
+    const items = group.items.length ? group.items : ['暂无'];
+    items.forEach((item, i) => ui.text(item, x + 94 * u + (i % 3) * (w - 106 * u) / 3,
+      lineY + Math.floor(i / 3) * rowH, 22, '#36271c', 'left', null));
+    lineY += Math.ceil(items.length / 3) * rowH;
+  }
+  ui.endScroll();
+  return h;
+}
+
 export class LevelUpDialog implements Dialog {
   private banishTip = false;
   constructor(private scene: BattleScene, private choices: Choice[]) {
@@ -178,32 +251,47 @@ export class LevelUpDialog implements Dialog {
     const u = ui.u;
     const b = this.scene.battle;
     const t = this.t || 0;
-    ui.ribbon(ui.W / 2, ui.H * 0.2, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
-    ui.text('选择一项强化', ui.W / 2, ui.H * 0.2 + 64 * u, 26, C.textDim);
-    const cw = ui.W - 70 * u, ch = 220 * u;
-    let y = ui.H * 0.2 + 110 * u;
+    const gap = 12 * u, panelW = ui.W - 46 * u;
+    const cw = IS_WEB ? (panelW - 2 * gap) / 3 : ui.W - 70 * u;
+    const cards = this.choices.map(c => ({ info: choiceInfo(c), ex: cardExtra(b, c) }));
+    let ch = 220 * u;
+    if (IS_WEB) {
+      ch = Math.max(...cards.map(({ info, ex }) => 269 * u
+        + ui.wrapLines(info.desc, cw - 32 * u, 24).length * 31.2 * u
+        + (ex.recipe ? ui.wrapLines(ex.recipe, cw - 32 * u, 21).length * 26.25 * u : 0)));
+    }
+    const titleY = IS_WEB ? Math.max(ui.safeTop + 45 * u, Math.min(ui.H * 0.18, (ui.H - ch - 590 * u) / 2)) : ui.H * 0.2;
+    ui.ribbon(ui.W / 2, titleY, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
+    ui.text(this.banishMode && IS_WEB ? '选择要封禁的新技能' : '选择一项强化', ui.W / 2, titleY + 64 * u, 26, C.textDim);
+    const cardTop = titleY + 110 * u;
+    const firstX = IS_WEB ? (ui.W - cards.length * cw - (cards.length - 1) * gap) / 2 : (ui.W - cw) / 2;
+    let y = cardTop;
     const tutorial = save.guide === 0 && b.level === 2;
     const rec = tutorial ? -1 : b.recommend(this.choices);
-    if (this.banishMode) ui.text('选择要封禁的新技能（本局不再出现）', ui.W / 2, y - 14 * u, 24, '#ff8a80');
+    if (this.banishMode && !IS_WEB) ui.text('选择要封禁的新技能（本局不再出现）', ui.W / 2, y - 14 * u, 24, '#ff8a80');
     for (let i = 0; i < this.choices.length; i++) {
       const c = this.choices[i];
       const k = Math.max(0, Math.min(1, (t - i * 0.07) * 5));
-      const x = ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
-      const ex = cardExtra(b, c);
+      const x = IS_WEB ? firstX + i * (cw + gap) : firstX + (1 - easeOutBack(k)) * ui.W;
+      y = IS_WEB ? cardTop : cardTop + i * (ch + 20 * u);
+      const { info, ex } = cards[i];
       ex.rec = i === rec;
       if (this.banishMode) ex.banish = (c.kind === 'weapon' || c.kind === 'passive') && c.isNew ? 'yes' : 'no';
-      if (choiceCard(ui, 'lv_choice_' + i, c, x, y, cw, ch, tutorial && i === 0, ex) && t > 0.25) {
+      const id = 'lv_choice_' + i;
+      const picked = IS_WEB ? drawSkillColumn(ui, id, info, ex, x, y, cw, ch)
+        : choiceCard(ui, id, c, x, y, cw, ch, tutorial && i === 0, ex);
+      if (picked && t > 0.25) {
         if (this.banishMode) {
           if (ex.banish === 'yes' && b.banish(this.choices, i)) { this.banishMode = false; playSfx('hurt'); }
           else ui.toast('只能封禁新技能');
-          y += ch + 20 * u;
           continue;
         }
         this.scene.choose(c);
         return false;
       }
-      y += ch + 20 * u;
     }
+    y += ch + 20 * u;
+    if (IS_WEB) y += drawOwnedSkills(ui, ownedSkillGroups(b), (ui.W - panelW) / 2, y, panelW) + 10 * u;
     // 刷新 / 封禁
     const bh = 92 * u;
     y += 10 * u;
@@ -243,7 +331,7 @@ export class LevelUpDialog implements Dialog {
         return false;
       }
     }
-    if (save.guide === 0 && b.level === 2) guidePointer(ui, ui.W / 2 - cw / 2, ui.H * 0.2 + 110 * u, cw, ch);
+    if (tutorial) guidePointer(ui, firstX, cardTop, cw, ch);
     if (this.banishTip) guideHint(ui, '不满意可以「刷新」，不想要的可以「封禁」', y + bh + 150 * u);
   }
   t?: number;
