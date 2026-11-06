@@ -24,7 +24,7 @@ import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
 import { funnel } from '../meta/telemetry';
-import { NO_ADS } from '../data/platformConfig';
+import { IS_WEB, NO_ADS } from '../data/platformConfig';
 import { HEROES } from '../data/heroes';
 import { heroBase } from '../meta/ops';
 import { createDefense, HeroInfo, grainRate, nextAutoUnit, soldiers, buildStepText } from '../battle/defense';
@@ -50,7 +50,12 @@ export class BattleScene implements Scene {
   private tipT = 0;
   private tipCheckT = 0;
   private autoGoldT = 0;
+  private nextSkillPickAt = 0;
   paused = false;
+
+  get spacedSkillPicks() {
+    return IS_WEB && this.modeName === 'chapter' && !this.chapter.tutorial;
+  }
 
   diff: DifficultyDef;
 
@@ -247,6 +252,7 @@ export class BattleScene implements Scene {
         // 大招期间不弹窗，结束后再处理升级与宝箱
       } else if (b.pendingStrats.length) {
         const st = b.pendingStrats.shift()!;
+        if (this.spacedSkillPicks) this.nextSkillPickAt = Math.max(this.nextSkillPickAt, b.t + 12);
         playSfx('chest');
         game.openDialog(new StrategyDialog(this, st.tier, st.round));
       } else if (b.pendingChests.length) {
@@ -255,17 +261,20 @@ export class BattleScene implements Scene {
       } else if (b.pendingLevelUps > 0) {
         b.pendingLevelUps--;
         const choices = b.rollChoices();
+        const nextStratAt = b.stratTimes[b.stratRound] ?? Infinity;
+        const betweenPicks = this.spacedSkillPicks && (b.t < this.nextSkillPickAt || nextStratAt - b.t < 12);
         if (choices.every((c) => c.kind === 'heal' || c.kind === 'gold')) {
           // 技能全满：自动领取，避免频繁打断
           b.applyChoice(b.player.hp < b.player.maxHp * 0.6 ? { kind: 'heal' } : { kind: 'gold' });
           this.autoGoldT = 1;
-        } else if (save.settings.autoPick && save.guide > 0) {
+        } else if (betweenPicks || (save.settings.autoPick && save.guide > 0)) {
           // 自动选择：直接领推荐项，在武将身边飘字
           const c = choices[Math.max(0, b.recommend(choices))];
           playSfx('levelup');
           this.choose(c);
           this.floatLines([{ text: '升级 · ' + this.choiceLine(c), color: c.kind === 'evo' || c.kind === 'link' ? '#fee761' : '#b6f5a0' }]);
         } else {
+          if (this.spacedSkillPicks) this.nextSkillPickAt = b.t + 50;
           playSfx('levelup');
           if (save.stats.runs === 0) funnel('b1_levelup');
           game.openDialog(new LevelUpDialog(this, choices));
