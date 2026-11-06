@@ -3,7 +3,7 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries, itemSlot, RewardEntry } from '../ui/widgets';
 import { guidePointer } from '../ui/guide';
-import { save, markDirty, flushSave, staminaNextSeconds, preparedSkillsFor } from '../meta/save';
+import { save, markDirty, flushSave, staminaNextSeconds, preparationPresetsFor, selectedPreparationStage } from '../meta/save';
 import type { EquipItem } from '../meta/save';
 import {
   canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, tasksRedDot, patrolPending, patrolReward,
@@ -24,7 +24,7 @@ import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, IS_WEB } from '../data/plat
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
-import { weaponsForHero, passivesFor, defenseWeaponsForHero, SkillId, WEAPONS, PASSIVES } from '../data/skills';
+import { skillPoolFor, fitPreparation, WEAPON_SLOTS, PASSIVE_SLOTS, SKILLS_BY_ID, WEAPONS, PASSIVES } from '../data/skills';
 import { setOf, redeem } from '../meta/goals';
 import { getEquipped } from '../meta/ops';
 import { SLOTS } from '../data/meta';
@@ -586,31 +586,55 @@ export class SidebarDialog implements Dialog {
 
 export class PreparationDialog implements Dialog {
   t?: number;
-  private readonly hero = save.hero;
-  private selected = preparedSkillsFor(this.hero);
+  private readonly hero = HERO_BY_ID[save.hero];
+  private readonly presets = preparationPresetsFor(this.hero.id);
+  private slot = this.presets.active;
   private tab: 'weapons' | 'passives' = 'weapons';
-  private readonly weapons = weaponsForHero(this.hero).map(id => WEAPONS[id]);
-  private readonly defenseWeapons = new Set<SkillId>(defenseWeaponsForHero(HERO_BY_ID[this.hero], save.maxCleared));
-  private readonly passives = passivesFor(save.maxCleared).map(id => PASSIVES[id]);
+  private readonly stage = selectedPreparationStage();
+  private readonly pool = skillPoolFor(this.hero, save.maxCleared, this.stage.chapter, this.stage.defense);
+  private readonly fullPool = skillPoolFor(this.hero, Infinity, null, false);
+  private readonly weapons = this.pool.weapons.map(id => WEAPONS[id]);
+  private readonly passives = this.pool.passives.map(id => PASSIVES[id]);
+
+  constructor() { game.ui.resetScroll('prep_list'); }
 
   draw(ui: UI) {
     const u = ui.u, w = ui.W - 52 * u;
     const h = Math.min(1100 * u, ui.H - ui.safeTop - ui.safeBottom - 125 * u);
-    const f = dialogFrame(ui, w, h, `备战 · ${HERO_BY_ID[this.hero].name}`, this.t, 'prep_close');
+    const f = dialogFrame(ui, w, h, `备战 · ${this.hero.name}`, this.t, 'prep_close');
     if (f.close) return false;
     const x = f.x + 28 * u, innerW = w - 56 * u;
-    ui.text('按点选顺序自动拿技能，再点一次可取消', ui.W / 2, f.y + 79 * u, 24, C.ink, 'center', null);
+    const stageName = (this.stage.defense ? '守城第' : '征战第') + this.stage.chapter + (this.stage.defense ? '关' : '章');
+    ui.text(stageName + ' · 按点选顺序优先领取', ui.W / 2, f.y + 77 * u, 24, C.ink, 'center', null);
+    const slotW = (innerW - 20 * u) / this.presets.slots.length;
+    this.presets.slots.forEach((_, i) => {
+      const label = `预设${i + 1}` + (i === this.presets.active ? ' ✓' : '');
+      if (ui.button('prep_slot_' + i, x + i * (slotW + 10 * u), f.y + 104 * u, slotW, 64 * u,
+        label, i === this.slot ? C.btnRed : C.btnGray, { size: 24 })) {
+        this.slot = i;
+        ui.resetScroll('prep_list');
+      }
+    });
+    const selected = this.presets.slots[this.slot];
+    const effective = fitPreparation(selected, this.pool, [this.hero.weapon]);
+    const skipped = selected.filter(id => !effective.includes(id));
+    const weaponCount = 1 + effective.filter(id => id !== this.hero.weapon && id in WEAPONS).length;
+    const passiveCount = effective.filter(id => id in PASSIVES).length;
     const tabW = (innerW - 12 * u) / 2;
-    for (const [i, tab] of (['weapons', 'passives'] as const).entries()) {
-      const count = this[tab].filter(skill => this.selected.includes(skill.id)).length;
-      const title = (tab === 'weapons' ? '武器' : '兵法') + `  ${count}/${this[tab].length}`;
-      if (ui.button('prep_' + tab, x + i * (tabW + 12 * u), f.y + 116 * u, tabW, 74 * u, title, this.tab === tab ? C.btnRed : C.btnGray, { size: 28 })) {
+    if (this.stage.defense) ui.text(`本关可用武器 ${this.weapons.length} 件 · 配装上限 ${WEAPON_SLOTS} 件`, x, f.y + 221 * u, 26, C.ink, 'left', null);
+    const tabs = this.stage.defense ? [] : (['weapons', 'passives'] as const);
+    for (const [i, tab] of tabs.entries()) {
+      const title = tab === 'weapons' ? `武器位  ${weaponCount}/${WEAPON_SLOTS}` : `兵法位  ${passiveCount}/${PASSIVE_SLOTS}`;
+      if (ui.button('prep_' + tab, x + i * (tabW + 12 * u), f.y + 184 * u, tabW, 66 * u, title, this.tab === tab ? C.btnRed : C.btnGray, { size: 25 })) {
         this.tab = tab;
         ui.resetScroll('prep_list');
       }
     }
-    const listY = f.y + 214 * u, footerY = f.y + h - 132 * u;
-    const listH = footerY - listY - 50 * u, rowH = 172 * u;
+    const listY = f.y + 268 * u, footerY = f.y + h - 122 * u;
+    const note = skipped.length ? '预设有变动，本关暂缓：' + skipped.map(id => SKILLS_BY_ID[id].name).join('、')
+      : `${WEAPONS[this.hero.weapon].name}自带占1格，勾选后也会优先升级`;
+    const noteH = ui.wrapLines(note, innerW, 22).length * 29 * u;
+    const listH = footerY - listY - noteH - 20 * u, rowH = 144 * u;
     const skills = this[this.tab];
     const listContentH = Math.ceil(skills.length / 2) * rowH;
     const dy = ui.beginScroll('prep_list', x, listY, innerW, listH, listContentH);
@@ -618,29 +642,36 @@ export class PreparationDialog implements Dialog {
       const cx = x + (i % 2) * (tabW + 12 * u);
       const cy = listY + Math.floor(i / 2) * rowH + dy;
       if (cy + rowH <= listY || cy >= listY + listH) return;
-      const rank = this.selected.indexOf(skill.id);
+      const rank = effective.indexOf(skill.id);
+      const full = rank < 0 && (this.tab === 'weapons'
+        ? skill.id !== this.hero.weapon && weaponCount >= WEAPON_SLOTS
+        : passiveCount >= PASSIVE_SLOTS);
       const ink = rank < 0 ? '#a3937b' : '#9e2c20';
       ui.ctx.fillStyle = rank < 0 ? '#f4ebd9' : '#f3ddbc';
       ui.ctx.fillRect(cx + u, cy + u, tabW - 2 * u, rowH - 12 * u);
       ui.ctx.strokeStyle = ink;
       ui.ctx.lineWidth = Math.max(1, u * (rank < 0 ? 1 : 3));
       ui.ctx.strokeRect(cx + 2 * u, cy + 2 * u, tabW - 4 * u, rowH - 14 * u);
-      ui.icon(skill.icon, cx + 37 * u, cy + 38 * u, 46 * u);
-      ui.text(skill.name, cx + 71 * u, cy + 38 * u, 27, C.ink, 'left', null);
+      ui.icon(skill.icon, cx + 37 * u, cy + 38 * u, 46 * u, full ? 0.45 : 1);
+      ui.text(skill.name, cx + 71 * u, cy + 38 * u, 27, full ? '#776d60' : C.ink, 'left', null);
       if (rank >= 0) {
         ui.pixRect(cx + tabW - 44 * u, cy + 9 * u, 32 * u, 32 * u, '#9e2c20');
         ui.text(String(rank + 1), cx + tabW - 28 * u, cy + 25 * u, 20, '#fbf4e4', 'center', null);
       }
       ui.wrapText('intro' in skill ? skill.intro : skill.desc, cx + 14 * u, cy + 67 * u, tabW - 28 * u, 21, C.textDim, 1.2);
-      const locked = (skill.unlockCh ?? 0) > save.maxCleared;
-      const restriction = locked ? `通关普通第${skill.unlockCh}章解锁`
-        : save.homeMode === 'defense' && !this.defenseWeapons.has(skill.id) ? '守城模式不出现' : '';
-      if (restriction) ui.text(restriction, cx + 14 * u, cy + rowH - 31 * u, 20, '#993c22', 'left', null);
       if (ui.clicked('prep_skill_' + skill.id, cx, cy, tabW, rowH - 10 * u)) {
-        if (rank < 0) {
-          this.selected.push(skill.id);
-          if (restriction) ui.toast(`本局抽不到${skill.name}，${restriction}`);
-        } else this.selected.splice(rank, 1);
+        if (rank >= 0) selected.splice(selected.indexOf(skill.id), 1);
+        else if (!full) {
+          // 暂缓技能不占本章名额；玩家主动补位时，才替换同类中优先级最低的暂缓项。
+          const next = fitPreparation([...effective, skill.id, ...skipped], this.fullPool, [this.hero.weapon]);
+          const replaced = skipped.find(id => !next.includes(id));
+          if (replaced) {
+            selected.splice(selected.indexOf(replaced), 1);
+            ui.toast('保存后将替换暂缓项：' + SKILLS_BY_ID[replaced].name);
+          }
+          selected.push(skill.id);
+        }
+        else ui.toast(this.tab === 'weapons' ? `武器位已满（含自带武器共${WEAPON_SLOTS}件）` : `兵法最多选${PASSIVE_SLOTS}项`);
       }
     });
     ui.endScroll();
@@ -650,14 +681,17 @@ export class PreparationDialog implements Dialog {
       ui.ctx.fillStyle = '#917b61';
       ui.ctx.fillRect(x + innerW + 5 * u, listY + thumbY, 4 * u, thumbH);
     }
-    ui.text(`已选 ${this.selected.length} 项 · ${save.homeMode === 'defense' ? '守城仅匹配可用武器' : '未命中时可手选或刷新'}`, ui.W / 2, footerY - 23 * u, 22, C.textDim, 'center', null);
+    ui.wrapText(note, ui.W / 2, footerY - noteH, innerW, 22, skipped.length ? '#983e20' : C.textDim, 1.3, 'center');
     const clearW = 170 * u;
-    if (ui.button('prep_clear', x, footerY + 12 * u, clearW, 88 * u, '清空', C.btnGray, { disabled: !this.selected.length })) this.selected = [];
-    if (ui.button('prep_save', x + clearW + 14 * u, footerY + 12 * u, innerW - clearW - 14 * u, 88 * u, '保存备战', C.btnRed)) {
-      (save.preparedSkills ??= {})[this.hero] = this.selected.slice();
+    if (ui.button('prep_clear', x, footerY + 12 * u, clearW, 88 * u, '清空此预设', C.btnGray, { size: 24, disabled: !selected.length })) selected.length = 0;
+    if (ui.button('prep_save', x + clearW + 14 * u, footerY + 12 * u, innerW - clearW - 14 * u, 88 * u, '保存并启用预设' + (this.slot + 1), C.btnRed, { size: 29 })) {
+      const stored = preparationPresetsFor(this.hero.id);
+      stored.slots[this.slot] = fitPreparation(selected, this.fullPool, [this.hero.weapon]);
+      stored.active = this.slot;
+      (save.preparationPresets ??= {})[this.hero.id] = stored;
       markDirty();
       flushSave(true);
-      ui.toast(this.selected.length ? '备战已保存，下次出战自动匹配' : '备战已清空，升级时手选');
+      ui.toast(`预设${this.slot + 1}已启用，本关${effective.length ? '自动匹配' + effective.length + '项' : '手动选技'}`);
       return false;
     }
   }

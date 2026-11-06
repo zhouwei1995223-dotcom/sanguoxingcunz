@@ -52,6 +52,7 @@ export function cardExtra(b: Battle, c: Choice): CardExtra {
     // 守城没有兵法：满级直接进化
     const has = !!b.def || b.passiveLv(d.evoPassive) > 0;
     ex.recipe = b.def ? `进化：满级 → ${link ? '★' + link.name : d.evoName}` : `进化：满级 + ${PASSIVES[d.evoPassive].name} → ${link ? '★' + link.name : d.evoName}`;
+    if (IS_WEB && !has && !b.skillPool.passives.includes(d.evoPassive)) ex.recipe = `本章缺少进化兵法：${PASSIVES[d.evoPassive].name}`;
     ex.recipeOk = has;
   } else if (c.kind === 'order' && b.def) {
     const d = b.def;
@@ -68,7 +69,7 @@ export function cardExtra(b: Battle, c: Choice): CardExtra {
       ex.recipe = '可助进化：' + helps.map((id) => weaponLink(id, b.hero.id)?.name || WEAPONS[id].evoName).join('、');
       ex.recipeOk = true;
     } else {
-      const ws = weaponsForHero(b.hero.id, b.cleared).filter((id) => WEAPONS[id].evoPassive === c.id).map((id) => WEAPONS[id].name);
+      const ws = b.skillPool.weapons.filter(id => WEAPONS[id].evoPassive === c.id).map(id => WEAPONS[id].name);
       if (ws.length) ex.recipe = '进化搭配：' + ws.join('、');
     }
   }
@@ -453,7 +454,7 @@ export class QiyuDialog implements Dialog {
       const k = Math.max(0, Math.min(1, (t - i * 0.08) * 4));
       const x = IS_WEB ? 23 * u + i * (cw + gap) : ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
       if (this.card(ui, 'qiyu_' + i, this.choices[i], x, y, cw, ch) && t > 0.3) {
-        this.scene.battle.applyQiyu(this.choices[i]);
+        this.scene.chooseQiyu(this.choices[i]);
         playSfx('evolve');
         return false;
       }
@@ -470,7 +471,7 @@ export class QiyuDialog implements Dialog {
     }
     const unavailable = this.scene.unavailablePreparedNames;
     if (unavailable.length) {
-      ui.wrapText('备战中本局不会出现：' + unavailable.join('、'), ui.W / 2, y + bh + 26 * u,
+      ui.wrapText('备战预设有变动，本局暂缓：' + unavailable.join('、'), ui.W / 2, y + bh + 26 * u,
         ui.W - 90 * u, 25, '#ffd49b', 1.35, 'center', '#241911');
     } else if (this.firstTime) guideHint(ui, '每局开始选一个奇遇，效果持续整局', y + bh + 60 * u);
   }
@@ -959,8 +960,9 @@ export class EvoTableDialog implements Dialog {
     const w = ui.W - 50 * u, h = Math.min(ui.H - 200 * u - ui.safeTop, 1300 * u);
     const f = dialogFrame(ui, w, h, '进化表', this.t, 'evo_close');
     if (f.close) return false;
-    ui.text('武器升满级 + 拥有对应兵法，开宝箱即可进化', ui.W / 2, f.y + 80 * u, 22, '#9be37a');
-    const ids = weaponsForHero(b.hero.id, b.cleared);
+    const defense = IS_WEB && !!b.def;
+    ui.text(defense ? '守城武器升满级即可进化' : '武器升满级 + 拥有对应兵法，开宝箱即可进化', ui.W / 2, f.y + 80 * u, 22, '#9be37a');
+    const ids = IS_WEB ? b.skillPool.weapons.slice() : weaponsForHero(b.hero.id, b.cleared);
     // 专属武器与联动排在前面
     const rank = (id: WeaponId) => (WEAPONS[id].hero ? 0 : weaponLink(id, b.hero.id) ? 1 : 2);
     ids.sort((a, c) => rank(a) - rank(c));
@@ -983,15 +985,18 @@ export class EvoTableDialog implements Dialog {
         x += isz;
       };
       cell(d.icon, d.name, '#fff4d6', !!own);
-      ui.text('+', x + 22 * u, iy + isz / 2, 34, C.gold);
-      x += 44 * u;
-      cell(PASSIVES[d.evoPassive].icon, PASSIVES[d.evoPassive].name, '#fff4d6', b.passiveLv(d.evoPassive) > 0);
+      if (!defense) {
+        ui.text('+', x + 22 * u, iy + isz / 2, 34, C.gold);
+        x += 44 * u;
+        cell(PASSIVES[d.evoPassive].icon, PASSIVES[d.evoPassive].name, '#fff4d6', b.passiveLv(d.evoPassive) > 0);
+      }
       ui.text('→', x + 26 * u, iy + isz / 2, 34, C.gold);
       x += 52 * u;
       cell(d.evoIcon, '', '#fff', !!own?.evo);
       const tx = x + 20 * u;
       ui.text(link ? link.name : d.evoName, tx, iy + 20 * u, 28, link ? '#fee761' : '#fff4d6', 'left');
-      const sub = link ? '★' + b.hero.name + '专属联动' : d.hero ? '★专属武器' : own?.evo ? '已进化' : own ? `已拥有 Lv.${own.lv}` : '';
+      const missing = IS_WEB && !defense && !b.skillPool.passives.includes(d.evoPassive);
+      const sub = missing ? '本章缺少' + PASSIVES[d.evoPassive].name : link ? '★' + b.hero.name + '专属联动' : d.hero ? '★专属武器' : own?.evo ? '已进化' : own ? `已拥有 Lv.${own.lv}` : '';
       ui.text(sub, tx, iy + 60 * u, 20, link || d.hero ? '#feae34' : '#9be37a', 'left');
     });
     ui.endScroll();

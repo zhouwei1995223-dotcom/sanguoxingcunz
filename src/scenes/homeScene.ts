@@ -3,9 +3,9 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
 import { HomeCamp } from './homeCamp';
-import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily } from '../meta/save';
+import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily, preparedSkillsFor, selectedPreparationStage } from '../meta/save';
 import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
-import { WEAPONS, PASSIVES, heroLinks } from '../data/skills';
+import { WEAPONS, PASSIVES, heroLinks, skillPoolFor, fitPreparation } from '../data/skills';
 import {
   heroBase, heroRedDot, anyHeroRedDot, unlockHero, starUpHero, peakUpHero, randomShardHero, grantShards,
   computeStats, combatPower, getEquipped, isEquipped, equipBest, mergeAll, upgradeHero, upgradeTalent, chapterUnlocked,
@@ -52,6 +52,7 @@ export class HomeScene implements Scene {
   private flashPower = 0;
   private lastPower = 0;
   private autoPopped = false;
+  private lastPreparationStage = '';
 
   enter() {
     const p = getPlatform();
@@ -381,6 +382,17 @@ export class HomeScene implements Scene {
   }
 
   private drawBattleTab(ui: UI) {
+    if (IS_WEB) {
+      const { defense, chapter } = selectedPreparationStage();
+      const key = `${save.hero}:${defense}:${chapter}`;
+      if (this.lastPreparationStage && key !== this.lastPreparationStage) {
+        const hero = HERO_BY_ID[save.hero], plan = preparedSkillsFor(hero.id);
+        const pool = skillPoolFor(hero, save.maxCleared, chapter, defense);
+        const skipped = plan.length - fitPreparation(plan, pool, [hero.weapon]).length;
+        if (skipped) ui.toast(`备战预设有变动，本关暂缓${skipped}项`);
+      }
+      this.lastPreparationStage = key;
+    }
     const u = ui.u;
     const top = this.contentTop(ui);
     const L = this.battleLayout(ui);

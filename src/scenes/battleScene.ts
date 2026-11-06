@@ -11,7 +11,8 @@ import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../me
 import { WeeklyDef, WEEKLY_DURATION } from '../data/goals';
 import { setFirstBoss } from '../battle/spawner';
 import type { SkillId, WeaponId } from '../data/skills';
-import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink, weaponsForHero, passivesFor } from '../data/skills';
+import { WEAPONS, PASSIVES, SKILLS_BY_ID, MAX_WEAPON_LV, passiveMax, weaponLink, fitPreparation } from '../data/skills';
+import type { QiyuId } from '../data/qiyu';
 import { BossDef } from '../data/enemies';
 import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
 import { computeStats, combatPower } from '../meta/ops';
@@ -156,12 +157,7 @@ export class BattleScene implements Scene {
     }
     this.battle.showDamage = save.settings.dmgNum;
     if (IS_WEB && !this.chapter.tutorial) {
-      const skills = preparedSkillsFor(this.battle.hero.id);
-      const b = this.battle;
-      const available = new Set<SkillId>(b.def ? b.defenseWeapons() : [...weaponsForHero(b.hero.id, b.cleared), ...passivesFor(b.cleared)]);
-      this.preparedSkills = skills.filter(id => available.has(id));
-      const defs = { ...WEAPONS, ...PASSIVES };
-      this.unavailablePreparedNames = skills.filter(id => !available.has(id)).map(id => defs[id].name);
+      this.unavailablePreparedNames = this.fitRunPreparation(preparedSkillsFor(this.battle.hero.id));
       this.runAutoPick = this.hasPreparation;
     }
     this.battle.hooks = {
@@ -416,7 +412,28 @@ export class BattleScene implements Scene {
   /** 选择技能后调用 */
   choose(c: Choice) {
     this.battle.applyChoice(c);
+    if ((c.kind === 'weapon' || c.kind === 'passive') && c.isNew && !this.preparedSkills.includes(c.id)) this.checkPreparedSlots();
     if (c.kind === 'evo') { playSfx('evolve'); vibrate(true); getPlatform().recorderMark(); }
+  }
+
+  chooseQiyu(id: QiyuId) {
+    this.battle.applyQiyu(id);
+    if (id === 'shenbing') this.checkPreparedSlots();
+  }
+
+  private fitRunPreparation(ids: SkillId[]) {
+    const b = this.battle;
+    this.preparedSkills = fitPreparation(ids, b.skillPool, b.weapons.map(w => w.id), b.passives.map(p => p.id));
+    return ids.filter(id => !this.preparedSkills.includes(id)).map(id => SKILLS_BY_ID[id].name);
+  }
+
+  private checkPreparedSlots() {
+    if (!this.hasPreparation) return;
+    const skipped = this.fitRunPreparation(this.preparedSkills);
+    if (skipped.length) {
+      if (!this.hasPreparation) this.autoPick = false;
+      game.ui.toast('装备占位，本局暂缓：' + skipped.join('、'));
+    }
   }
 
   revive(adRevive = 0) {

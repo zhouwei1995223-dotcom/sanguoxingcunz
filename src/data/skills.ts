@@ -430,6 +430,35 @@ export function passivesFor(cleared = 99): PassiveId[] {
   return (Object.keys(PASSIVES) as PassiveId[]).filter((id) => (PASSIVES[id].unlockCh || 0) <= cleared);
 }
 
+export interface SkillPool { weapons: WeaponId[]; passives: PassiveId[] }
+
+/** 第 N 章只能抽到进章前已解锁的技能。无尽和每周没有章节，按账号进度。 */
+export function skillPoolFor(hero: HeroDef, progress: number, chapter: number | null, defense: boolean): SkillPool {
+  const cleared = IS_WEB && chapter !== null ? Math.max(0, chapter - 1) : progress;
+  return {
+    weapons: defense ? defenseWeaponsForHero(hero, cleared) : weaponsForHero(hero.id, cleared),
+    passives: defense ? [] : passivesFor(cleared),
+  };
+}
+
+/** 保留原优先顺序。自带武器即使没有勾选升级，也已经占位。 */
+export function fitPreparation(ids: readonly SkillId[], pool: SkillPool, ownedWeapons: readonly WeaponId[], ownedPassives: readonly PassiveId[] = []): SkillId[] {
+  const weapons = new Set<SkillId>(pool.weapons), passives = new Set<SkillId>(pool.passives);
+  const weaponSlots = new Set<SkillId>(ownedWeapons), passiveSlots = new Set<SkillId>(ownedPassives);
+  const result: SkillId[] = [];
+  for (const id of new Set(ids)) {
+    if (weapons.has(id)) {
+      if (!weaponSlots.has(id) && weaponSlots.size >= WEAPON_SLOTS) continue;
+      weaponSlots.add(id);
+    } else if (passives.has(id)) {
+      if (!passiveSlots.has(id) && passiveSlots.size >= PASSIVE_SLOTS) continue;
+      passiveSlots.add(id);
+    } else continue;
+    result.push(id);
+  }
+  return result;
+}
+
 export function passiveMax(id: PassiveId): number {
   return PASSIVES[id].max || MAX_PASSIVE_LV;
 }
@@ -468,6 +497,8 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   mirror: { id: 'mirror', name: '护心镜', icon: 'p_mirror', desc: '每隔一段时间抵挡一次伤害（每级冷却-2秒）', unlockCh: 3 },
   ration: { id: 'ration', name: '军粮', icon: 'p_ration', desc: '每击败50名敌人回复1%生命', unlockCh: 3 },
 };
+
+export const SKILLS_BY_ID = { ...WEAPONS, ...PASSIVES };
 
 /** 升到下一级所需经验（参考同类游戏的曲线） */
 export function expToNext(level: number): number {

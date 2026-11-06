@@ -2,7 +2,9 @@ import { getPlatform } from '../platform';
 import { dayKey } from '../core/math';
 import { DEBUG } from '../debug';
 import { NEW_PLAYER, STAMINA, SLOTS, Slot } from '../data/meta';
-import { SkillId, weaponsForHero, passivesFor } from '../data/skills';
+import { SkillId, skillPoolFor, fitPreparation } from '../data/skills';
+import { HERO_BY_ID } from '../data/heroes';
+import { IS_WEB } from '../data/platformConfig';
 
 // 存档：本地 JSON，带版本号便于后续迁移。
 
@@ -57,6 +59,7 @@ export interface SaveData {
   hero: string; // 当前出战武将
   /** 每名武将的备战技能，依玩家点选的优先顺序保存。 */
   preparedSkills?: Record<string, SkillId[]>;
+  preparationPresets?: Record<string, PreparationPresets>;
   talents: Record<string, number>;
   items: EquipItem[];
   equipped: Record<Slot, number>;
@@ -195,11 +198,30 @@ function freshSave(): SaveData {
 export let save: SaveData = freshSave();
 let dirty = false;
 
+export const PRESET_COUNT = 3;
+export interface PreparationPresets { active: number; slots: SkillId[][] }
+
+export function preparationPresetsFor(hero: string): PreparationPresets {
+  const saved = save.preparationPresets?.[hero];
+  const active = saved?.active ?? 0;
+  const pool = skillPoolFor(HERO_BY_ID[hero], Infinity, null, false);
+  return {
+    active: Number.isInteger(active) && active >= 0 && active < PRESET_COUNT ? active : 0,
+    slots: Array.from({ length: PRESET_COUNT }, (_, i) => {
+      const ids = saved?.slots?.[i] ?? (i === 0 ? save.preparedSkills?.[hero] : []);
+      return fitPreparation(Array.isArray(ids) ? ids : [], pool, [HERO_BY_ID[hero].weapon]);
+    }),
+  };
+}
+
 export function preparedSkillsFor(hero: string): SkillId[] {
-  const stored = save.preparedSkills?.[hero];
-  if (!Array.isArray(stored)) return [];
-  const available = new Set<SkillId>([...weaponsForHero(hero), ...passivesFor(save.maxCleared)]);
-  return [...new Set(stored.filter(id => available.has(id)))];
+  const presets = preparationPresetsFor(hero);
+  return presets.slots[presets.active];
+}
+
+export function selectedPreparationStage() {
+  const defense = save.homeMode === 'defense';
+  return { defense, chapter: (defense ? save.selectedDefense : save.selectedChapter) || 1 };
 }
 
 export function loadSave() {
@@ -239,6 +261,14 @@ export function loadSave() {
     }
   }
   if (DEBUG.reset) save = freshSave();
+  if (IS_WEB && save.preparedSkills) {
+    const presets = (save.preparationPresets ??= {});
+    for (const hero of Object.keys(save.preparedSkills)) {
+      if (HERO_BY_ID[hero]) presets[hero] = preparationPresetsFor(hero);
+    }
+    delete save.preparedSkills;
+    markDirty();
+  }
   applyTestResources();
   if (DEBUG.chapter) save.maxCleared = Math.max(save.maxCleared, DEBUG.chapter - 1);
   if (DEBUG.skipGuide) { save.guide = 99; save.agreedPrivacy = true; }

@@ -6,7 +6,7 @@ import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
-  WEAPONS, WeaponId, PassiveId, weaponsForHero, passivesFor, passiveMax, weaponLink, defenseWeaponsForHero, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
+  WEAPONS, WeaponId, PassiveId, SkillPool, skillPoolFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
 } from '../data/skills';
 import type { HeroStats } from '../meta/ops';
 import { potionStats } from '../data/meta';
@@ -284,6 +284,7 @@ export class Battle {
   mirrorT = 0;
   /** 已通关章节数：决定技能池 */
   cleared = 99;
+  readonly skillPool: SkillPool;
   /** 本局封禁的选项（kind:id） */
   banned = new Set<string>();
   banishes = 2;
@@ -310,6 +311,7 @@ export class Battle {
     this.potionBase = potionStats(base.potion || 0);
     this.hero = HERO_BY_ID[base.hero] || HERO_BY_ID.zhaoyun;
     this.cleared = base.cleared ?? 99;
+    this.skillPool = skillPoolFor(this.hero, this.cleared, chapter.endless || chapter.tutorial ? null : chapter.id, !!chapter.defense);
     this.addWeapon(this.hero.weapon);
     this.recalc();
   }
@@ -407,7 +409,7 @@ export class Battle {
     this.qiyu = id;
     if (id === 'shenbing' && this.weapons.length < WEAPON_SLOTS) {
       // 神兵天降：送一件还没有的兵器，直接 2 级
-      const ids = weaponsForHero(this.hero.id, this.cleared).filter((w) => !this.weapon(w));
+      const ids = this.skillPool.weapons.filter(w => !this.weapon(w));
       if (ids.length) {
         const w = pick(ids);
         this.addWeapon(w);
@@ -2053,12 +2055,12 @@ export class Battle {
     for (const p of this.passives) if (p.lv < passiveMax(p.id)) pool.push({ c: { kind: 'passive', id: p.id, lv: p.lv + 1, isNew: false }, w: 2.2 });
     // 新技能的总出现几率不随技能总数膨胀，避免已有技能升不上去
     if (this.weapons.length < WEAPON_SLOTS) {
-      const ids = weaponsForHero(this.hero.id, this.cleared).filter((id) => !this.weapon(id) && ok('weapon', id));
+      const ids = this.skillPool.weapons.filter(id => !this.weapon(id) && ok('weapon', id));
       const k = Math.min(1, 6 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: (weaponLink(id, this.hero.id) ? 2.8 : 2.2) * k });
     }
     if (this.passives.length < PASSIVE_SLOTS) {
-      const ids = passivesFor(this.cleared).filter((id) => !this.passiveLv(id) && ok('passive', id));
+      const ids = this.skillPool.passives.filter(id => !this.passiveLv(id) && ok('passive', id));
       const k = Math.min(1, 8 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: (wanted.has(id) ? 3 : 1.4) * k });
     }
@@ -2081,11 +2083,6 @@ export class Battle {
    * 守城的升级三选一：兵种营 / 城防军令、建筑、召唤武将、修城，外加当前武将的专属武器和专属联动武器（满级直接可以进化，联动武器进化成专属联动）。
    * 别的武器和兵法不出现——守城靠兵和建筑，不用再凑技能。
    */
-  /** 守城能用的武器：专属武器 + 专属联动的武器（已解锁的） */
-  defenseWeapons(): WeaponId[] {
-    return defenseWeaponsForHero(this.hero, this.cleared);
-  }
-
   private defenseChoicePool() {
     const d = this.def!;
     const pool: { c: Choice; w: number }[] = [];
@@ -2096,7 +2093,7 @@ export class Battle {
     const hs = Object.keys(d.heroes).filter((id) => heroCanSummon(this, id));
     for (const id of hs) pool.push({ c: { kind: 'hero', id }, w: Math.min(2.4, 4 / hs.length) });
     if (d.cityHp < d.cityMax * 0.85) pool.push({ c: { kind: 'repair' }, w: 2 + 10 * (1 - d.cityHp / d.cityMax) });
-    for (const id of this.defenseWeapons()) {
+    for (const id of this.skillPool.weapons) {
       const w = this.weapon(id);
       if (!w) { if (this.weapons.length < WEAPON_SLOTS && ok('weapon', id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 1.6 }); }
       else if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id, lv: w.lv + 1, isNew: false }, w: id === this.hero.weapon ? 2.6 : 2 });
@@ -2235,7 +2232,11 @@ export class Battle {
     let evo = this.evolvable();
     let count = boss ? 3 : Math.random() < 0.08 ? 5 : Math.random() < 0.3 ? 3 : 1;
     if (boss && !evo.length && this.passives.length < PASSIVE_SLOTS) {
-      const w = this.weapons.find((x) => !x.evo && x.lv >= MAX_WEAPON_LV && !this.passiveLv(WEAPONS[x.id].evoPassive));
+      const w = this.weapons.find(x => {
+        const needed = WEAPONS[x.id].evoPassive;
+        return !x.evo && x.lv >= MAX_WEAPON_LV && !this.passiveLv(needed)
+          && (!IS_WEB || (this.skillPool.passives.includes(needed) && !this.banned.has('passive:' + needed)));
+      });
       if (w) { out.push({ kind: 'passive', id: WEAPONS[w.id].evoPassive, lv: 1, isNew: true }); evo = [w.id]; count--; }
     }
     if (evo.length) { out.push({ kind: 'evo', id: evo[0] }); count--; }
