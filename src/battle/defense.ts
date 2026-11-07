@@ -1,4 +1,5 @@
 import { rand, TAU, weighted } from '../core/math';
+import { HERO_BY_ID } from '../data/heroes';
 import { SpatialGrid } from '../core/grid';
 import { IS_WEB } from '../data/platformConfig';
 import {
@@ -583,9 +584,9 @@ function updateAllies(b: Battle, dt: number) {
       a.skillT = 8;
       const h = d.heroes[a.heroId!];
       splash(b, a.x, a.y - 6, 90, a.atk * 5, 40);
-      b.fx.push({ kind: 'ring', x: a.x, y: a.y - 6, t: 0, dur: 0.6, r: 90, color: '#fee761' });
-      b.fx.push({ kind: 'text', x: a.x, y: a.y - 40, t: 0, dur: 1.4, text: h.ultName, color: '#fee761' });
-      b.hooks.shake(3);
+      heroSkillFx(b, a, a.heroId!);
+      b.fx.push({ kind: 'text', x: a.x, y: a.y - 44, t: 0, dur: 1.4, text: h.ultName, color: HERO_BY_ID[a.heroId!]?.color || '#fee761' });
+      b.hooks.shake(4);
       b.hooks.sfx('explode');
     }
     // 不要站进城里
@@ -608,6 +609,88 @@ function updateAllies(b: Battle, dt: number) {
     if (IS_WEB) grid.insert(a);
   }
   if (b.t % 1 < dt && d.allies.some(a => a.dead)) d.allies = d.allies.filter(a => !a.dead);
+}
+
+/**
+ * 召唤武将放技能的动画：起手用武将本色的冲击波 + 放射光 + 粒子，
+ * 再按各自大招种类加一段缩小版的专属特效（范围与 90 的伤害半径一致）。
+ */
+function heroSkillFx(b: Battle, a: Ally, heroId: string) {
+  const hero = HERO_BY_ID[heroId];
+  const col = hero?.color || '#fee761';
+  const x = a.x, y = a.y - 6, R = 90;
+  const fx = b.fx;
+  if (fx.length > 380) return;
+  const parts = (n: number, colors: string[], speed: number, dur = 0.6, g = 0, delay = 0) => {
+    for (let i = 0; i < n; i++) {
+      const ang = rand(TAU), v = rand(speed * 0.4, speed);
+      fx.push({ kind: 'particle', x, y, t: -delay, dur, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v * 0.8 - 20, color: colors[i % colors.length], r: rand(2, 4), g });
+    }
+  };
+  fx.push({ kind: 'shock', x, y, t: 0, dur: 0.5, r: R, w: 12, color: col });
+  fx.push({ kind: 'rays', x, y, t: 0, dur: 0.6, r: R * 1.1, a: rand(TAU), color: col });
+  parts(14, [col, '#ffffff', '#fee761'], 150);
+  // 朝向最近的敌人（没有就朝武将面向）
+  const e = nearestEnemy(b, x, y, R * 1.6);
+  const dir = e ? Math.atan2(e.y - y, e.x - x) : (a.left ? Math.PI : 0);
+  switch (hero?.ult) {
+    case 'dragon': // 赵云：白龙穿阵，往返两次
+      fx.push({ kind: 'dragon', x: x - Math.cos(dir) * R * 0.8, y: y - Math.sin(dir) * R * 0.8, t: 0, dur: 0.55, a: dir, len: R * 1.6, w: 20, color: '#2ce8f5' });
+      fx.push({ kind: 'dragon', x: x + Math.cos(dir + 0.6) * R * 0.8, y: y + Math.sin(dir + 0.6) * R * 0.8, t: -0.3, dur: 0.55, a: dir + 0.6 + Math.PI, len: R * 1.6, w: 18, color: '#ffffff' });
+      fx.push({ kind: 'shock', x, y, t: -0.6, dur: 0.5, r: R, w: 16, color: '#fee761' });
+      break;
+    case 'crescent': // 关羽：三道青龙刀气
+      for (let i = 0; i < 3; i++) fx.push({ kind: 'slash', x, y, t: -i * 0.15, dur: 0.35, r: R * (0.7 + i * 0.15), w: 1.4, a: dir + (i - 1) * 0.5, color: '#63c74d' });
+      parts(10, ['#63c74d', '#c9ffb8'], 120, 0.5, 0, 0.2);
+      break;
+    case 'roar': // 张飞：三圈声浪 + 尘土
+      for (let i = 0; i < 3; i++) fx.push({ kind: 'drum', x, y, t: -i * 0.16, dur: 0.45, r: R * (0.6 + i * 0.2), color: '#c0cbdc' });
+      parts(16, ['#d9c6a0', '#a89a86'], 110, 0.7, 60);
+      break;
+    case 'tornado': // 诸葛亮：八卦阵 + 火星
+      fx.push({ kind: 'bagua', x, y: y + 6, t: 0, dur: 1.2, r: R * 0.8, color: '#2ce8f5' });
+      parts(16, ['#f77622', '#fee761', '#e43b44'], 90, 0.9, -50, 0.15);
+      break;
+    case 'whirl': // 吕布：赤紫旋风两圈
+      fx.push({ kind: 'shock', x, y, t: -0.25, dur: 0.45, r: R, w: 10, color: '#b55088' });
+      for (let i = 0; i < 12; i++) {
+        const ang = (i / 12) * TAU, rr = rand(20, R * 0.8);
+        fx.push({ kind: 'particle', x: x + Math.cos(ang) * rr, y: y + Math.sin(ang) * rr * 0.8, t: -rand(0, 0.3), dur: 0.55, vx: -Math.sin(ang) * 120, vy: Math.cos(ang) * 90 - 50, color: ['#e43b44', '#b55088', '#dc9be9', '#fee761'][i % 4], r: 4 });
+      }
+      break;
+    case 'arrowrain': { // 黄忠：箭雨 + 神箭光柱
+      let n = 0, best: Enemy | null = null;
+      for (const en of b.enemies) {
+        if (en.dead || (en.x - x) ** 2 + (en.y - y) ** 2 > R * R) continue;
+        if (n++ < 12) fx.push({ kind: 'volley', x: en.x + rand(-4, 4), y: en.y - 4, t: -rand(0, 0.25), dur: 0.35 });
+        if (!best || en.hp > best.hp) best = en;
+      }
+      const tx = best ? best.x : x, ty = best ? best.y : y;
+      fx.push({ kind: 'pillar', x: tx, y: ty, t: -0.35, dur: 0.6, w: 20, len: 180, color: '#feae34' });
+      break;
+    }
+    case 'cavalry': // 马超：三道冲锋光束 + 马蹄尘土
+      for (let i = 0; i < 3; i++) fx.push({ kind: 'beam', x: x - Math.cos(dir) * R, y: y - Math.sin(dir) * R + (i - 1) * 22, t: -i * 0.1, dur: 0.35, a: dir, len: R * 2, w: 10 });
+      parts(14, ['#e8b796', '#8be9ff'], 100, 0.5, 40, 0.1);
+      break;
+    case 'arrowstorm': // 孙尚香：四面连射
+      for (let i = 0; i < 8; i++) fx.push({ kind: 'beam', x, y, t: -i * 0.06, dur: 0.25, a: (i / 8) * TAU, len: R, w: 5 });
+      parts(12, ['#ff7a6b', '#ffffff', '#dc9be9'], 140, 0.6);
+      break;
+    case 'frenzy': // 典韦：血色光柱
+      fx.push({ kind: 'pillar', x, y: y + 6, t: 0, dur: 0.6, w: 26, len: 170, color: '#e43b44' });
+      fx.push({ kind: 'shock', x, y, t: -0.2, dur: 0.45, r: R * 0.8, w: 12, color: '#e43b44' });
+      break;
+    case 'starfall': // 姜维：五颗流星坠落
+      for (let i = 0; i < 5; i++) {
+        const ang = rand(TAU), rr = rand(10, R * 0.8), mx = x + Math.cos(ang) * rr, my = y + Math.sin(ang) * rr * 0.8;
+        fx.push({ kind: 'meteor', x: mx, y: my, t: -i * 0.12, dur: 0.22, color: '#8fb8ff' });
+        fx.push({ kind: 'explo', x: mx, y: my, t: -i * 0.12 - 0.22, dur: 0.35 });
+      }
+      break;
+    default:
+      fx.push({ kind: 'ring', x, y, t: 0, dur: 0.6, r: R, color: '#fee761' });
+  }
 }
 
 function attack(b: Battle, a: Ally, e: Enemy, nx: number, ny: number) {

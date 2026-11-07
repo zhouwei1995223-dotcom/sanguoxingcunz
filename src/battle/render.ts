@@ -570,6 +570,8 @@ export class WorldRenderer {
   }
 
   private drawFx(f: Battle['fx'][number], b: Battle) {
+    // 延迟出场的特效（t < 0）到时间再画
+    if (f.t < 0) return;
     const g = this.ctx;
     const k = f.t / f.dur;
     switch (f.kind) {
