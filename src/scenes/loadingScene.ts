@@ -13,6 +13,7 @@ import { PrivacyDialog } from './homeDialogs';
 import { DEBUG } from '../debug';
 import { TowerScene } from './towerScene';
 import { TOWER_MAPS } from '../data/tower';
+import { getPlatform } from '../platform';
 
 // 启动页：健康游戏忠告 + 资源生成
 
@@ -22,13 +23,32 @@ export class LoadingScene implements Scene {
   private done = false;
   private cloudWait = false;
   private restored = false;
+  /** null：还没开始等；false：等待中；true：平台已就绪（或超时） */
+  private platformReady: boolean | null = null;
 
   update(dt: number) {
     const ui = game.ui;
     const u = ui.u;
     this.t += dt;
+    // 平台异步初始化（小红书 Storage 预读、顶部按钮位置）：读档前等待，最多 3 秒
+    if (this.platformReady === null) {
+      const ready = getPlatform().ready;
+      if (!ready) this.platformReady = true;
+      else {
+        this.platformReady = false;
+        const done = () => {
+          if (this.platformReady) return;
+          this.platformReady = true;
+          // 顶部避让可能更新了安全区：界面重新读取
+          game.ui.safeTop = getPlatform().safeArea.top;
+        };
+        ready.then(done, done);
+        setTimeout(done, 3000);
+      }
+    }
+    const holdForPlatform = this.step === 1 && !this.platformReady;
     // 分帧初始化，先画出启动页
-    if (this.step === 1) { loadSave(); reportDailyLogin(); }
+    if (this.step === 1 && !holdForPlatform) { loadSave(); reportDailyLogin(); }
     if (this.step === 2) { buildAtlas(); }
     if (this.step === 3) {
       initAudio();
@@ -41,7 +61,7 @@ export class LoadingScene implements Scene {
         flushSave(true);
       });
     }
-    this.step++;
+    if (!holdForPlatform) this.step++;
 
     const g = ui.ctx;
     g.fillStyle = '#120d14';

@@ -1,3 +1,4 @@
+import { GLOBAL } from '../core/global';
 import { getPlatform } from '../platform';
 import { save, markDirty } from './save';
 import { GAME_INFO } from '../data/platformConfig';
@@ -11,7 +12,7 @@ export function reportError(msg: string) {
   if (seen.has(key) || seen.size > 20) return;
   seen.add(key);
   const p = getPlatform();
-  const scene = (globalThis as any).__sceneName || '';
+  const scene = GLOBAL.__sceneName || '';
   p.logError(`[v${GAME_INFO.version}] [${scene}] ${msg}`);
   p.report('js_error', { msg: msg.slice(0, 120), scene, ver: GAME_INFO.version });
 }

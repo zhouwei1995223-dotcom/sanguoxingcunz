@@ -36,6 +36,9 @@ export interface Platform {
   requestFrame(cb: (t: number) => void): void;
   now(): number;
 
+  /** 平台异步初始化（如小红书 Storage 预读、窗口信息）；加载页读档前等待它（最多 3 秒） */
+  readonly ready?: Promise<unknown>;
+
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 

@@ -1,6 +1,7 @@
 import { DEBUG } from '../debug';
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
 import { IS_H5, IS_XHS } from '../data/platformConfig';
+import { createXhsStorage, xhsTopInset, xhsVibrate } from './xhs';
 
 // 浏览器实现：用于开发调试与验收。广告用 2 秒模拟弹窗代替。
 
@@ -64,8 +65,15 @@ export function createWebPlatform(): Platform {
   } catch (e) {}
   // 小红书容器在右上角叠加「··· / 关闭」按钮：在系统安全区下面再留 44 像素（与微信按胶囊按钮底边留空的效果相当，
   // iPhone 上约 91 像素），顶部的资源栏、战斗计时和暂停按钮都不会被挡住。TapTap 只留最小空隙。
+  const envTop = safeArea.top;
   if (IS_XHS) safeArea.top = Math.max(safeArea.top, 20 * dpr) + 44 * dpr;
   else if (IS_H5) safeArea.top = Math.max(safeArea.top, 20 * dpr);
+  // 小红书：Storage 预读 + 按 getWindowInfo 的顶部按钮实际位置避让（客户端不支持时保留上面的 44 像素兜底）
+  const xhsStore = IS_XHS ? createXhsStorage() : null;
+  const ready = xhsStore ? Promise.all([
+    xhsStore.ready,
+    xhsTopInset().then((top) => { if (top !== null) safeArea.top = Math.max(envTop, top * dpr); }),
+  ]) : undefined;
 
   const listeners: ((k: TouchKind, t: TouchPoint[]) => void)[] = [];
   const emit = (k: TouchKind, t: TouchPoint[]) => listeners.forEach((l) => l(k, t));
@@ -143,11 +151,12 @@ export function createWebPlatform(): Platform {
     onTouch(cb) { listeners.push(cb); },
     requestFrame(cb) { requestAnimationFrame(cb); },
     now() { return performance.now(); },
-    getItem(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    setItem(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    ready,
+    getItem(k) { if (xhsStore) return xhsStore.get(k); try { return localStorage.getItem(k); } catch (e) { return null; } },
+    setItem(k, v) { if (xhsStore) { xhsStore.set(k, v); return; } try { localStorage.setItem(k, v); } catch (e) {} },
     createSound(path, loop) { return new WebSound(path, loop); },
-    vibrateShort() { if (navigator.vibrate) navigator.vibrate(15); },
-    vibrateLong() { if (navigator.vibrate) navigator.vibrate(300); },
+    vibrateShort() { if (IS_XHS) { xhsVibrate(false); return; } if (navigator.vibrate) navigator.vibrate(15); },
+    vibrateLong() { if (IS_XHS) { xhsVibrate(true); return; } if (navigator.vibrate) navigator.vibrate(300); },
     showRewardedAd: fakeAd,
     showInterstitialAd() {},
     share(title) { showToast('分享：' + title); },

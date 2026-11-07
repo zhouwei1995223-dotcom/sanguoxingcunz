@@ -1,3 +1,4 @@
+import { GLOBAL } from './core/global';
 import { getPlatform } from './platform';
 import { reportError } from './meta/telemetry';
 import type { TouchKind, TouchPoint } from './platform/types';
@@ -91,7 +92,7 @@ class Game {
       this.ui.paperTheme = NEW_UI || !!this.scene.paperTheme;
       this.ui.preserveTextColors = NEW_UI && !!this.scene.preserveTextColors;
       this.nextScene = null;
-      (globalThis as any).__sceneName = this.scene.constructor.name;
+      GLOBAL.__sceneName = this.scene.constructor.name;
       this.dialogs.length = 0;
       this.fade = 1;
       if (this.scene.enter) this.scene.enter();
