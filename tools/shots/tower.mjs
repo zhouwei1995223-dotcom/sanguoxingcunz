@@ -40,7 +40,11 @@ export default async function({ page }) {
   await page.waitForTimeout(500);
   assert.equal(await page.evaluate(() => window.__game.scene.battle.towers.filter(Boolean).length), 1);
   await capture('02-opening');
+  // 二倍速要先看一次视频（网页版为模拟广告，2 秒后自动发奖励），之后本局可以随时切换。
+  assert.equal(await page.evaluate(() => window.__game.scene.speedOpen), false);
   await button('td_speed');
+  await page.waitForFunction(() => window.__game.scene.speedOpen && window.__game.scene.speed === 2 && !window.__game.scene.busy, null, { timeout: 8000 });
+  await page.waitForTimeout(200);
   await button('td_pause');
   const time = await page.evaluate(() => window.__game.scene.battle.elapsed);
   await page.waitForTimeout(250);

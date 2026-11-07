@@ -34,8 +34,9 @@ export default async function({ page }) {
   await page.waitForTimeout(150);
   await button('td_start');
   await page.waitForFunction(() => window.__game.scene.constructor.name === 'TowerScene');
-  // 真实时间二倍速跑一段：事件应当每帧被取走。
+  // 真实时间二倍速跑一段：事件应当每帧被取走。（二倍速先看一次模拟广告）
   await button('td_speed');
+  await page.waitForFunction(() => window.__game.scene.speed === 2 && !window.__game.scene.busy, null, { timeout: 8000 });
   await page.evaluate(() => {
     window.__pick = setInterval(() => { const b = window.__game.scene.battle; if (b?.offer) b.choose(b.offer.cards[0]); }, 50);
   });

@@ -21,8 +21,8 @@ import { HomeScene } from './homeScene';
 
 const INK = '#30291f', MUTED = '#6a5842', RED = '#a02f24', GREEN = '#365c43';
 const VIDEO = IS_WEB || IS_WX;
-/** 二倍速：微信版每局看一次视频解锁；网页版、小红书、TapTap 免费。 */
-const SPEED_AD = IS_WX;
+/** 二倍速：网页版、微信版每局看一次视频解锁；小红书、TapTap 没有广告，免费。 */
+const SPEED_AD = VIDEO;
 
 /** 援将强度 = 局外武将实际攻击（含等级、星级、巅峰、觉醒、装备、军略、暴击期望）÷ 一级新武将攻击。 */
 export function allyPowerOf(id: AllyId) {
