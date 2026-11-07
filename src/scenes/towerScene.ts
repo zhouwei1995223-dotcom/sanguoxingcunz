@@ -1,9 +1,8 @@
 import { game, Scene, Dialog } from '../game';
 import { TowerBattle } from '../battle/tower';
-import { FIELD_H, FIELD_W, TOWER_MAPS, TOWER_KINDS, TOWERS, TowerKind, WAVES, GATE_HP, commandBonus, upgradePrice, towerRange } from '../data/tower';
+import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, WAVES, GATE_HP, commandBonus } from '../data/tower';
 import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { BOSSES } from '../data/enemies';
-import { clamp } from '../core/math';
 import { IS_WEB, IS_WX } from '../data/platformConfig';
 import { getPlatform } from '../platform';
 import { sprite } from '../gfx/atlas';
@@ -97,15 +96,12 @@ export class TowerScene implements Scene {
   private busy = false;
   private result?: ReturnType<typeof settleTower>;
   private doubled = false;
-  private selected = -1;
-  private buildKind: TowerKind | null = null;
   private aiming = false;
   private accumulator = 0;
   private readonly sdk = getPlatform();
-  constructor(level: number, rich = false) {
+  constructor(level: number) {
     const map = TOWER_MAPS[level - 1] || TOWER_MAPS[0], id = towerCommander(), hero = save.heroes[id];
     this.battle = new TowerBattle(map, id, commandBonus(hero.lv, hero.star, hero.peak || 0));
-    if (rich) this.battle.grain = 1600;
   }
   enter() {
     const b = this.battle;
@@ -116,7 +112,7 @@ export class TowerScene implements Scene {
     playBgm('bgm_battle');
     this.sdk.report('battle_start', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: 0 });
   }
-  onHide() { if (!this.result) this.paused = true; }
+  onHide() { if (!this.result && !this.busy) this.paused = true; }
   private finish() {
     if (this.result) return;
     const b = this.battle;
@@ -128,14 +124,19 @@ export class TowerScene implements Scene {
     playSfx(b.phase === 'win' ? 'victory' : 'defeat');
     this.sdk.report('battle_end', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: b.leaks, win: b.phase === 'win' ? 1 : 0, waves: b.cleared, kills: b.kills, sec: Math.floor(b.elapsed) });
   }
-  private async reward(kind: 'repair' | 'double') {
+  private async reward(kind: 'repair' | 'double' | 'aid') {
     const b = this.battle;
-    if (this.busy || (kind === 'repair' ? b.over || b.repaired || b.hp >= GATE_HP : !this.result || this.doubled)) return;
+    if (this.busy || (kind === 'aid' && !b.canReinforce)) return;
+    if (kind === 'repair' && (b.over || b.repaired || b.hp >= GATE_HP)) return;
+    if (kind === 'double' && (!this.result || this.doubled)) return;
     this.busy = true;
     try {
       const ok = !VIDEO || await this.sdk.showRewardedAd('tower_' + kind);
       if (game.scene !== this || !ok) return;
-      if (kind === 'repair') {
+      if (kind === 'aid') {
+        if (!b.offerAid()) return;
+        this.aiming = false;
+      } else if (kind === 'repair') {
         if (!b.repair()) return;
         game.ui.toast('城门修复至 ' + b.hp + ' 点');
         playSfx('coin');
@@ -152,7 +153,7 @@ export class TowerScene implements Scene {
   }
   update(dt: number) {
     const ui = game.ui, u = ui.u, b = this.battle, g = ui.ctx;
-    if (!this.paused && !this.busy && !b.over) {
+    if (!this.paused && !this.busy && !b.over && !b.offer) {
       this.accumulator += dt * this.speed;
       while (this.accumulator >= 1 / 30 && !b.over) {
         b.update(1 / 30);
@@ -160,7 +161,7 @@ export class TowerScene implements Scene {
       }
       if (b.strikes.some(f => f.age === 0 && f.kind !== 'command')) playSfx('shoot');
     }
-    if (b.phase !== 'wave') this.aiming = false;
+    if (b.phase !== 'wave' || b.offer) this.aiming = false;
     if (b.over) this.finish();
     g.fillStyle = '#e7dcc2';
     g.fillRect(0, 0, ui.W, ui.H);
@@ -168,30 +169,28 @@ export class TowerScene implements Scene {
     const compact = ui.H - ui.safeTop - ui.safeBottom < 1450 * u;
     const y = ui.safeTop + 4 * u;
     ui.text(`布阵  ·  ${b.map.name}`, 22 * u, y + 32 * u, 31, INK, 'left', null);
-    const interact = !this.paused && !this.result && !this.busy;
+    const interact = !this.paused && !this.result && !this.busy && !b.offer;
     if (ui.button('td_speed', ui.W - 189 * u, y, 78 * u, 66 * u, '×' + this.speed, C.btnGray, { size: 26 }) && interact) this.speed = this.speed === 1 ? 2 : 1;
     if (ui.button('td_pause', ui.W - 103 * u, y, 82 * u, 66 * u, '暂停', C.btnGray, { size: 22 }) && interact) this.paused = true;
     const hudY = y + 70 * u, hudH = (compact ? 54 : 68) * u;
     ui.panel(8 * u, hudY, ui.W - 16 * u, hudH, 'paper');
-    const hud = [['城门', b.hp + '/' + GATE_HP, b.hp <= 6 ? RED : GREEN], ['粮草', String(b.grain), RED], ['波次', b.wave + '/' + WAVES, INK], ['漏怪', String(b.leaks), RED]];
+    const hud = [['城门', b.hp + '/' + GATE_HP, b.hp <= 6 ? RED : GREEN], ['阵级', String(b.level), RED], ['波次', b.wave + '/' + WAVES, INK], ['漏怪', String(b.leaks), RED]];
     hud.forEach(([label, value, col], i) => {
       const x = (24 + i * 187) * u;
       ui.text(label, x, hudY + hudH / 2, 22, MUTED, 'left', null);
       ui.text(value, x + 54 * u, hudY + hudH / 2, 31, col, 'left', null);
     });
-    const panelH = (compact ? 156 : 184) * u, actionH = (compact ? 80 : 94) * u;
-    const trayY = ui.H - ui.safeBottom - panelH - actionH - 12 * u;
-    const top = hudY + hudH + 8 * u;
+    const actionH = (compact ? 84 : 98) * u;
+    const trayY = ui.H - ui.safeBottom - actionH - 7 * u;
+    const xpY = hudY + hudH + 4 * u;
+    ui.bar(10 * u, xpY, ui.W - 20 * u, 12 * u, Math.min(1, b.xp / b.xpNeeded), GREEN, '#b7a789');
+    const top = xpY + 17 * u;
     // 两侧只留纸边。竖向按设备可用高度排布，所有命中和射程使用同一投影。
     const x = 9 * u, fw = ui.W - 2 * x, scaleX = fw / FIELD_W;
-    const room = trayY - 8 * u - top;
-    const fh = Math.min(room, FIELD_H * scaleX * 1.12), scaleY = fh / FIELD_H;
+    const room = trayY - 50 * u - top;
+    const fh = Math.min(room, FIELD_H * scaleX * 1.20), scaleY = fh / FIELD_H;
     const fy = top + (room - fh) / 2;
     const mapX = (ui.px - x) / scaleX, mapY = (ui.py - fy) / scaleY;
-    const inside = mapX >= 0 && mapX <= FIELD_W && mapY >= 0 && mapY <= FIELD_H;
-    const site = inside ? this.nearestSite(mapX, mapY, scaleX, scaleY, u) : -1;
-    const heldSite = ui.isPressed('td_ground') && !this.aiming && this.buildKind && !b.towers[site] ? site : -1;
-    const heldKind = TOWER_KINDS.find(kind => ui.isPressed('td_pick_' + kind));
     g.fillStyle = '#6c6149';
     g.fillRect(x - 3 * u, fy - 3 * u, fw + 6 * u, fh + 6 * u);
     g.save();
@@ -202,67 +201,20 @@ export class TowerScene implements Scene {
     g.rect(0, 0, FIELD_W, FIELD_H);
     g.clip();
     g.drawImage(this.terrain, 0, 0);
-    this.drawUnits(g, heldSite >= 0 ? heldSite : this.selected, heldKind ?? this.buildKind, scaleX / scaleY);
+    this.drawUnits(g, scaleX / scaleY);
     g.restore();
-    if (interact && !this.paused) {
-      if (this.aiming) {
-        if (ui.clicked('td_target', x, fy, fw, fh)) {
-          if (b.cast(mapX, mapY)) playSfx('thrust');
-          this.aiming = false;
-        }
-      } else if (ui.clicked('td_ground', x, fy, fw, fh, false)) {
-        if (site >= 0 && !b.towers[site] && this.buildKind) this.place(site, this.buildKind);
-        else {
-          this.selected = site === this.selected ? -1 : site;
-          this.buildKind = null;
-        }
-      }
+    if (interact && !this.paused && this.aiming && ui.clicked('td_target', x, fy, fw, fh)) {
+      if (b.cast(mapX, mapY)) playSfx('thrust');
+      this.aiming = false;
     }
-    this.drawTray(ui, trayY, panelH, actionH, interact && !this.paused);
+    this.drawActions(ui, trayY, actionH, interact && !this.paused);
     if (this.result) this.drawResult(ui);
     else if (this.paused) this.drawPause(ui);
+    else if (b.offer) this.drawCards(ui);
   }
 
-  private nearestSite(x: number, y: number, sx: number, sy: number, u: number) {
-    // 塔身和地基都可点。相邻热区相交时，把触摸交给最近的位置。
-    let best = -1, limit = Math.max(44 * u, 20 * sx) ** 2;
-    this.battle.map.sites.forEach(([cx, cy], i) => {
-      const height = this.battle.towers[i] ? 25 * sx / sy : 0;
-      const dx = (x - cx) * sx, dy = (y - clamp(y, cy - height, cy)) * sy;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < limit) { best = i; limit = d2; }
-    });
-    return best;
-  }
-
-  private place(site: number, kind: TowerKind) {
-    if (this.battle.build(site, kind)) {
-      this.selected = -1;
-      this.buildKind = kind;
-      playSfx('levelup');
-    } else if (this.battle.grain < TOWERS[kind].cost) {
-      game.ui.toast(`还差 ${TOWERS[kind].cost - this.battle.grain} 粮草`);
-    }
-  }
-
-  private drawUnits(g: CanvasRenderingContext2D, focus: number, preview: TowerKind | null, heightRatio: number) {
-    const b = this.battle, slot = b.map.sites[focus], tower = b.towers[focus];
-    const kind = tower?.kind ?? preview;
-    if (slot && kind && !this.aiming) {
-      const r = towerRange(kind, tower?.branch);
-      g.save();
-      g.beginPath();
-      g.rect(0, 0, FIELD_W, FIELD_H);
-      g.clip();
-      g.beginPath();
-      g.arc(...slot, r, 0, Math.PI * 2);
-      g.fillStyle = 'rgba(47,102,83,.13)';
-      g.fill();
-      g.strokeStyle = '#497862';
-      g.lineWidth = 1;
-      g.stroke();
-      g.restore();
-    }
+  private drawUnits(g: CanvasRenderingContext2D, heightRatio: number) {
+    const b = this.battle;
     for (const f of b.oil) {
       g.fillStyle = 'rgba(179,83,35,.45)';
       g.beginPath();
@@ -271,14 +223,14 @@ export class TowerScene implements Scene {
       for (let j = 0; j < 3; j++) stamp(g, 'flame' + Math.floor((b.elapsed * 8 + j) % 2), f.x + (j - 1) * 8, f.y + 3 + (j % 2) * 4, 11, heightRatio);
     }
     b.map.sites.forEach(([x, y], i) => {
-      const t = b.towers[i], picked = i === focus && !this.aiming;
+      const t = b.towers[i], reserve = b.map.aidSites.includes(i);
       g.beginPath();
       g.ellipse(x, y, 17, 10, 0, 0, Math.PI * 2);
-      g.fillStyle = picked ? '#f1ddb4' : '#e4d4ad';
+      g.fillStyle = reserve && !t ? '#cbb988' : '#dbccab';
       g.fill();
       g.setLineDash(t ? [] : [3, 2]);
-      g.lineWidth = picked ? 2 : 1;
-      g.strokeStyle = picked ? '#a33026' : '#6a6048';
+      g.lineWidth = 1;
+      g.strokeStyle = reserve ? '#946826' : '#877b61';
       g.stroke();
       g.setLineDash([]);
       if (t) {
@@ -288,15 +240,8 @@ export class TowerScene implements Scene {
         g.fillRect(x - 7, y + 6, 14, 4);
         g.fillStyle = '#efd27d';
         for (let j = 0; j < t.level; j++)g.fillRect(x - 5 + j * 4, y + 7, 2, 2);
-      } else if (picked && preview) {
-        g.save();
-        g.globalAlpha = 0.65;
-        stamp(g, 'td_' + preview + '1', x, Math.max(y + 3, 35 * heightRatio), 35, heightRatio);
-        g.restore();
-      } else {
-        g.fillStyle = picked ? '#9d3427' : '#92794f';
-        g.fillRect(x - 4, y - 1, 9, 2);
-        g.fillRect(x, y - 4, 2, 8);
+      } else if (reserve) {
+        stamp(g, 'icon_lock', x, y + 4, 12, heightRatio);
       }
     });
     for (const e of b.enemies) {
@@ -309,6 +254,10 @@ export class TowerScene implements Scene {
         g.fillStyle = e.gateDamage === 5 ? '#a52225' : '#ce702b';
         g.fillRect(e.x - w / 2 + 1, e.y - sz * heightRatio, Math.max(0, (w - 2) * e.hp / e.maxHp), 1.5);
       }
+    }
+    for (const a of b.allies) {
+      stamp(g, 'hero_' + a.id + '_' + Math.floor(b.elapsed * 6) % 4 + (a.left ? '_L' : ''), a.x, a.y + 3, 32, heightRatio);
+      g.fillStyle = '#31694c'; g.fillRect(a.x - 6, a.y + 4, 12, 2);
     }
     for (const f of b.strikes) {
       const k = f.age / f.life;
@@ -339,6 +288,13 @@ export class TowerScene implements Scene {
           g.arc(f.tx, f.ty, 12 + 37 * k, 0, Math.PI * 2);
           g.stroke();
         }
+      } else if (f.kind === 'roar' || f.kind === 'frost' || f.kind === 'slash' || f.kind === 'deploy') {
+        g.strokeStyle = f.kind === 'frost' ? '#c3f5ff' : f.kind === 'slash' || f.kind === 'deploy' ? '#b1f1a5' : '#ffd08e';
+        g.lineWidth = f.kind === 'slash' ? 5 : 3;
+        g.beginPath(); g.arc(f.tx, f.ty, f.radius * (.4 + .6 * k), -.8, f.kind === 'slash' ? 2.7 : Math.PI * 2 - .8); g.stroke();
+      } else if (f.kind === 'lightning') {
+        g.strokeStyle = '#fff1a7'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.tx + 5, f.ty - 24); g.lineTo(f.tx - 5, f.ty - 22); g.lineTo(f.tx, f.ty); g.stroke();
       } else if (f.kind === 'stone' || f.kind === 'oil') {
         stamp(g, f.kind === 'oil' ? 'pot' : 'stone', f.x + (f.tx - f.x) * k, f.y + (f.ty - f.y) * k - 17 * Math.sin(Math.PI * k), 10, heightRatio);
       } else {
@@ -352,70 +308,66 @@ export class TowerScene implements Scene {
       g.restore();
     }
   }
-  private drawTray(ui: UI, y: number, panelH: number, actionH: number, interactive: boolean) {
-    const b = this.battle, u = ui.u, t = b.towers[this.selected], sel = this.selected >= 0;
-    const press = (clicked: boolean) => clicked && interactive && !this.busy;
-    ui.panel(8 * u, y, 734 * u, panelH, 'paper');
-    const startX = 24 * u, rowY = y + 39 * u, btnH = panelH - 87 * u, detailY = rowY + btnH + 2 * u;
-    let head = sel ? '已选空位 · 点塔种建造' : this.buildKind ? TOWERS[this.buildKind].name + ' · 点空位连建' : '选塔种，再点空位';
-    if (t) {
-      const rank = t.branch === undefined ? t.level + '级' : TOWERS[t.kind].branches[t.branch];
-      head = `${TOWERS[t.kind].name} · ${rank} · 射程${towerRange(t.kind, t.branch)}`;
+  private drawActions(ui: UI, y: number, h: number, interactive: boolean) {
+    const b = this.battle, u = ui.u, wave = b.phase === 'ready' ? b.wave + 1 : b.wave;
+    const foe = wave === 8 || wave === WAVES ? BOSSES[b.map.bosses[wave === 8 ? 0 : 1]].name + '出阵' : '第 ' + wave + ' 波';
+    const status = this.aiming ? '点地图指定将令落点' : b.phase === 'ready' ? foe + ' · ' + Math.ceil(b.countdown) + ' 秒后出兵' : foe + ' · 防守中';
+    ui.text(status, 20 * u, y - 24 * u, 23, GREEN, 'left', null);
+    ui.text(`升级经验 ${b.xp}/${b.xpNeeded}`, ui.W - 20 * u, y - 24 * u, 22, MUTED, 'right', null);
+    const hero = HERO_BY_ID[b.hero], cmd = b.hero === 'zhaoyun' ? '龙胆突阵' : '鸣金震阵';
+    if (ui.button('td_command', 9 * u, y, 238 * u, h, this.aiming ? '取消选点' : cmd, C.btnRed, {
+      icon: 'hero_' + hero.id + '_0', size: 25, sub: b.commandCd > 0 ? `冷却 ${Math.ceil(b.commandCd)} 秒` : '指定落点',
+      disabled: b.phase !== 'wave' || b.commandCd > 0
+    }) && interactive) this.aiming = !this.aiming;
+    if (ui.button('td_aid', 254 * u, y, 238 * u, h, VIDEO ? '援建' : '免费援建', C.btnGold, {
+      icon: VIDEO ? 'video' : 'td_arrow1', size: 25, sub: `额外塔位 ${AID_LIMIT - b.aidUsed}/${AID_LIMIT}`,
+      disabled: !b.canReinforce || this.busy
+    }) && interactive) void this.reward('aid');
+    if (ui.button('td_send', 499 * u, y, 242 * u, h, b.phase === 'ready' ? '提前出兵' : '敌军行进中', C.btnGreen, {
+      size: 25, sub: b.phase === 'ready' ? `+${b.earlyXP} 经验` : '第 ' + b.wave + ' 波', disabled: b.phase !== 'ready'
+    }) && interactive) { b.startWave(); playSfx('boss'); }
+  }
+
+  private cardInfo(card: TowerCard) {
+    const b = this.battle;
+    if (card.type === 'tower') {
+      const d = TOWERS[card.kind], [x, y] = b.map.sites[card.slot];
+      const side = (x < 120 ? '西' : x > 200 ? '东' : '') + (y < 138 ? '北' : y > 264 ? '南' : '');
+      const branch = card.branch;
+      const location = (side || '中路') + (card.slot + 1) + '号';
+      const action = card.level === 1 ? '新建' : branch === undefined ? '升二级' : d.branches[branch];
+      return {
+        label: '建筑', color: GREEN, icon: 'td_' + card.kind + card.level, name: d.name,
+        action: action + ' · ' + location, desc: branch === undefined ? d.desc : d.effects[branch]
+      };
     }
-    if (this.aiming) head = '选择将令落点';
-    ui.text(head, startX, y + 21 * u, 25, INK, 'left', null);
-    const waveInfo = b.phase === 'ready' ? `第 ${b.wave + 1} 波 · ${Math.ceil(b.countdown)} 秒` : `第 ${b.wave} 波 · 进攻中`;
-    ui.text(waveInfo, ui.W - startX, y + 21 * u, 22, MUTED, 'right', null);
-    if (this.aiming) {
-      const dragon = b.hero === 'zhaoyun';
-      ui.icon('hero_' + b.hero + '_0', 75 * u, y + panelH * .61, 83 * u);
-      ui.text(dragon ? '龙胆突阵' : '鸣金震阵', 136 * u, y + panelH * .43, 28, RED, 'left', null);
-      ui.text(dragon ? '点地图，重击并短暂眩晕周围敌军' : '点地图，震伤周围敌军并眩晕两秒', 136 * u, y + panelH * .76, 22, INK, 'left', null);
-    } else if (!t) {
-      TOWER_KINDS.forEach((kind, i) => {
-        const spec = TOWERS[kind], x = (20 + i * 143) * u, w = 137 * u;
-        const active = kind === this.buildKind;
-        if (press(ui.button('td_pick_' + kind, x, rowY, w, btnH, spec.name, active ? C.btnRed : C.btnGray, { icon: 'td_' + kind + '1', size: 24, sub: spec.cost + ' 粮', disabled: b.grain < spec.cost }))) {
-          if (sel) this.place(this.selected, kind);
-          else this.buildKind = active ? null : kind;
-        }
-      });
-      const wave = b.phase === 'ready' ? b.wave + 1 : b.wave;
-      let hint = sel ? '按住塔种预览射程，松手建造' : b.map.hint;
-      if (this.buildKind) hint = TOWERS[this.buildKind].desc + ' · 按住空位看射程';
-      else if (!sel && (wave === 8 || wave === WAVES)) hint = '敌将 ' + BOSSES[b.map.bosses[wave === 8 ? 0 : 1]].name + ' 随队出阵';
-      ui.text(hint, ui.W / 2, y + panelH - 23 * u, 22, MUTED, 'center', null);
-    } else {
-      const price = upgradePrice(t.kind, t.level);
-      if (t.level === 2) {
-        for (const branch of [0, 1] as const) {
-          if (press(ui.button('td_branch_' + branch, (34 + branch * 233) * u, rowY, 222 * u, btnH, TOWERS[t.kind].branches[branch], C.btnBlue, { sub: price + ' 粮', size: 25, disabled: b.grain < price }))) {
-            if (b.upgrade(this.selected, branch)) playSfx('evolve');
-          }
-          ui.wrapText(TOWERS[t.kind].effects[branch], (145 + branch * 233) * u, detailY, 222 * u, 20, INK, 1.05, 'center', null);
-        }
-      } else {
-        if (press(ui.button('td_upgrade', 34 * u, rowY, 278 * u, btnH, t.level === 3 ? '已满级' : '升至二级', C.btnGold, { sub: t.level === 3 ? undefined : price + ' 粮', size: 25, disabled: t.level === 3 || b.grain < price }))) {
-          if (b.upgrade(this.selected)) playSfx('levelup');
-        }
-        ui.text(t.branch === undefined ? TOWERS[t.kind].desc : TOWERS[t.kind].effects[t.branch], startX, y + panelH - 23 * u, 22, INK, 'left', null);
+    if (card.type === 'ally') {
+      const d = ALLY_CARDS[card.id], lv = (b.allies.find(a => a.id === card.id)?.level || 0) + 1;
+      return { label: '武将', color: RED, icon: 'hero_' + card.id + '_0', name: d.name, action: lv === 1 ? '上阵 · ' + d.skill : '强化至 ' + lv + ' 级', desc: d.desc + (lv > 1 ? ' 本将技能伤害提升。' : '') };
+    }
+    const d = TACTIC_CARDS[card.id], lv = (b.tactics.find(t => t.id === card.id)?.level || 0) + 1;
+    return { label: '特殊效果', color: '#335880', icon: d.icon, name: d.name, action: lv === 1 ? '本局生效' : '强化至 ' + lv + ' 级', desc: d.desc + (lv > 1 ? ' 效果增强。' : '') };
+  }
+
+  private drawCards(ui: UI) {
+    const b = this.battle, offer = b.offer!, u = ui.u;
+    ui.layer = 1; ui.dim(.65); ui.blocker('td_cards_block');
+    const f = dialogFrame(ui, 724 * u, 488 * u, offer.aid ? '援建 · 解锁塔位' : '军阵升级 · Lv.' + b.level);
+    ui.text(offer.aid ? '任选一座，立即部署在援建位' : '选择一项，本局生效', ui.W / 2, f.y + 85 * u, 25, MUTED, 'center', null);
+    offer.cards.forEach((card, i) => {
+      const d = this.cardInfo(card), x = f.x + (17 + i * 232) * u, y = f.y + 126 * u, w = 226 * u, h = 326 * u;
+      ui.panel(x, y, w, h, 'paper');
+      ui.text(d.label, x + w / 2, y + 30 * u, 23, d.color, 'center', null);
+      ui.icon(d.icon, x + w / 2, y + 91 * u, 71 * u);
+      ui.text(d.name, x + w / 2, y + 157 * u, 31, INK, 'center', null);
+      ui.text(d.action, x + w / 2, y + 201 * u, 21, d.color, 'center', null);
+      ui.wrapText(d.desc, x + 12 * u, y + 228 * u, w - 24 * u, 21, INK, 1.18, 'left', null);
+      if (ui.clicked('td_reward_' + i, x, y, w, h) && b.choose(card)) {
+        this.aiming = false; playSfx('levelup');
+        ui.toast(d.name + ' · ' + d.action);
       }
-      if (press(ui.button('td_sell', 506 * u, rowY, 201 * u, btnH, '出售', C.btnGray, { sub: '返 ' + Math.floor(t.spent * .7) + ' 粮', size: 25 })) && b.sell(this.selected)) this.selected = -1;
-    }
-    const hero = HERO_BY_ID[b.hero], cmd = b.hero === 'zhaoyun' ? '龙胆突阵' : '鸣金震阵', by = y + panelH + 6 * u;
-    if (press(ui.button('td_command', 9 * u, by, 357 * u, actionH, this.aiming ? '取消选点' : cmd, C.btnRed, {
-      size: 28, icon: 'hero_' + hero.id + '_0', sub: b.commandCd > 0 ? `冷却 ${Math.ceil(b.commandCd)} 秒` : hero.name + ' · 指定落点', disabled: b.phase !== 'wave' || b.commandCd > 0
-    }))) {
-      this.aiming = !this.aiming;
-      this.buildKind = null;
-      this.selected = -1;
-    }
-    if (press(ui.button('td_send', 377 * u, by, 364 * u, actionH, b.phase === 'ready' ? '提前出兵' : '敌军行进中', C.btnGreen, {
-      size: 28, sub: b.phase === 'ready' ? `立即得 ${b.earlyGrain} 粮` : '第 ' + b.wave + ' 波', disabled: b.phase !== 'ready'
-    }))) {
-      b.startWave();
-      playSfx('boss');
-    }
+    });
+    ui.layer = 0;
   }
 
   private drawPause(ui: UI) {
@@ -423,13 +375,18 @@ export class TowerScene implements Scene {
     ui.layer = 1;
     ui.dim(.61);
     ui.blocker('td_pause_block');
-    const f = dialogFrame(ui, 614 * u, 552 * u, '暂停布阵');
+    const roster = [];
+    if (b.allies.length) roster.push('援将　' + b.allies.map(a => ALLY_CARDS[a.id].name + ' Lv.' + a.level).join('　'));
+    if (b.tactics.length) roster.push('特效　' + b.tactics.map(t => TACTIC_CARDS[t.id].name + ' Lv.' + t.level).join('　'));
+    const extra = roster.length * 38 * u;
+    const f = dialogFrame(ui, 614 * u, 552 * u + extra, '暂停布阵');
     ui.text(`城门 ${b.hp}/20   ·   已漏 ${b.leaks} 个敌人`, ui.W / 2, f.y + 100 * u, 26, INK, 'center', null);
-    if (ui.button('td_resume', f.x + 50 * u, f.y + 155 * u, 514 * u, 86 * u, '继续布阵', C.btnGreen, { disabled: this.busy })) this.paused = false;
-    if (ui.button('td_repair', f.x + 50 * u, f.y + 258 * u, 514 * u, 86 * u, '修复城门 +5', C.btnGold, {
+    roster.forEach((line, i) => ui.text(line, ui.W / 2, f.y + (144 + i * 38) * u, 21, MUTED, 'center', null));
+    if (ui.button('td_resume', f.x + 50 * u, f.y + extra + 155 * u, 514 * u, 86 * u, '继续布阵', C.btnGreen, { disabled: this.busy })) this.paused = false;
+    if (ui.button('td_repair', f.x + 50 * u, f.y + extra + 258 * u, 514 * u, 86 * u, '修复城门 +5', C.btnGold, {
       icon: VIDEO ? 'video' : undefined, sub: b.repaired ? '本局已用' : b.hp === GATE_HP ? '城门完好' : '每局一次', disabled: this.busy || b.repaired || b.hp === GATE_HP
     })) void this.reward('repair');
-    if (ui.button('td_quit', f.x + 50 * u, f.y + 374 * u, 514 * u, 86 * u, '撤军结算', C.btnGray, { disabled: this.busy })) {
+    if (ui.button('td_quit', f.x + 50 * u, f.y + extra + 374 * u, 514 * u, 86 * u, '撤军结算', C.btnGray, { disabled: this.busy })) {
       b.phase = 'loss';
       this.finish();
     }

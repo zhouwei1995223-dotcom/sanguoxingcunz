@@ -66,7 +66,7 @@ export class LoadingScene implements Scene {
   private route() {
     if (DEBUG.webPlaytest && Number.isInteger(DEBUG.tower) && TOWER_MAPS[DEBUG.tower - 1]) {
       save.homeMode = 'tower';
-      game.setScene(new TowerScene(DEBUG.tower, DEBUG.rich));
+      game.setScene(new TowerScene(DEBUG.tower));
       return;
     }
     if (save.guide === 0) {
