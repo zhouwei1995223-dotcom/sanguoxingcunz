@@ -7,12 +7,27 @@ export interface Marcher {
   x: number; y: number; route: number; next: number; remaining: number; hp: number; maxHp: number;
   speed: number; armor: boolean; gateDamage: number; bounty: number; sprite: string; left: boolean; stun: number; flash: number; frozenUntil: number;
   banner: boolean; shield: number; maxShield: number;
+  /** 敌将名，仅用于画面横幅。 */
+  name?: string;
 }
 export interface Strike {
   kind: TowerKind | 'command' | 'slash' | 'roar' | 'frost' | 'lightning' | 'deploy' | 'iceShard' | 'arc' | 'blast' | 'dust' | 'breakShield'; x: number; y: number; tx: number; ty: number;
   age: number; life: number; radius: number; impactDamage?: number; burnTime?: number; target?: Marcher;
 }
-interface OilPatch { x: number; y: number; radius: number; damage: number; life: number; tick: number }
+export interface OilPatch { x: number; y: number; radius: number; damage: number; life: number; maxLife: number; tick: number }
+/** 只给画面用的战斗事件：场景每帧取走；模拟器不开 fxOn，不会堆积。 */
+export type TowerEvent =
+  | { t: 'hit'; e: Marcher; dmg: number }
+  | { t: 'kill'; e: Marcher }
+  | { t: 'leak'; e: Marcher }
+  | { t: 'fire'; slot: number; kind: TowerKind; tx: number; ty: number }
+  | { t: 'impact'; kind: 'arrow' | 'stone' | 'oil' | 'blast'; x: number; y: number; r: number }
+  | { t: 'build'; slot: number; level: number }
+  | { t: 'boss'; e: Marcher; final: boolean }
+  | { t: 'tactic'; id: TacticId; x: number; y: number }
+  | { t: 'ally'; id: AllyId; x: number; y: number; tx: number; ty: number }
+  | { t: 'command'; x: number; y: number; r: number }
+  | { t: 'shield'; x: number; y: number };
 
 const distance = (x: number, y: number, a: number, b: number) => Math.hypot(x - a, y - b);
 const routeLength = (path: Point[]) => path.slice(1).reduce((s, p, i) => s + distance(...p, ...path[i]), 0);
@@ -24,7 +39,10 @@ export class TowerBattle {
   readonly oil: OilPatch[] = [];
   readonly formations = new Set<TacticId>();
   readonly fallen: Marcher[] = [];
-  private readonly lengths: number[];
+  readonly lengths: number[];
+  /** 打开后记录 events 供画面使用（模拟器保持关闭）。 */
+  fxOn = false;
+  readonly events: TowerEvent[] = [];
   level = 1;
   xp = 0;
   aidUsed = 0;
@@ -45,6 +63,9 @@ export class TowerBattle {
     this.towers = map.sites.map(() => null);
     this.towers[0] = { kind: 'arrow', level: 1, cooldown: 0, firedAt: -1, left: false };
     this.lengths = map.routes.map(routeLength);
+  }
+  private emit(ev: TowerEvent) {
+    if (this.fxOn && this.events.length < 400) this.events.push(ev);
   }
   get over() { return this.phase === 'win' || this.phase === 'loss'; }
   get stars() { return this.phase !== 'win' ? 0 : this.leaks === 0 ? 3 : this.leaks <= 5 ? 2 : 1; }
@@ -115,6 +136,7 @@ export class TowerBattle {
       this.towers[card.slot] = { kind: card.kind, level: card.level, branch: card.branch, cooldown: current?.cooldown ?? 0, firedAt: -1, left: current?.left ?? false };
       const [x, y] = this.map.sites[card.slot];
       this.strikes.push({ kind: 'deploy', x, y, tx: x, ty: y - 7, age: 0, life: 1, radius: 27 });
+      this.emit({ t: 'build', slot: card.slot, level: card.level });
     } else if (card.type === 'ally') {
       const ally = this.allies.find(a => a.id === card.id);
       if (ally) ally.level++;
@@ -145,6 +167,7 @@ export class TowerBattle {
     if (this.offer || this.over || this.commandCd > 0) return false;
     const dragon = this.hero === 'zhaoyun', radius = dragon ? 69 : 80;
     this.strikes.push({ kind: 'command', x, y, tx: x, ty: y, age: 0, life: 0.8, radius });
+    this.emit({ t: 'command', x, y, r: radius });
     for (const e of this.enemies) if (distance(x, y, e.x, e.y) <= radius) {
       this.hit(e, (dragon ? 90 : 62) + (1 + 14 * this.progress) * (dragon ? 6 : 4));
       e.stun = dragon ? 0.9 : 2;
@@ -174,8 +197,9 @@ export class TowerBattle {
       speed: (boss ? 17 : mounted ? 36 : armored ? 21 : 26) * (1 + .08 * p) * (.96 + .08 * this.random()),
       armor: armored, gateDamage: boss ? 5 : elite ? 2 : 1, bounty: boss ? 34 : elite ? 12 : 4,
       sprite: (boss ? BOSSES[id] : ENEMIES[id]).sprite, left: false, stun: 0, flash: 0, frozenUntil: 0,
-      banner: elite && this.map.id === 2, shield, maxShield: shield
+      banner: elite && this.map.id === 2, shield, maxShield: shield, name: boss ? BOSSES[id].name : undefined
     });
+    if (boss) this.emit({ t: 'boss', e: this.enemies[this.enemies.length - 1], final: rank === 'final' });
   }
   private hit(e: Marcher, damage: number, siege = false) {
     if (e.hp <= 0) return;
@@ -184,10 +208,14 @@ export class TowerBattle {
       const absorbed = Math.min(damage, e.shield / multiplier);
       e.shield -= absorbed * multiplier;
       damage -= absorbed;
-      if (e.shield <= 0) this.strikes.push({ kind: 'breakShield', x: e.x, y: e.y, tx: e.x, ty: e.y, age: 0, life: .32, radius: 14 });
+      if (e.shield <= 0) {
+        this.strikes.push({ kind: 'breakShield', x: e.x, y: e.y, tx: e.x, ty: e.y, age: 0, life: .32, radius: 14 });
+        this.emit({ t: 'shield', x: e.x, y: e.y });
+      }
     }
     e.hp -= damage;
     e.flash = .08;
+    this.emit({ t: 'hit', e, dmg: damage });
   }
 
   private collectKills() {
@@ -195,6 +223,7 @@ export class TowerBattle {
       const e = this.enemies[i];
       if (e.hp > 0) continue;
       this.fallen.push(e);
+      this.emit({ t: 'kill', e });
       this.xp += e.bounty;
       this.kills++;
       this.enemies.splice(i, 1);
@@ -206,6 +235,7 @@ export class TowerBattle {
     const tx = target.x, ty = target.y;
     t.firedAt = this.elapsed;
     t.left = tx < x;
+    this.emit({ t: 'fire', slot: this.towers.indexOf(t), kind, tx, ty });
     let endX = tx, endY = ty, radius = 0;
     if (kind === 'arrow') {
       this.strikes.push({ kind, x, y: y - 17, tx, ty, age: 0, life: .14, radius: 0,
@@ -263,6 +293,7 @@ export class TowerBattle {
       if (a.cooldown > 0) continue;
       a.cooldown = spec.interval;
       const damage = spec.damage * (1 + (a.level - 1) * 0.65);
+      this.emit({ t: 'ally', id: a.id, x: a.x, y: a.y, tx: target.x, ty: target.y });
       if (a.id === 'huangzhong') {
         this.strikes.push({ kind: 'arrow', x: a.x, y: a.y - 14, tx: target.x, ty: target.y, age: 0, life: .18, radius: 0,
           target, impactDamage: damage * (target.gateDamage > 1 ? 1.8 : 1) });
@@ -281,11 +312,13 @@ export class TowerBattle {
       const living = line.filter(e => e.hp > 0), first = living[0];
       if (!first) break;
       t.cooldown = TACTIC_CARDS[t.id].interval;
+      if (t.id !== 'lightning') this.emit({ t: 'tactic', id: t.id, x: first.x, y: first.y });
       const power = 1 + 0.65 * (t.level - 1);
       if (t.id === 'wildfire') {
-        this.oil.push({ x: first.x, y: first.y, radius: 33, damage: 13 * power, life: 2.5, tick: 0 });
+        this.oil.push({ x: first.x, y: first.y, radius: 33, damage: 13 * power, life: 2.5, maxLife: 2.5, tick: 0 });
       } else if (t.id === 'lightning') {
         for (const e of living.slice(0, 3)) {
+          this.emit({ t: 'tactic', id: 'lightning', x: e.x, y: e.y });
           this.hit(e, 46 * power);
           this.strikes.push({ kind: 'lightning', x: e.x - 8, y: e.y - 45, tx: e.x, ty: e.y, age: 0, life: .3, radius: 0 });
         }
@@ -306,7 +339,10 @@ export class TowerBattle {
   private impact(s: Strike) {
     const damage = s.impactDamage!;
     if (s.target) {
-      if (this.enemies.includes(s.target)) this.hit(s.target, damage);
+      if (this.enemies.includes(s.target)) {
+        this.hit(s.target, damage);
+        this.emit({ t: 'impact', kind: 'arrow', x: s.target.x, y: s.target.y, r: 0 });
+      }
       return;
     }
     if (s.kind === 'oil') {
@@ -314,8 +350,10 @@ export class TowerBattle {
         const radius = s.radius + 13;
         for (const e of this.enemies) if (distance(s.tx, s.ty, e.x, e.y) <= radius) this.hit(e, damage, true);
         this.strikes.push({ ...s, kind: 'blast', age: 0, life: .36, radius, impactDamage: undefined });
+        this.emit({ t: 'impact', kind: 'blast', x: s.tx, y: s.ty, r: radius });
       }
-      this.oil.push({ x: s.tx, y: s.ty, radius: s.radius, damage, life: s.burnTime!, tick: 0 });
+      this.oil.push({ x: s.tx, y: s.ty, radius: s.radius, damage, life: s.burnTime!, maxLife: s.burnTime!, tick: 0 });
+      this.emit({ t: 'impact', kind: 'oil', x: s.tx, y: s.ty, r: s.radius });
       return;
     }
     let frozen = false;
@@ -325,6 +363,7 @@ export class TowerBattle {
       this.hit(e, damage * (e.armor ? 1.4 : 1), true);
     }
     this.strikes.push({ ...s, kind: 'dust', age: 0, life: .32, impactDamage: undefined });
+    this.emit({ t: 'impact', kind: 'stone', x: s.tx, y: s.ty, r: s.radius });
     if (frozen && this.formations.has('frost')) {
       const outer = this.enemies.filter(e => {
         const dist = distance(s.tx, s.ty, e.x, e.y);
@@ -434,6 +473,7 @@ export class TowerBattle {
         e.next++;
       }
       if (e.next === path.length) {
+        this.emit({ t: 'leak', e });
         this.leaks++;
         this.hp = Math.max(0, this.hp - e.gateDamage);
         this.enemies.splice(i, 1);

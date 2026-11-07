@@ -1,14 +1,15 @@
 import { game, Scene, Dialog } from '../game';
 import { fmtTime } from '../core/math';
-import { Marcher, TowerBattle } from '../battle/tower';
+import { Marcher, OilPatch, TowerBattle } from '../battle/tower';
 import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, FORMATIONS, TACTIC_IDS, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, MARCH_SECONDS, GATE_HP, commandBonus } from '../data/tower';
 import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { BOSSES } from '../data/enemies';
 import { IS_WEB, IS_WX } from '../data/platformConfig';
 import { getPlatform } from '../platform';
 import { sprite } from '../gfx/atlas';
-import { drawMissile, drawImpact, drawThunder } from '../gfx/towerEffects';
-import { drawTerrain } from '../gfx/art/tower';
+import { drawMissile, drawImpact, drawThunder, drawLobShadow } from '../gfx/towerEffects';
+import { drawTerrain, drawSpawnFlag, HANSHUI_RIVER } from '../gfx/art/tower';
+import { Death, TowerFx, arcHeight } from '../gfx/towerFx';
 import { drawXuanTexture } from '../ui/xuanPaper';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, rewardEntries, rewardRow } from '../ui/widgets';
@@ -48,6 +49,7 @@ export class TowerStageDialog implements Dialog {
       const stars = save.tower.stars[map.id] || 0;
       ui.text('★'.repeat(stars) + '☆'.repeat(3 - stars), x + w - 17 * u, y + 111 * u, 24, C.gold, 'right');
       if (ui.clicked('td_map_' + map.id, x, y, w, h)) {
+        if (!open) { ui.toast(`通关第 ${map.id - 1} 关后解锁`); continue; }
         save.tower.selected = map.id;
         markDirty();
         return false;
@@ -101,9 +103,14 @@ export class TowerScene implements Scene {
   private aiming = false;
   private accumulator = 0;
   private readonly sdk = getPlatform();
+  readonly fx: TowerFx;
+  private quitArmed = 0;
   constructor(level: number) {
     const map = TOWER_MAPS[level - 1] || TOWER_MAPS[0], id = towerCommander(), hero = save.heroes[id];
     this.battle = new TowerBattle(map, id, commandBonus(hero.lv, hero.star, hero.peak || 0));
+    this.battle.fxOn = true;
+    const gate = map.routes[0][map.routes[0].length - 1];
+    this.fx = new TowerFx(gate, map.sites, save.settings.lowPower);
   }
   enter() {
     const b = this.battle;
@@ -115,6 +122,25 @@ export class TowerScene implements Scene {
     this.sdk.report('battle_start', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: 0 });
   }
   onHide() { if (!this.result && !this.busy) this.paused = true; }
+  /** 取走战斗事件交给特效层，并统一播放音效。 */
+  private playEvents() {
+    const b = this.battle, fx = this.fx;
+    if (!b.events.length) return;
+    let shots = false, leaked = false;
+    for (const ev of b.events) {
+      if (ev.t === 'fire' && ev.kind !== 'drum') shots = true;
+      else if (ev.t === 'leak') leaked = true;
+    }
+    fx.consume(b, b.events, save.settings.dmgNum);
+    if (shots) playSfx('shoot');
+    for (const s of fx.sounds) playSfx(s);
+    fx.sounds.clear();
+    if (fx.bossArrived) {
+      fx.bossArrived = false;
+      if (!b.over) playBgm('bgm_boss');
+    }
+    if (leaked && save.settings.vibrate) this.sdk.vibrateShort();
+  }
   private finish() {
     if (this.result) return;
     const b = this.battle;
@@ -155,16 +181,22 @@ export class TowerScene implements Scene {
   }
   update(dt: number) {
     const ui = game.ui, u = ui.u, b = this.battle, g = ui.ctx;
+    let simDt = 0;
     if (!this.paused && !this.busy && !b.over && !b.offer) {
-      let fired = false;
       this.accumulator += dt * this.speed;
-      while (this.accumulator >= 1 / 30 && !b.over) {
+      while (this.accumulator >= 1 / 30 && !b.over && !b.offer) {
         b.update(1 / 30);
         this.accumulator -= 1 / 30;
-        fired ||= b.strikes.some(f => f.age === 0 && (f.kind === 'arrow' || f.kind === 'bolt' || f.kind === 'stone' || f.kind === 'oil'));
+        simDt += 1 / 30;
       }
-      if (fired) playSfx('shoot');
+      if (b.offer) this.accumulator = 0;
+    } else if (b.over && !this.paused) {
+      // 结算后让倒地、烟尘等动画自然收尾。
+      simDt = dt;
     }
+    this.playEvents();
+    this.fx.update(simDt, b);
+    this.quitArmed = Math.max(0, this.quitArmed - dt);
     if (b.over || b.offer) this.aiming = false;
     if (b.over) this.finish();
     g.fillStyle = '#e7dcc2';
@@ -178,7 +210,8 @@ export class TowerScene implements Scene {
     if (ui.button('td_pause', ui.W - 103 * u, y, 82 * u, 66 * u, '暂停', C.btnGray, { size: 22 }) && interact) this.paused = true;
     const hudY = y + 70 * u, hudH = (compact ? 54 : 68) * u;
     ui.panel(8 * u, hudY, ui.W - 16 * u, hudH, 'paper');
-    const hud = [['城门', b.hp + '/' + GATE_HP, b.hp <= 6 ? RED : GREEN], ['阵级', String(b.level), RED], ['用时', fmtTime(b.elapsed), INK], ['漏怪', String(b.leaks), RED]];
+    const gateCol = this.fx.hudHit > 0 && Math.floor(this.fx.hudHit * 10) % 2 === 0 ? '#e0402f' : b.hp <= 6 ? RED : GREEN;
+    const hud = [['城门', b.hp + '/' + GATE_HP, gateCol], ['阵级', String(b.level), RED], ['用时', fmtTime(b.elapsed), INK], ['漏怪', String(b.leaks), RED]];
     hud.forEach(([label, value, col], i) => {
       const x = (24 + i * 187) * u;
       ui.text(label, x, hudY + hudH / 2, 22, MUTED, 'left', null);
@@ -197,15 +230,23 @@ export class TowerScene implements Scene {
     const mapX = (ui.px - x) / scaleX, mapY = (ui.py - fy) / scaleY;
     g.fillStyle = '#6c6149';
     g.fillRect(x - 3 * u, fy - 3 * u, fw + 6 * u, fh + 6 * u);
+    const [shx, shy] = save.settings.screenShake ? this.fx.shakeOffset : [0, 0];
     g.save();
-    g.translate(x, fy);
-    g.scale(scaleX, scaleY);
-    g.imageSmoothingEnabled = false;
+    // 先按屏幕坐标裁剪，再整体晃动：震屏时地图边缘不会露出空隙。
     g.beginPath();
-    g.rect(0, 0, FIELD_W, FIELD_H);
+    g.rect(x, fy, fw, fh);
     g.clip();
+    g.imageSmoothingEnabled = false;
+    // 晃动时先垫一张不动的底图，露出的边缘看不出来。
+    if (shx || shy) g.drawImage(this.terrain, x, fy, fw, fh);
+    g.translate(x + shx * scaleX, fy + shy * scaleY);
+    g.scale(scaleX, scaleY);
     g.drawImage(this.terrain, 0, 0);
     this.drawUnits(g, scaleX / scaleY);
+    g.restore();
+    g.save();
+    g.beginPath(); g.rect(x, fy, fw, fh); g.clip();
+    this.drawOverlay(ui, x + shx * scaleX, fy + shy * scaleY, scaleX, scaleY, fw, fh);
     g.restore();
     if (interact && !this.paused && this.aiming && ui.clicked('td_target', x, fy, fw, fh)) {
       if (b.cast(mapX, mapY)) playSfx('thrust');
@@ -218,152 +259,430 @@ export class TowerScene implements Scene {
   }
 
   private drawUnits(g: CanvasRenderingContext2D, heightRatio: number) {
-    const b = this.battle;
-    for (const f of b.oil) {
-      g.fillStyle = 'rgba(179,83,35,.45)';
-      g.beginPath();
-      g.ellipse(f.x, f.y, f.radius, f.radius * .74, 0, 0, Math.PI * 2);
-      g.fill();
-      for (let j = 0; j < 3; j++) stamp(g, 'flame' + Math.floor((b.elapsed * 8 + j) % 2), f.x + (j - 1) * 8, f.y + 3 + (j % 2) * 4, 11, heightRatio);
-    }
+    const b = this.battle, fx = this.fx, t = fx.time;
+    // 环境：云影、河面波光
+    if (b.map.id === 2) this.drawRiverGlint(g, t);
+    fx.drawDecals(g);
+    for (const f of b.oil) this.drawFire(g, f, heightRatio);
     b.map.sites.forEach(([x, y], i) => {
-      const t = b.towers[i], reserve = i >= b.openSites;
+      const tw = b.towers[i], reserve = i >= b.openSites;
+      if (tw) {
+        // 底座阴影 + 三级塔的光环
+        g.fillStyle = 'rgba(48,36,22,.28)';
+        g.beginPath(); g.ellipse(x, y + 4, 17, 7, 0, 0, Math.PI * 2); g.fill();
+        if (tw.level === 3) {
+          const pulse = .5 + .5 * Math.sin(t * 3 + i);
+          g.strokeStyle = tw.branch === 1 ? `rgba(120,200,255,${.35 + .3 * pulse})` : `rgba(255,214,90,${.35 + .3 * pulse})`;
+          g.lineWidth = 1.5;
+          g.beginPath(); g.ellipse(x, y + 2, 15 + pulse * 2, 8 + pulse, 0, 0, Math.PI * 2); g.stroke();
+        }
+        return;
+      }
       g.beginPath();
       g.ellipse(x, y, 17, 10, 0, 0, Math.PI * 2);
-      g.fillStyle = reserve && !t ? '#cbb988' : '#dbccab';
+      g.fillStyle = reserve ? '#cbb988' : '#dbccab';
       g.fill();
-      g.setLineDash(t ? [] : [3, 2]);
+      g.setLineDash([3, 2]);
+      g.lineDashOffset = reserve ? 0 : -t * 4;
       g.lineWidth = 1;
       g.strokeStyle = reserve ? '#946826' : '#877b61';
       g.stroke();
       g.setLineDash([]);
-      if (t) {
-        const size = 33 + t.level * 2;
-        const age = b.elapsed - t.firedAt, beat = (b.elapsed + i * .13) % 1.3;
-        const motion = t.kind === 'drum' ? beat : age;
-        const pose = motion < .12 ? 1 : motion < .28 ? 2 : 0;
-        g.save(); g.translate(x, y + 3);
-        if (t.left) g.scale(-1, 1);
-        stamp(g, 'td_' + t.kind + t.level + (pose ? '_p' + pose : ''), 0, 0, size, heightRatio);
-        g.restore();
-        if (t.kind === 'drum' && beat < .45) {
-          g.save(); g.globalAlpha = .5 * (1 - beat / .45);
-          g.strokeStyle = '#f2d56e'; g.lineWidth = 1.5;
-          g.beginPath(); g.ellipse(x, y, 10 + beat * 44, 5 + beat * 22, 0, 0, Math.PI * 2); g.stroke(); g.restore();
-        }
-        g.fillStyle = '#443e2c';
-        g.fillRect(x - 7, y + 6, 14, 4);
-        g.fillStyle = '#efd27d';
-        for (let j = 0; j < t.level; j++)g.fillRect(x - 5 + j * 4, y + 7, 2, 2);
-      } else if (reserve) {
-        stamp(g, 'icon_lock', x, y + 4, 12, heightRatio);
+      if (reserve) stamp(g, 'icon_lock', x, y + 4, 12, heightRatio);
+      else if (i === b.towers.indexOf(null)) {
+        // 下一座塔落在这里：轻轻闪烁的小旗
+        g.globalAlpha = .45 + .35 * Math.sin(t * 4);
+        g.fillStyle = '#7a5a35'; g.fillRect(x - .5, y - 9, 1, 9);
+        g.fillStyle = '#c8392b'; g.fillRect(x + .5, y - 9, 5, 3);
+        g.globalAlpha = 1;
       }
     });
-    for (const e of b.enemies) {
-      if (e.banner && e.stun <= 0) {
-        g.save(); g.globalAlpha = .30; g.strokeStyle = '#ad561c'; g.lineWidth = 1.3;
-        g.setLineDash([4, 6]); g.lineDashOffset = -b.elapsed * 8;
-        g.beginPath(); g.arc(e.x, e.y, 43, 0, Math.PI * 2); g.stroke(); g.restore();
-      }
-      const sz = this.drawEnemy(g, e, heightRatio);
-      if (e.banner) {
-        const py = e.y - 18 * heightRatio, tip = Math.sin(b.elapsed * 9) * 2;
-        g.fillStyle = '#68482e'; g.fillRect(e.x + 8, py - 14, 2, 24);
-        g.fillStyle = e.stun > 0 ? '#9e886a' : '#be3c27';
-        g.beginPath(); g.moveTo(e.x + 10, py - 14); g.lineTo(e.x + 22, py - 12 + tip);
-        g.lineTo(e.x + 17, py - 8 + tip); g.lineTo(e.x + 22, py - 5 + tip); g.lineTo(e.x + 10, py - 6); g.fill();
-      }
-      if (e.shield > 0) {
-        const sx = e.x + (e.left ? -7 : 7), sy = e.y - 8;
-        g.fillStyle = '#6a4b26'; g.fillRect(sx - 4, sy - 7, 9, 10);
-        g.fillStyle = '#e6bd69'; g.fillRect(sx - 3, sy - 6, 7, 7); g.fillRect(sx - 2, sy + 1, 5, 2);
-        if (e.shield < e.maxShield / 2) { g.fillStyle = '#78552b'; g.fillRect(sx, sy - 5, 1.5, 4); g.fillRect(sx - 1, sy - 1, 1.5, 3); }
-      }
-      if (e.frozenUntil > b.elapsed) {
-        g.strokeStyle = '#cdffff'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(e.x - 8, e.y - 1); g.lineTo(e.x - 10, e.y - 8); g.lineTo(e.x - 4, e.y - 4);
-        g.lineTo(e.x, e.y - 12); g.lineTo(e.x + 4, e.y - 4); g.lineTo(e.x + 8, e.y - 7); g.lineTo(e.x + 7, e.y); g.stroke();
-      }
-      if (e.gateDamage > 1 || e.hp < e.maxHp) {
-        const w = sz * .87;
-        g.fillStyle = '#372b22';
-        g.fillRect(e.x - w / 2, e.y - sz * heightRatio - 1, w, 3);
-        g.fillStyle = e.gateDamage === 5 ? '#a52225' : '#ce702b';
-        g.fillRect(e.x - w / 2 + 1, e.y - sz * heightRatio, Math.max(0, (w - 2) * e.hp / e.maxHp), 1.5);
-      }
+    fx.drawParticles(g, heightRatio, 0);
+    // 按纵坐标排序：靠下的单位压住靠上的。
+    const list = this.drawList;
+    list.length = 0;
+    b.map.sites.forEach(([, y], i) => { if (b.towers[i]) list.push({ y: y + 3, kind: 0, i }); });
+    b.enemies.forEach((e, i) => list.push({ y: e.y + 3, kind: 1, i }));
+    fx.deaths.forEach((d, i) => list.push({ y: d.e.y + 2, kind: 2, i }));
+    b.allies.forEach((a, i) => list.push({ y: a.y + 3, kind: 3, i }));
+    const gate = b.map.routes[0][b.map.routes[0].length - 1];
+    list.push({ y: gate[1] + 13, kind: 4, i: 0 });
+    list.sort((p, q) => p.y - q.y);
+    for (const it of list) {
+      if (it.kind === 0) this.drawTower(g, it.i, heightRatio);
+      else if (it.kind === 1) this.drawEnemy(g, b.enemies[it.i], heightRatio);
+      else if (it.kind === 2) this.drawDeath(g, fx.deaths[it.i], heightRatio);
+      else if (it.kind === 3) this.drawAlly(g, it.i, heightRatio);
+      else this.drawGate(g, gate[0], gate[1], heightRatio);
     }
-    for (const e of b.fallen) this.drawEnemy(g, e, heightRatio);
-    for (const a of b.allies) {
-      const swing = ALLY_CARDS[a.id].interval - a.cooldown;
-      const thrust = swing < .28 ? Math.sin(Math.PI * swing / .28) * (a.id === 'huangzhong' ? -2 : 5) : 0;
-      stamp(g, 'hero_' + a.id + '_' + Math.floor(b.elapsed * 6) % 4 + (a.left ? '_L' : ''), a.x + (a.left ? -thrust : thrust), a.y + 3, 32, heightRatio);
-      g.fillStyle = '#31694c'; g.fillRect(a.x - 6, a.y + 4, 12, 2);
-    }
+    b.map.routes.forEach((r, i) => drawSpawnFlag(g, r[0][0], r[0][1], t, i * 2));
     for (const f of b.strikes) {
-      const k = f.age / f.life;
+      const k = Math.min(1, f.age / f.life);
       g.save();
       g.globalAlpha = f.kind === 'stone' || f.kind === 'oil' ? 1 : Math.max(0, 1 - k);
       if (f.kind === 'command') {
-        const dragon = b.hero === 'zhaoyun';
+        const dragon = b.hero === 'zhaoyun', ease = 1 - (1 - k) * (1 - k);
+        g.fillStyle = dragon ? 'rgba(220,250,255,.18)' : 'rgba(255,230,180,.2)';
+        g.beginPath(); g.arc(f.tx, f.ty, f.radius * ease, 0, Math.PI * 2); g.fill();
         g.strokeStyle = dragon ? '#fff4ae' : '#f5d3ac';
-        g.lineWidth = 2.5;
+        g.lineWidth = 3.5;
         g.beginPath();
-        g.arc(f.tx, f.ty, f.radius * (0.55 + 0.45 * k), 0, Math.PI * 2);
+        g.arc(f.tx, f.ty, f.radius * (0.35 + 0.65 * ease), 0, Math.PI * 2);
         g.stroke();
+        g.lineWidth = 1.5;
+        g.beginPath(); g.arc(f.tx, f.ty, f.radius * (0.2 + 0.5 * ease), 0, Math.PI * 2); g.stroke();
         if (dragon) {
+          // 白龙从左下冲向右上，身后拖出青白龙气。
           const dx = 75 * k - 32, dy = -0.52 * dx;
+          g.globalCompositeOperation = 'lighter';
           for (let i = 0; i < 7; i++) {
             const a = i * 2.4, ex = f.x + Math.cos(a) * 33, ey = f.y + Math.sin(a) * 29;
-            g.strokeStyle = i % 2 ? '#287c82' : '#ffffe8';
+            g.strokeStyle = i % 2 ? 'rgba(60,180,190,.8)' : 'rgba(255,255,235,.9)';
             g.lineWidth = i % 2 ? 4 : 2;
             g.beginPath();
             g.moveTo(ex - 18 + dx, ey + 10 + dy);
             g.lineTo(ex + 18 + dx, ey - 9 + dy);
             g.stroke();
           }
-          stamp(g, 'hero_zhaoyun_' + Math.floor(k * 12) % 4, f.x + dx, f.y + dy + 8, 33, heightRatio);
+          g.globalCompositeOperation = 'source-over';
+          stamp(g, 'hero_zhaoyun_' + Math.floor(k * 12) % 4, f.x + dx, f.y + dy + 8, 36, heightRatio);
         } else {
           g.strokeStyle = '#b65e32';
-          g.beginPath();
-          g.arc(f.tx, f.ty, 12 + 37 * k, 0, Math.PI * 2);
-          g.stroke();
+          for (const off of [0, .25]) {
+            const kk = Math.min(1, k + off);
+            g.globalAlpha = Math.max(0, 1 - kk);
+            g.lineWidth = 3;
+            g.beginPath(); g.arc(f.tx, f.ty, 12 + 55 * kk, 0, Math.PI * 2); g.stroke();
+          }
         }
       } else if (f.kind === 'roar' || f.kind === 'frost' || f.kind === 'slash' || f.kind === 'deploy') {
+        const ease = 1 - (1 - k) * (1 - k);
         g.strokeStyle = f.kind === 'frost' ? '#c3f5ff' : f.kind === 'slash' || f.kind === 'deploy' ? '#b1f1a5' : '#ffd08e';
-        g.lineWidth = f.kind === 'slash' ? 5 : 3;
-        const radius = f.radius * (.35 + .65 * k);
+        g.lineWidth = f.kind === 'slash' ? 6 : 3;
+        const radius = f.radius * (.35 + .65 * ease);
         const angle = f.kind === 'slash' ? -1.6 + k * 2.5 : -.8;
+        if (f.kind === 'slash') {
+          // 刀光：外宽内窄的月牙
+          g.globalCompositeOperation = 'lighter';
+          g.strokeStyle = 'rgba(150,255,170,.5)'; g.lineWidth = 9;
+          g.beginPath(); g.arc(f.tx, f.ty, radius, angle, angle + 2.6); g.stroke();
+          g.globalCompositeOperation = 'source-over';
+          g.strokeStyle = '#efffe0'; g.lineWidth = 3;
+        }
         g.beginPath(); g.arc(f.tx, f.ty, radius, angle, angle + (f.kind === 'slash' ? 2.6 : Math.PI * 2)); g.stroke();
         if (f.kind === 'frost') {
           for (let i = 0; i < 8; i++) {
-            const a = i * Math.PI / 4, dx = Math.cos(a), dy = Math.sin(a);
-            const x = f.tx + dx * radius, y = f.ty + dy * radius;
+            const a = i * Math.PI / 4 + k * .6, dx = Math.cos(a), dy = Math.sin(a);
+            const x = f.tx + dx * radius, y = f.ty + dy * radius * .7;
             g.fillStyle = i % 2 ? '#dfffff' : '#81cef0';
-            g.beginPath(); g.moveTo(x + dx * 6, y + dy * 6); g.lineTo(x - dy * 3, y + dx * 3);
+            g.beginPath(); g.moveTo(x + dx * 7, y + dy * 7); g.lineTo(x - dy * 3, y + dx * 3);
             g.lineTo(x - dx * 5, y - dy * 5); g.lineTo(x + dy * 3, y - dx * 3); g.fill();
           }
-        } else if (f.kind === 'roar' || f.kind === 'slash') {
-          g.strokeStyle = f.kind === 'roar' ? '#fff1ba' : '#efffc9'; g.lineWidth = 1.5;
-          g.beginPath(); g.arc(f.tx, f.ty, radius * .76, angle, angle + (f.kind === 'slash' ? 1.9 : Math.PI * 2)); g.stroke();
+        } else if (f.kind === 'roar') {
+          for (const off of [.18, .36]) {
+            g.strokeStyle = '#fff1ba'; g.lineWidth = 1.5;
+            g.beginPath(); g.arc(f.tx, f.ty, radius * (1 - off), 0, Math.PI * 2); g.stroke();
+          }
+        } else if (f.kind === 'deploy') {
+          g.strokeStyle = '#fff6c8'; g.lineWidth = 1;
+          g.beginPath(); g.arc(f.tx, f.ty, radius * .7, 0, Math.PI * 2); g.stroke();
         }
       } else if (f.kind === 'lightning' || f.kind === 'arc') {
         drawThunder(g, f);
       } else if (f.kind === 'dust' || f.kind === 'blast' || f.kind === 'breakShield') {
         drawImpact(g, f);
       } else if (f.kind === 'stone' || f.kind === 'oil') {
-        stamp(g, f.kind === 'oil' ? 'pot' : 'stone', f.x + (f.tx - f.x) * k, f.y + (f.ty - f.y) * k - 17 * Math.sin(Math.PI * k), 10, heightRatio);
+        const h = arcHeight(f) * Math.sin(Math.PI * k);
+        const gx = f.x + (f.tx - f.x) * k, gy = f.y + (f.ty - f.y) * k;
+        drawLobShadow(g, gx, gy + 2, h, f.kind === 'stone' ? 14 : 11);
+        g.translate(gx, gy - h - 4);
+        g.rotate(k * (f.kind === 'stone' ? 9 : 12) * (f.tx < f.x ? -1 : 1));
+        const size = (f.kind === 'stone' ? 12 : 11) * (1 + .25 * Math.sin(Math.PI * k));
+        stamp(g, f.kind === 'oil' ? 'pot' : 'stone', 0, size / 2, size, heightRatio);
       } else if (f.kind === 'arrow' || f.kind === 'bolt' || f.kind === 'iceShard') {
         drawMissile(g, f);
       }
       g.restore();
     }
+    fx.drawParticles(g, heightRatio, 1);
+    // 云影缓缓掠过
+    g.fillStyle = 'rgba(40,46,30,.07)';
+    for (let i = 0; i < 3; i++) {
+      const cx = ((t * 5 + i * 170) % 520) - 100, cy = 60 + i * 135 + Math.sin(t * .1 + i) * 10;
+      g.beginPath(); g.ellipse(cx, cy, 62, 24, 0, 0, Math.PI * 2); g.ellipse(cx + 40, cy + 8, 40, 18, 0, 0, Math.PI * 2); g.fill();
+    }
+    if (fx.flash > 0) {
+      g.fillStyle = fx.flashColor;
+      g.globalAlpha = Math.min(.45, fx.flash * .55);
+      g.fillRect(0, 0, FIELD_W, FIELD_H);
+      g.globalAlpha = 1;
+    }
+    if (this.aiming) {
+      g.strokeStyle = `rgba(255,214,90,${.5 + .4 * Math.sin(t * 8)})`;
+      g.lineWidth = 3;
+      g.strokeRect(2, 2, FIELD_W - 4, FIELD_H - 4);
+    }
   }
+  private readonly drawList: { y: number; kind: number; i: number }[] = [];
+
+  private drawRiverGlint(g: CanvasRenderingContext2D, t: number) {
+    const river = HANSHUI_RIVER;
+    g.fillStyle = 'rgba(235,250,245,.55)';
+    for (let i = 0; i < 18; i++) {
+      const s = ((i * .37 + t * .015) % 1) * (river.length - 1), j = Math.floor(s), f = s - j;
+      const [ax, ay] = river[j], [bx, by] = river[j + 1];
+      const off = Math.sin(i * 3.1) * 6, blink = Math.sin(t * 3 + i * 1.7);
+      if (blink < 0) continue;
+      g.globalAlpha = blink * .7;
+      g.fillRect(Math.round(ax + (bx - ax) * f), Math.round(ay + (by - ay) * f + off), 4, 1);
+    }
+    g.globalAlpha = 1;
+  }
+
+  private drawFire(g: CanvasRenderingContext2D, f: OilPatch, heightRatio: number) {
+    const t = this.fx.time, alive = f.maxLife - f.life;
+    const a = Math.min(1, f.life / .45) * Math.min(1, alive / .12);
+    g.save();
+    g.globalAlpha = a;
+    g.fillStyle = 'rgba(60,32,18,.32)';
+    g.beginPath(); g.ellipse(f.x, f.y, f.radius, f.radius * .7, 0, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = 'lighter';
+    const flick = .85 + .15 * Math.sin(t * 17 + f.x);
+    g.fillStyle = 'rgba(255,120,40,.28)';
+    g.beginPath(); g.ellipse(f.x, f.y - 2, f.radius * flick, f.radius * .66 * flick, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(255,200,80,.22)';
+    g.beginPath(); g.ellipse(f.x, f.y - 2, f.radius * .55, f.radius * .36, 0, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = 'source-over';
+    const n = Math.max(3, Math.round(f.radius / 5));
+    for (let j = 0; j < n; j++) {
+      const ang = j * 2.4 + f.x, r = f.radius * (.15 + .6 * ((j * .618) % 1));
+      const fx = f.x + Math.cos(ang) * r, fy = f.y + Math.sin(ang) * r * .66;
+      const s = (9 + 4 * Math.sin(t * 11 + j * 1.9)) * (.7 + .3 * a);
+      stamp(g, 'flame' + Math.floor((t * 9 + j) % 2), fx, fy + 3, s, heightRatio);
+    }
+    g.restore();
+  }
+
+  private drawTower(g: CanvasRenderingContext2D, i: number, heightRatio: number) {
+    const b = this.battle, tw = b.towers[i]!, [x, y] = b.map.sites[i], anim = this.fx.anims.get(i);
+    const size = 33 + tw.level * 2;
+    const age = b.elapsed - tw.firedAt, beat = (b.elapsed + i * .13) % 1.3;
+    const motion = tw.kind === 'drum' ? beat : age;
+    const pose = motion < .12 ? 1 : motion < .28 ? 2 : 0;
+    let sx = 1, sy = 1, lift = 0;
+    if (anim && anim.build < .5) {
+      const k = anim.build;
+      if (anim.level === 1) {
+        // 新建：从空中落下，落地压扁再弹回。
+        if (k < .22) { const f = 1 - k / .22; lift = 34 * f * f; sy = 1.08; sx = .94; }
+        else { const f = Math.sin(Math.PI * Math.min(1, (k - .22) / .26)); sy = 1 - .16 * f; sx = 1 + .12 * f; }
+      } else {
+        const f = Math.sin(Math.PI * Math.min(1, k / .35));
+        sx = sy = 1 + .18 * f;
+      }
+    } else if (anim && anim.fire < .16 && tw.kind !== 'drum') {
+      const f = Math.sin(Math.PI * anim.fire / .16);
+      sy = 1 - .07 * f; sx = 1 + .05 * f;
+    } else if (tw.kind === 'drum' && beat < .12) {
+      sy = 1 - .05 * Math.sin(Math.PI * beat / .12);
+    }
+    g.save(); g.translate(x, y + 3 - lift);
+    if (tw.left) g.scale(-1, 1);
+    g.scale(sx, sy);
+    stamp(g, 'td_' + tw.kind + tw.level + (pose ? '_p' + pose : ''), 0, 0, size, heightRatio);
+    if (anim && anim.level > 1 && anim.build < .3) {
+      g.globalAlpha = .6 * (1 - anim.build / .3);
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = '#ffe9a0';
+      g.beginPath(); g.ellipse(0, -size * .45 * heightRatio, size * .45, size * .5 * heightRatio, 0, 0, Math.PI * 2); g.fill();
+    }
+    g.restore();
+    if (tw.kind === 'drum' && beat < .45) {
+      g.save(); g.globalAlpha = .55 * (1 - beat / .45);
+      g.strokeStyle = '#f2d56e'; g.lineWidth = 2;
+      g.beginPath(); g.ellipse(x, y, 10 + beat * 44, 5 + beat * 22, 0, 0, Math.PI * 2); g.stroke();
+      g.lineWidth = 1;
+      g.beginPath(); g.ellipse(x, y, 4 + beat * 30, 2 + beat * 15, 0, 0, Math.PI * 2); g.stroke();
+      g.restore();
+    }
+    g.fillStyle = '#443e2c';
+    g.fillRect(x - 7, y + 6, 14, 4);
+    g.fillStyle = '#efd27d';
+    for (let j = 0; j < tw.level; j++) g.fillRect(x - 5 + j * 4, y + 7, 2, 2);
+  }
+
+  private drawGate(g: CanvasRenderingContext2D, gx: number, gy: number, heightRatio: number) {
+    const b = this.battle, hit = this.fx.gateHit;
+    const shake = hit > 0 ? Math.sin(hit * 70) * 2.5 * hit / .5 : 0;
+    stamp(g, 'td_gate', gx + shake, gy + 13, 48, heightRatio);
+    if (hit > 0) {
+      g.save();
+      g.globalAlpha = hit * .8;
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = 'rgba(255,70,50,.6)';
+      g.beginPath(); g.ellipse(gx + shake, gy - 4, 26, 18, 0, 0, Math.PI * 2); g.fill();
+      g.restore();
+    }
+    // 城门血条
+    const w = 34, ratio = b.hp / GATE_HP, top = gy - 36 * heightRatio;
+    g.fillStyle = '#372b22'; g.fillRect(gx - w / 2 - 1, top - 1, w + 2, 5);
+    g.fillStyle = ratio > .5 ? '#4f9a58' : ratio > .25 ? '#d49a2c' : '#c8392b';
+    g.fillRect(gx - w / 2, top, w * ratio, 3);
+  }
+
   private drawEnemy(g: CanvasRenderingContext2D, e: Marcher, heightRatio: number) {
-    const size = e.gateDamage === 5 ? 43 : e.gateDamage === 2 ? 33 : 24;
+    const b = this.battle, t = this.fx.time;
+    const boss = e.gateDamage === 5, elite = e.gateDamage === 2;
+    const size = boss ? 43 : elite ? 33 : 24;
+    const traveled = b.lengths[e.route] - e.remaining;
+    const moving = e.stun <= 0;
+    const frame = moving ? Math.floor(traveled / 5) % 4 : 0;
+    const bob = moving ? Math.abs(Math.sin(traveled * .63)) * 1.2 : 0;
+    // 受击：向后小退一步
+    const knock = e.flash > 0 ? (e.left ? 1.5 : -1.5) : 0;
+    // 阴影
+    g.fillStyle = 'rgba(40,30,20,.28)';
+    g.beginPath(); g.ellipse(e.x, e.y + 3, size * .3, size * .1, 0, 0, Math.PI * 2); g.fill();
+    if (boss) {
+      const p = .5 + .5 * Math.sin(t * 5);
+      g.strokeStyle = `rgba(210,50,40,${.45 + .35 * p})`; g.lineWidth = 2;
+      g.beginPath(); g.ellipse(e.x, e.y + 3, 15 + p * 3, 6 + p, 0, 0, Math.PI * 2); g.stroke();
+    } else if (elite) {
+      g.strokeStyle = 'rgba(240,200,90,.55)'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(e.x, e.y + 3, 11, 4, 0, 0, Math.PI * 2); g.stroke();
+    }
+    if (e.banner && e.stun <= 0) {
+      g.save(); g.globalAlpha = .30; g.strokeStyle = '#ad561c'; g.lineWidth = 1.3;
+      g.setLineDash([4, 6]); g.lineDashOffset = -b.elapsed * 8;
+      g.beginPath(); g.arc(e.x, e.y, 43, 0, Math.PI * 2); g.stroke(); g.restore();
+    }
     const pose = e.left ? (e.flash > 0 ? '_LW' : '_L') : (e.flash > 0 ? '_W' : '');
-    stamp(g, 'u_' + e.sprite + '_' + (e.stun > 0 ? 0 : Math.floor((e.x + e.y) / 5) % 4) + pose, e.x, e.y + 3, size, heightRatio);
-    return size;
+    stamp(g, 'u_' + e.sprite + '_' + frame + pose, e.x + knock, e.y + 3 - bob, size, heightRatio);
+    if (e.banner) {
+      const py = e.y - 18 * heightRatio - bob, tip = Math.sin(b.elapsed * 9) * 2;
+      g.fillStyle = '#68482e'; g.fillRect(e.x + 8, py - 14, 2, 24);
+      g.fillStyle = e.stun > 0 ? '#9e886a' : '#be3c27';
+      g.beginPath(); g.moveTo(e.x + 10, py - 14); g.lineTo(e.x + 22, py - 12 + tip);
+      g.lineTo(e.x + 17, py - 8 + tip); g.lineTo(e.x + 22, py - 5 + tip); g.lineTo(e.x + 10, py - 6); g.fill();
+    }
+    if (e.shield > 0) {
+      const sx = e.x + (e.left ? -7 : 7), sy = e.y - 8 - bob;
+      g.fillStyle = '#6a4b26'; g.fillRect(sx - 4, sy - 7, 9, 10);
+      g.fillStyle = '#e6bd69'; g.fillRect(sx - 3, sy - 6, 7, 7); g.fillRect(sx - 2, sy + 1, 5, 2);
+      g.fillStyle = 'rgba(255,250,210,.8)'; g.fillRect(sx - 2, sy - 5, 2, 2);
+      if (e.shield < e.maxShield / 2) { g.fillStyle = '#78552b'; g.fillRect(sx, sy - 5, 1.5, 4); g.fillRect(sx - 1, sy - 1, 1.5, 3); }
+    }
+    const frozen = e.frozenUntil > b.elapsed;
+    if (frozen) {
+      // 冰块：半透明蓝色方块 + 高光
+      const w = size * .55, h = size * .78 * heightRatio, top = e.y + 3 - h;
+      g.fillStyle = 'rgba(170,230,255,.42)';
+      g.fillRect(e.x - w / 2, top, w, h);
+      g.strokeStyle = 'rgba(230,255,255,.85)'; g.lineWidth = 1;
+      g.strokeRect(e.x - w / 2 + .5, top + .5, w - 1, h - 1);
+      g.fillStyle = 'rgba(255,255,255,.75)';
+      g.fillRect(e.x - w / 2 + 2, top + 2, 2, h * .45);
+      g.fillRect(e.x - w / 2 + 2, top + 2, w * .4, 1.5);
+    } else if (e.stun > 0) {
+      // 眩晕：头顶三颗转圈的小星
+      const hy = e.y - size * .8 * heightRatio;
+      for (let j = 0; j < 3; j++) {
+        const a = t * 7 + j * 2.09, sx = e.x + Math.cos(a) * 7, sy = hy + Math.sin(a) * 2.5;
+        g.fillStyle = Math.sin(a) > 0 ? '#ffe36a' : '#d8a93a';
+        g.fillRect(Math.round(sx) - 1, Math.round(sy), 3, 1); g.fillRect(Math.round(sx), Math.round(sy) - 1, 1, 3);
+      }
+    }
+    if (boss || elite || e.hp < e.maxHp) {
+      const w = boss ? 34 : size * .87, top = e.y - size * heightRatio - 1 - bob, h = boss ? 4 : 3;
+      g.fillStyle = '#372b22';
+      g.fillRect(e.x - w / 2, top, w, h);
+      g.fillStyle = boss ? '#d8352c' : elite ? '#e0a33a' : '#ce702b';
+      g.fillRect(e.x - w / 2 + 1, top + 1, Math.max(0, (w - 2) * e.hp / e.maxHp), h - 1.5);
+      if (e.maxShield > 0 && e.shield > 0) {
+        g.fillStyle = '#f3e3a0';
+        g.fillRect(e.x - w / 2 + 1, top - 2, Math.max(0, (w - 2) * e.shield / e.maxShield), 1.5);
+      }
+    }
   }
+
+  private drawDeath(g: CanvasRenderingContext2D, d: Death, heightRatio: number) {
+    const e = d.e, k = d.age / d.life;
+    const fall = Math.min(1, d.age / (d.boss ? .5 : .28));
+    const ease = 1 - (1 - fall) * (1 - fall);
+    const angle = d.dir * (d.boss ? .9 : 1.45) * ease;
+    const hop = Math.sin(Math.PI * fall) * (d.boss ? 2 : 4);
+    const fade = k < .55 ? 1 : 1 - (k - .55) / .45;
+    g.save();
+    g.globalAlpha = Math.max(0, fade);
+    g.fillStyle = 'rgba(40,30,20,.25)';
+    g.beginPath(); g.ellipse(e.x, e.y + 3, d.size * .3 * (1 + ease * .4), d.size * .1, 0, 0, Math.PI * 2); g.fill();
+    g.translate(e.x, e.y + 3 - hop + ease * 2);
+    g.rotate(angle);
+    const white = d.age < .07;
+    stamp(g, 'u_' + e.sprite + '_0' + (e.left ? (white ? '_LW' : '_L') : (white ? '_W' : '')), 0, 0, d.size, heightRatio);
+    g.restore();
+  }
+
+  private drawAlly(g: CanvasRenderingContext2D, i: number, heightRatio: number) {
+    const b = this.battle, a = b.allies[i], t = this.fx.time;
+    const swing = ALLY_CARDS[a.id].interval - a.cooldown;
+    const thrust = swing < .28 ? Math.sin(Math.PI * swing / .28) * (a.id === 'huangzhong' ? -2 : 5) : 0;
+    const p = .5 + .5 * Math.sin(t * 4 + i);
+    g.fillStyle = 'rgba(40,30,20,.28)';
+    g.beginPath(); g.ellipse(a.x, a.y + 3, 10, 3.5, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = `rgba(90,200,120,${.45 + .3 * p})`; g.lineWidth = 1.5;
+    g.beginPath(); g.ellipse(a.x, a.y + 3, 11 + p * 2, 4 + p * .6, 0, 0, Math.PI * 2); g.stroke();
+    stamp(g, 'hero_' + a.id + '_' + Math.floor(t * 6) % 4 + (a.left ? '_L' : ''), a.x + (a.left ? -thrust : thrust), a.y + 3, 32, heightRatio);
+    for (let j = 0; j < Math.min(5, a.level); j++) {
+      g.fillStyle = '#ffd95a';
+      g.fillRect(a.x - a.level * 2 + j * 4, a.y + 6, 2, 2);
+    }
+  }
+
+  /** 伤害数字、横幅等屏幕坐标的叠加层（不随地图拉伸变形）。 */
+  private drawOverlay(ui: UI, ox: number, oy: number, sx: number, sy: number, fw: number, fh: number) {
+    const g = ui.ctx, fx = this.fx, u = ui.u;
+    g.save();
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineJoin = 'round';
+    for (const p of fx.popups) {
+      const k = p.age / p.life, rise = 1 - (1 - k) * (1 - k);
+      const pop = k < .12 ? 1.45 - 3.75 * k : 1;
+      const px = ox + p.x * sx, py = oy + (p.y - 14 * rise) * sy;
+      g.globalAlpha = k < .7 ? 1 : (1 - k) / .3;
+      g.font = ui.font(p.size * sx * pop / u, true);
+      g.lineWidth = 3.2 * sx / 2.2;
+      g.strokeStyle = '#2b1d12';
+      g.strokeText(p.text, px, py);
+      g.fillStyle = p.color;
+      g.fillText(p.text, px, py);
+    }
+    const bn = fx.banner;
+    if (bn) {
+      const k = bn.age / bn.life;
+      const slide = k < .14 ? 1 - k / .14 : 0, fade = k > .8 ? 1 - (k - .8) / .2 : 1;
+      const cy = oy + fh * .4, bh = 92 * u;
+      g.globalAlpha = .85 * fade;
+      g.fillStyle = '#1f150e';
+      g.fillRect(ox, cy - bh / 2, fw, bh);
+      g.fillStyle = bn.color;
+      g.fillRect(ox, cy - bh / 2, fw, 4 * u);
+      g.fillRect(ox, cy + bh / 2 - 4 * u, fw, 4 * u);
+      g.globalAlpha = fade;
+      const tx = ui.W / 2 + slide * fw;
+      g.font = ui.font(42, true);
+      g.lineWidth = 6 * u; g.strokeStyle = '#2b1d12';
+      g.strokeText(bn.text, tx, cy - 12 * u);
+      g.fillStyle = '#ffe2a0';
+      g.fillText(bn.text, tx, cy - 12 * u);
+      g.font = ui.font(21, false);
+      g.fillStyle = '#e9d6b0';
+      g.fillText(bn.sub, ui.W / 2 - slide * fw, cy + 26 * u);
+    }
+    g.restore();
+  }
+
   private drawActions(ui: UI, y: number, h: number, interactive: boolean) {
     const b = this.battle, u = ui.u;
     const next = b.generalsSent === 0 ? 0 : 1;
@@ -455,9 +774,13 @@ export class TowerScene implements Scene {
     if (ui.button('td_repair', f.x + 50 * u, f.y + extra + 258 * u, 514 * u, 86 * u, '修复城门 +5', C.btnGold, {
       icon: VIDEO ? 'video' : undefined, sub: b.repaired ? '本局已用' : b.hp === GATE_HP ? '城门完好' : '每局一次', disabled: this.busy || b.repaired || b.hp === GATE_HP
     })) void this.reward('repair');
-    if (ui.button('td_quit', f.x + 50 * u, f.y + extra + 374 * u, 514 * u, 86 * u, '撤军结算', C.btnGray, { disabled: this.busy })) {
-      b.phase = 'loss';
-      this.finish();
+    // 撤军会直接判负，第一下只提示，三秒内再点一次才生效，避免误触。
+    if (ui.button('td_quit', f.x + 50 * u, f.y + extra + 374 * u, 514 * u, 86 * u, this.quitArmed > 0 ? '再点一次确认撤军' : '撤军结算', this.quitArmed > 0 ? C.btnRed : C.btnGray, { disabled: this.busy })) {
+      if (this.quitArmed > 0) {
+        this.quitArmed = 0;
+        b.phase = 'loss';
+        this.finish();
+      } else this.quitArmed = 3;
     }
     ui.layer = 0;
   }

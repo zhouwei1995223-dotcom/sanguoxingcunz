@@ -109,7 +109,7 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
     points.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
   };
   if (map.id === 2) {
-    const river: Point[] = [[0, 202], [64, 178], [111, 185], [159, 161], [207, 160], [263, 179], [320, 163]];
+    const river = HANSHUI_RIVER;
     for (const [width, col] of [[28, '#83967a'], [22, '#719b91'], [12, '#80aaa0']] as const) {
       path(river);
       g.lineWidth = width;
@@ -153,15 +153,29 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
     decor.push({ x, y, size, name });
   }
   decor.sort((a, b) => a.y - b.y).forEach(o => stamp('env_' + map.theme + '_' + o.name, o.x, o.y, o.size));
-  for (const route of map.routes) {
-    const [x, y] = route[0], px = x < 100 ? 10 : FIELD_W - 10;
-    g.fillStyle = '#513b2d';
-    g.fillRect(px, y - 23, 2, 20);
-    g.fillStyle = '#9d3028';
-    g.fillRect(px + 2, y - 22, 9, 8);
-    g.fillStyle = '#e9cc85';
-    g.fillRect(px + 4, y - 20, 4, 2);
-  }
+  // 出兵旗与城门每帧单独绘制（旗帜飘动、城门受击晃动），这里只画地面痕迹。
   const gate = map.routes[0][map.routes[0].length - 1];
-  stamp('td_gate', gate[0], gate[1] + 13, 48);
+  g.fillStyle = 'rgba(60,46,30,.22)';
+  g.beginPath(); g.ellipse(gate[0], gate[1] + 12, 27, 6, 0, 0, Math.PI * 2); g.fill();
+}
+
+/** 汉水双渡的河道（地图与水面波光共用）。 */
+export const HANSHUI_RIVER: Point[] = [[0, 202], [64, 178], [111, 185], [159, 161], [207, 160], [263, 179], [320, 163]];
+
+/** 出兵口的军旗：旗面按时间波动。 */
+export function drawSpawnFlag(g: CanvasRenderingContext2D, x: number, y: number, t: number, phase: number) {
+  const px = x < 100 ? 10 : FIELD_W - 12, dir = x < 100 ? 1 : -1;
+  g.fillStyle = 'rgba(40,30,20,.25)';
+  g.fillRect(px - 2, y - 3, 6, 2);
+  g.fillStyle = '#513b2d';
+  g.fillRect(px, y - 25, 2, 23);
+  g.fillStyle = '#e9cc85';
+  g.fillRect(px - 1, y - 26, 4, 2);
+  const x0 = dir > 0 ? px + 2 : px;
+  for (let i = 0; i < 6; i++) {
+    const wave = Math.round(Math.sin(t * 6 + phase - i * .8) * 1.5 * (i / 5));
+    g.fillStyle = i === 2 || i === 3 ? '#b5382d' : '#9d3028';
+    g.fillRect(x0 + dir * (i * 2) - (dir < 0 ? 2 : 0), y - 23 + wave, 2, 9);
+    if (i >= 1 && i <= 3) { g.fillStyle = '#e9cc85'; g.fillRect(x0 + dir * (i * 2) - (dir < 0 ? 2 : 0), y - 20 + wave, 2, 2); }
+  }
 }
