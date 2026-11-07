@@ -3,7 +3,7 @@
 // 所有调用前都检查 window.xhs / miniTool / 具体方法是否存在；普通浏览器里没有注入时全部走降级。
 
 /** 小红书容器注入的端能力对象；未注入（普通浏览器）时为 undefined */
-function miniTool(): any {
+export function miniTool(): any {
   const xhs = typeof window !== 'undefined' ? (window as any).xhs : undefined;
   return xhs && xhs.miniTool;
 }
@@ -14,7 +14,7 @@ function readBuildVersion(launchOptions: any): number {
 }
 
 /** 客户端 buildVersion（末 3 位是编译序号）。同步值优先，取不到再异步读；都取不到返回 0（按不支持处理） */
-async function getBuildVersion(): Promise<number> {
+export async function getBuildVersion(): Promise<number> {
   const xhs = typeof window !== 'undefined' ? (window as any).xhs : undefined;
   const sync = readBuildVersion(xhs && xhs.launchOptions);
   if (sync) return sync;
@@ -24,7 +24,7 @@ async function getBuildVersion(): Promise<number> {
 }
 
 /** 例如 9462004 → 9462，即客户端 9.46.2 */
-const atLeast = (buildVersion: number, min: number) => Math.floor(buildVersion / 1000) >= min;
+export const atLeast = (buildVersion: number, min: number) => Math.floor(buildVersion / 1000) >= min;
 const STORAGE_MIN = 9460, WINDOW_INFO_MIN = 9490, VIBRATE_MIN = 9500;
 
 let buildVersion = 0;

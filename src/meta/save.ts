@@ -36,6 +36,9 @@ export interface DailyState {
   adStamina: number;
   chestAd: Record<string, number>;
   /** 每个宝箱每天一次：看视频免费十连抽（网页版） */
+  xhsGoldTenStep?: number;
+  xhsNoteReward?: boolean;
+  xhsCommentReward?: boolean;
   chestTenAd?: Record<string, boolean>;
   freeGift: boolean;
   sidebar: boolean;
@@ -116,6 +119,7 @@ export interface SaveData {
   skins: Record<string, { owned: boolean; ads: number; on: boolean }>;
   redeemed: Record<string, boolean>;
   subscribed: boolean;
+  xhsFollowClaimed?: boolean;
   videoShareDay: string;
   agreedPrivacy: boolean;
   lastLogin: number;

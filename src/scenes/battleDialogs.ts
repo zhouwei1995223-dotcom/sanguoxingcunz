@@ -3,6 +3,7 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries } from '../ui/widgets';
 import { EvoTableDialog } from './evoTableDialog';
+import { hasResultPublish, drawResultPublish } from './xhsRewards';
 import { DamageReportDialog } from './damageReportDialog';
 import type { BattleScene } from './battleScene';
 import { choiceInfo } from './battleScene';
@@ -20,7 +21,7 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
-import { NO_ADS, NO_ADS_PRICE, IS_H5, WEB_RULES, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
+import { IS_XHS, NO_ADS, NO_ADS_PRICE, IS_H5, WEB_RULES, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 import { ORDERS, ORDER_IDS, LINKS, BUILD_KINDS, BUILDS } from '../data/defense';
@@ -883,7 +884,7 @@ export class ResultDialog implements Dialog {
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
     const showStars = this.res.stars !== undefined && this.win && !this.scene.weekly;
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0);
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0) + (IS_XHS && hasResultPublish() ? 100 * u : 0);
     const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
     if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
@@ -989,6 +990,11 @@ export class ResultDialog implements Dialog {
       playBgm('bgm_home');
       game.setScene(new HomeScene());
       return false;
+    }
+    if (IS_XHS && hasResultPublish()) {
+      const title = b.hero.name + (this.win ? '拿下' : '挑战') + this.scene.label;
+      const content = title + '，坚守' + fmtTime(b.t) + '，斩敌' + b.kills + '人。';
+      drawResultPublish(ui, 'res', bx, y + 110 * u, bw, { title, content, comment: content });
     }
     // 打赢了是推荐的好时机（官方建议在高光时刻拉起推荐组件；不发奖励）
     if (this.canRecommend) ui.button('res_recommend', ui.W / 2 - 170 * u, y + 116 * u, 340 * u, 64 * u, '觉得好玩？推荐给好友', C.btnGreen, { size: 22, icon: 'thumb', tap: () => openRecommend('result') });

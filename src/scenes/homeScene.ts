@@ -3,6 +3,8 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { HomeBackground } from './homeBg';
 import { HomeCamp } from './homeCamp';
+import { canPublish, refreshPublishSupport } from '../platform/xhsPublish';
+import { goldTenStep, drawGoldTen } from './xhsRewards';
 import { save, markDirty, flushSave, tickStamina, staminaNextSeconds, rolloverDaily, activePreparationFor, selectedPreparationStage } from '../meta/save';
 import { HEROES, HERO_BY_ID, STAR_COST, MAX_STAR, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
 import { WEAPONS, PASSIVES, heroLinks, skillPoolFor, fitPreparation, coreWeaponFits } from '../data/skills';
@@ -22,7 +24,7 @@ import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import {
-  SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, ChestBatchResultDialog, StaminaDialog, RankDialog,
+  XhsFollowDialog, SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, ChestBatchResultDialog, StaminaDialog, RankDialog,
   SidebarDialog, PreparationDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
@@ -30,7 +32,7 @@ import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
-import { GAME_INFO, WEB_RULES, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
+import { GAME_INFO, IS_XHS, WEB_RULES, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { TOWER_MAPS, commandBonus } from '../data/tower';
 import { TowerScene, TowerStageDialog, CommanderDialog, towerCommander } from './towerScene';
@@ -62,6 +64,7 @@ export class HomeScene implements Scene {
     this.camp = new HomeCamp();
     playBgm('bgm_home');
     checkUpdateNotice();
+    if (IS_XHS) void refreshPublishSupport();
     if (getPlatform().supportsRecommend()) getPlatform().preloadRecommend();
     rolloverDaily();
     tickStamina();
@@ -363,7 +366,14 @@ export class HomeScene implements Scene {
   }
 
   private shopRedDot() {
-    return !save.daily.freeGift || CHESTS.some((c) => (save.daily.chestAd[c.id] || 0) < c.adDaily || (WEB_RULES && !save.daily.chestTenAd?.[c.id]));
+    return !save.daily.freeGift || CHESTS.some(c => {
+      if ((save.daily.chestAd[c.id] || 0) < c.adDaily) return true;
+      if (IS_XHS && c.id === 'gold') {
+        const step = goldTenStep();
+        return step < 2 && canPublish(step === 0 ? 'comment' : 'note');
+      }
+      return WEB_RULES && !save.daily.chestTenAd?.[c.id];
+    });
   }
   private talentRedDot() {
     return TALENTS.some((t) => (save.talents[t.id] || 0) < t.max && save.maxCleared >= t.unlockChapter && save.gold >= talentCost(t, save.talents[t.id] || 0));
@@ -482,6 +492,7 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
+      ...(IS_XHS && !save.xhsFollowClaimed ? [{ id: 'xhs', icon: 'hero_sunshangxiang_0', label: '关注', dot: true, on: () => game.openDialog(new XhsFollowDialog()) }] : []),
       ...(WEB_RULES && save.homeMode !== 'tower' ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
@@ -1032,7 +1043,8 @@ export class HomeScene implements Scene {
     const py = top + Math.ceil(HEROES.length / cols) * rowH + 8 * u;
     const ph = this.contentBottom(ui) - py - 10 * u;
     ui.panel(16 * u, py, ui.W - 32 * u, ph, 'wood');
-    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1470 + 108 * heroLinks(this.viewHero || save.hero).length) * u);
+    const follow = IS_XHS && h.id === 'sunshangxiang' && !save.xhsFollowClaimed;
+    const off = ui.beginScroll('hero_detail', 16 * u, py + 12 * u, ui.W - 32 * u, ph - 24 * u, (1470 + (follow ? 104 : 0) + 108 * heroLinks(this.viewHero || save.hero).length) * u);
     let y = py + 20 * u + off;
     // 立绘区
     if (!NEW_UI) {
@@ -1059,6 +1071,10 @@ export class HomeScene implements Scene {
     ui.text(h.role, 130 * u, y + 34 * u, 20, NEW_UI ? '#f5ead4' : h.color, 'center', null);
     if (st.owned) for (let k = 0; k < 5; k++) ui.icon('star', ui.W - 90 * u - (4 - k) * 30 * u, y + 34 * u, 26 * u, k < st.star ? 1 : 0.2);
     y += 370 * u;
+    if (follow) {
+      if (ui.button('hero_xhs', 50 * u, y, ui.W - 100 * u, 80 * u, '关注领孙尚香', C.btnGold)) game.openDialog(new XhsFollowDialog());
+      y += 104 * u;
+    }
     const hb = heroBase(h.id);
     const lx = 50 * u;
     ui.text(`等级 ${st.lv}/${HERO.maxLevel}`, lx, y, 26, C.gold, 'left');
@@ -1237,10 +1253,12 @@ export class HomeScene implements Scene {
       }
       if (ui.button('chest_buy_' + c.id, 490 * u, y + 140 * u, bw, buttonH, String(c.cost), save.yuanbao >= c.cost ? C.btnGold : C.btnGray, { icon: 'yuanbao', size: 28 })) this.buyChests(c, 1);
       if (WEB_RULES) {
-        // 每个宝箱每天一次：看视频免费十连抽；旁边保留元宝十连。
+        // 小红书金匣有两次社交十连。元宝十连与每日奖励分别计次。
         const tenAd = (save.daily.chestTenAd ??= {});
         const usedTen = !!tenAd[c.id];
-        if (adButton(ui, 'chest_tenad_' + c.id, 270 * u, y + 221 * u, 205 * u, 65 * u, usedTen ? '今日已领' : '免费十连', { disabled: usedTen, sub: '每日1次', size: 24 })) {
+        if (IS_XHS && c.id === 'gold') {
+          drawGoldTen(ui, 270 * u, y + 221 * u, 205 * u, 65 * u, () => this.openChestNow(c, 10));
+        } else if (adButton(ui, 'chest_tenad_' + c.id, 270 * u, y + 221 * u, 205 * u, 65 * u, usedTen ? '今日已领' : '免费十连', { disabled: usedTen, sub: '每日1次', size: 24 })) {
           const day = save.daily.day;
           getPlatform().showRewardedAd('chest_ten_' + c.id).then((ok) => {
             if (!ok || save.daily.day !== day || save.daily.chestTenAd?.[c.id]) return;

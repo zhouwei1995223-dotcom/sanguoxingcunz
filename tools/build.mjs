@@ -98,6 +98,10 @@ function writeShells() {
   for (const d of ['dist/xhs', 'dist/taptap']) {
     fs.rmSync(d, { recursive: true, force: true });
     fs.mkdirSync(d, { recursive: true });
+    if (d === 'dist/xhs') {
+      // 图集与静态地形实际使用离屏画布，按小工具构建规范声明。
+      fs.writeFileSync(d + '/mini_tool.json', JSON.stringify({ is_high_consumption_scene: true }));
+    }
     fs.writeFileSync(d + '/index.html', `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

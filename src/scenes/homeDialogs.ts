@@ -2,13 +2,15 @@ import { game, Dialog } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries, itemSlot, RewardEntry } from '../ui/widgets';
+import { refreshXhsFollow, xhsFollowAuthor, xhsFollowEligible, xhsFollowLabel, xhsGetFollowStatus, XhsFollowStatus, XhsFollowSupport } from '../platform/xhsFollow';
 import { guidePointer } from '../ui/guide';
+import { hasResultPublish, drawResultPublish } from './xhsRewards';
 import { EvoTableDialog } from './evoTableDialog';
 import { save, markDirty, flushSave, staminaNextSeconds, preparationPresetsFor, selectedPreparationStage } from '../meta/save';
 import type { EquipItem } from '../meta/save';
 import type { ChestResult } from '../meta/ops';
 import {
-  canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, tasksRedDot, patrolPending, patrolReward,
+  claimXhsFollow, canSignin, signinIndex, doSignin, GrantResult, claimTask, activityPoints, claimActivityBox, tasksRedDot, patrolPending, patrolReward,
   collectPatrol, itemStats, isEquipped, equip, unequip, upgradeItem, mergeCandidates, mergeItem, grantReward, progressTask,
 } from '../meta/ops';
 import {
@@ -22,7 +24,7 @@ import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { BOSSES } from '../data/enemies';
 import { fmtNum, fmtTime, easeOutBack } from '../core/math';
 import { playSfx, refreshMusic } from '../audio/sound';
-import { GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, WEB_RULES } from '../data/platformConfig';
+import { IS_XHS, GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, WEB_RULES } from '../data/platformConfig';
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
@@ -463,6 +465,7 @@ export class SettingsDialog implements Dialog {
     if (ui.button('st_privacy', f.x + 100 * u + bw, y, bw, 80 * u, '隐私政策', C.btnBlue, { size: 24 })) game.openDialog(new TextDialog('隐私政策', PRIVACY_POLICY));
     y += 100 * u;
     if (ui.button('st_health', f.x + 40 * u, y, bw, 80 * u, '健康游戏忠告', C.btnBlue, { size: 22 })) game.openDialog(new TextDialog('健康游戏忠告', HEALTH_NOTICE));
+    if (IS_XHS && ui.button('st_xhs', f.x + 100 * u + bw, y, bw, 80 * u, '关注领孙尚香', C.btnGold, { size: 22, redDot: !save.xhsFollowClaimed })) game.openDialog(new XhsFollowDialog());
     if (getPlatform().supportsAddShortcut() && ui.button('st_shortcut', f.x + 100 * u + bw, y, bw, 80 * u, '添加到桌面', C.btnGreen, { size: 22 })) {
       getPlatform().addShortcut().then((ok) => ui.toast(ok ? '添加成功' : '添加失败'));
     }
@@ -581,6 +584,127 @@ export class RankDialog implements Dialog {
       }
       ui.text('好友排行榜在微信 / 抖音小游戏中可用', ui.W / 2, y + 30 * u, 20, C.textDim);
     }
+  }
+}
+
+/** 小红书：用容器的关注接口领孙尚香。只在 IS_XHS 构建里打开。 */
+export class XhsFollowDialog implements Dialog {
+  t?: number;
+  private booted = false;
+  private phase: 'load' | 'ready' = 'load';
+  private support: XhsFollowSupport = 'missing';
+  private status: XhsFollowStatus = -1;
+  private busy = false;
+  private notice = '';
+  private done = false;
+
+  /** 打开时查一次关注状态。查询失败显示「暂时无法获取」，不发奖。 */
+  private load() {
+    this.phase = 'load';
+    this.notice = '';
+    refreshXhsFollow().then((v) => {
+      if (this.done) return;
+      this.support = v.support;
+      this.status = v.status;
+      this.phase = 'ready';
+    });
+  }
+
+  private applyGrant(ui: UI): boolean {
+    const r = claimXhsFollow(this.status);
+    if (r === 'denied' || r === 'off') {
+      ui.toast(r === 'off' ? '当前版本不能领取' : '还没有关注作者');
+      return false;
+    }
+    if (r === 'new') {
+      save.hero = 'sunshangxiang';
+      playSfx('victory');
+      flushSave(true);
+      ui.toast('获得武将：孙尚香！');
+      return true;
+    }
+    if (r === 'shards') {
+      playSfx('chest');
+      flushSave(true);
+      ui.toast('转化为孙尚香碎片 ×20');
+      return true;
+    }
+    ui.toast('已经领取过了');
+    return true;
+  }
+
+  draw(ui: UI) {
+    if (!IS_XHS) return false;
+    if (this.done) return false;
+    if (!this.booted) { this.booted = true; this.load(); }
+    const u = ui.u;
+    const w = ui.W - 80 * u, h = 780 * u;
+    const f = dialogFrame(ui, w, h, '关注领孙尚香', this.t, 'xhs_close');
+    if (f.close) { this.done = true; return false; }
+    let y = f.y + 86 * u;
+    y += ui.wrapText('在小工具里关注作者，就能领取孙尚香。关注确认由小红书弹出，每位玩家只能领一次。已经拥有时，会换成孙尚香碎片 ×20。', f.x + 50 * u, y, w - 100 * u, 24, '#fff4d6');
+    y += 22 * u;
+    const statusText = this.phase === 'load' || this.busy ? '正在查询关注状态…' : this.support === 'ok' ? xhsFollowLabel(this.status) : '暂时无法获取';
+    ui.text('关注状态：' + statusText, ui.W / 2, y, 28, this.support === 'ok' && xhsFollowEligible(this.status) ? '#9be37a' : '#fee761');
+    y += 36 * u;
+    if (this.notice) {
+      y += ui.wrapText(this.notice, ui.W / 2, y, w - 120 * u, 22, '#ff8a80', 1.35, 'center');
+      y += 8 * u;
+    }
+    const bw = w - 140 * u;
+    const bh = 92 * u;
+    y += 16 * u;
+    if (save.xhsFollowClaimed) {
+      ui.text('孙尚香已经领取过了', ui.W / 2, y + 40 * u, 26, '#9be37a');
+      return;
+    }
+    if (this.phase === 'load' || this.busy) return;
+    if (this.support !== 'ok') {
+      ui.wrapText('请更新小红书 App 后再领取孙尚香。当前版本没有关注作者的能力。', ui.W / 2, y, w - 120 * u, 24, '#ff8a80', 1.4, 'center');
+      return;
+    }
+    if (this.status === 0) {
+      // 必须在这次点击里调用 followAuthor，确认成功且 follow_status 为 1 或 2 才发奖。
+      ui.button('xhs_follow', ui.W / 2 - bw / 2, y, bw, bh, '关注作者并领取', C.btnGold, {
+        size: 28,
+        tap: () => {
+          if (this.busy || save.xhsFollowClaimed) return;
+          this.busy = true;
+          this.notice = '';
+          xhsFollowAuthor().then((r) => {
+            this.busy = false;
+            if (this.done) return;
+            if (!r.ok) { this.notice = r.message; return; }
+            this.status = r.status;
+            if (!xhsFollowEligible(r.status)) {
+              this.notice = r.status === -1 ? '关注没有成功，请稍后再试' : '还没有关注作者';
+              return;
+            }
+            this.done = this.applyGrant(ui);
+          });
+        },
+      });
+      return;
+    }
+    if (xhsFollowEligible(this.status)) {
+      if (ui.button('xhs_claim', ui.W / 2 - bw / 2, y, bw, bh, '领取孙尚香', C.btnGold, { size: 28 })) {
+        if (this.busy) return;
+        this.busy = true;
+        this.notice = '';
+        xhsGetFollowStatus().then((s) => {
+          this.busy = false;
+          if (this.done) return;
+          this.status = s;
+          if (!xhsFollowEligible(s)) {
+            this.notice = s === 0 ? '还没有关注作者' : '暂时无法获取关注状态';
+            return;
+          }
+          this.done = this.applyGrant(ui);
+        });
+      }
+      return;
+    }
+    if (ui.button('xhs_retry', ui.W / 2 - bw / 2, y, bw, bh, '重新查询', C.btnBlue, { size: 28 })) this.load();
   }
 }
 
@@ -844,7 +968,7 @@ export class SweepDialog implements Dialog {
   constructor(private title: string, private res: RunResult) {}
   draw(ui: UI) {
     const u = ui.u;
-    const w = ui.W - 80 * u, h = 640 * u + (this.res.items.length > 2 ? 160 * u : 0);
+    const w = ui.W - 80 * u, h = 640 * u + (this.res.items.length > 2 ? 160 * u : 0) + (IS_XHS && hasResultPublish() ? 110 * u : 0);
     const f = dialogFrame(ui, w, h, '战力碾压', this.t);
     ui.text(this.title, ui.W / 2, f.y + 96 * u, 28, '#fff4d6');
     const r = this.res;
@@ -856,6 +980,11 @@ export class SweepDialog implements Dialog {
       ui.text(tip, ui.W / 2, f.y + 186 * u, 20, C.textDim);
     }
     rewardRow(ui, rewardEntries({ gold: r.gold, iron: r.iron, yuanbao: r.yuanbao, hero: r.heroReward, shards: r.shardReward }, r.items), ui.W / 2, f.y + 230 * u, 110 * u, this.t || 1);
+    if (IS_XHS && hasResultPublish()) {
+      const title = HERO_BY_ID[save.hero].name + '拿下' + this.title;
+      const content = '《长坂单骑传》' + title + '，碾压通关！';
+      drawResultPublish(ui, 'sweep', f.x + 60 * u, f.y + h - 240 * u, w - 120 * u, { title, content, comment: content });
+    }
     if (ui.button('sweep_ok', ui.W / 2 - 150 * u, f.y + h - 140 * u, 300 * u, 90 * u, '收下', C.btnGold, { size: 30 })) return false;
   }
 }

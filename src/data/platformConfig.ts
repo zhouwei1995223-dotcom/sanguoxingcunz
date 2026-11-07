@@ -47,7 +47,7 @@ export const SHARE_CONFIG = {
 export const GAME_INFO = {
   name: '长坂单骑传',
   shortName: '长坂单骑传',
-  version: '1.0.7',
+  version: IS_XHS ? '1.0.9' : '1.0.7',
   ageRating: 8, // 适龄提示：8+
   // 著作权人 / 出版单位等信息在拿到软著和备案后填写，显示在设置-关于
   copyright: '著作权人：张周炜',
