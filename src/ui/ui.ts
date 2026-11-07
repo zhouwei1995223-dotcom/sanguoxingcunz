@@ -26,6 +26,12 @@ interface ScrollState {
 const PAPER_FONT = '"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun","NSimSun",serif';
 const CLASSIC_FONT = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
 
+/** 进度条亮色 → 国画矿物颜料色 */
+const INK_PIGMENT: Record<string, string> = {
+  '#63c74d': '#4a8a52', '#9be37a': '#5c9a5a', '#feae34': '#c58a2e', '#fee761': '#c9a23a', '#f5c45e': '#c58a2e',
+  '#2ce8f5': '#3d93ad', '#e43b44': '#b23a2e', '#ff0044': '#b23a2e',
+};
+
 export const C = {
   bg: '#1d1a2b',
   panel: '#3a2c2a',
@@ -303,6 +309,24 @@ export class UI {
     return color;
   }
 
+  /** 保留色相的压深：白字变墨，亮色压到四成多亮度，宣纸上清晰可读。 */
+  private deepenInk(color: string): string {
+    const c = color.toLowerCase();
+    if (c === '#fff' || c === '#ffffff' || c === '#fff4d6' || c === '#fff6dc' || c === '#fff7e2' || c === '#e0e0e0' || c === C.text.toLowerCase()) return '#1e1814';
+    if (c === C.textDim.toLowerCase() || c === '#a89a86' || c === '#888' || c === '#8b8b8b') return '#5c4d3e';
+    if (c.startsWith('#') && (c.length === 7 || c.length === 4)) {
+      const hex = c.length === 4 ? `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}` : c;
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      if (lum > 0.45) {
+        const k = 0.36 / lum;
+        const toHex = (n: number) => Math.max(0, Math.min(255, Math.round(n * k))).toString(16).padStart(2, '0');
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+      }
+    }
+    return color;
+  }
+
   text(str: string, x: number, y: number, size: number, color = C.text, align: CanvasTextAlign = 'center', stroke: string | null = '#1a1210', bold = true) {
     const ctx = this.ctx;
     ctx.font = this.font(size, bold);
@@ -310,9 +334,9 @@ export class UI {
     ctx.textBaseline = 'middle';
     const cLow = color.toLowerCase();
     const onPaper = this.isOnPaper(x, y);
-    if (this.preserveTextColors && onPaper) stroke ??= '#443328';
-    if (!this.preserveTextColors && onPaper && cLow !== '#fbf4e4' && cLow !== '#f5ead4') {
-      const inkCol = this.mapInkColor(color);
+    if (onPaper && cLow !== '#fbf4e4' && cLow !== '#f5ead4') {
+      // 战斗里保留文字色相（金=进化、绿=推荐……），只压深成墨色调；其他场景按水墨映射表换色。
+      const inkCol = this.preserveTextColors ? this.deepenInk(color) : this.mapInkColor(color);
       if (stroke) {
         // 水墨字在宣纸上统一衬一层淡淡的宣纸暖白光晕，即便跨过深色乌丝栏或山水印记也清晰如古籍刻本
         ctx.lineJoin = 'round';
@@ -801,14 +825,16 @@ export class UI {
       ctx.fillRect(x - r * 0.4, y - r * 0.6, r * 0.4, r * 0.4);
       return;
     }
-    ctx.fillStyle = '#120a08';
-    ctx.beginPath(); ctx.arc(x, y, r + 3 * this.u, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#f5c976';
-    ctx.beginPath(); ctx.arc(x, y, r + 1.4 * this.u, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#e82030';
-    ctx.beginPath(); ctx.arc(x, y, r - 0.5 * this.u, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffb3b8';
-    ctx.beginPath(); ctx.arc(x - r * 0.28, y - r * 0.3, r * 0.28, 0, Math.PI * 2); ctx.fill();
+    // 朱砂印点：细墨圈 + 纸色衬圈 + 平涂朱红，比原来的亮红球安静，满屏红点时不吵。
+    const k = 0.82;
+    ctx.fillStyle = 'rgba(30,20,14,0.85)';
+    ctx.beginPath(); ctx.arc(x, y, r * k + 2.6 * this.u, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f3e6c8';
+    ctx.beginPath(); ctx.arc(x, y, r * k + 1.4 * this.u, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath(); ctx.arc(x, y, r * k, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,220,200,0.45)';
+    ctx.beginPath(); ctx.arc(x - r * 0.25, y - r * 0.28, r * 0.2, 0, Math.PI * 2); ctx.fill();
   }
 
   /** 绘制图标：this.paperTheme 下优先使用 16x16 精细像素图标，保持纯正像素风与整数倍清晰缩放 */
@@ -844,6 +870,10 @@ export class UI {
 
   bar(x: number, y: number, w: number, h: number, ratio: number, color: string, back = '#1a1210', border = '#120d0c') {
     const ctx = this.ctx;
+    if (this.paperTheme) {
+      this.inkBar(x, y, w, h, ratio, color, back);
+      return;
+    }
     const p = Math.max(2, Math.round(this.u * 3));
     ctx.fillStyle = border;
     ctx.fillRect(x, y, w, h);
@@ -854,10 +884,45 @@ export class UI {
     ctx.fillRect(x + p, y + p, fw, h - p * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.28)';
     ctx.fillRect(x + p, y + p, fw, Math.max(1, (h - p * 2) * 0.32));
-    if (this.paperTheme && h >= 14 * this.u) {
-      ctx.strokeStyle = 'rgba(216,170,96,0.35)';
-      ctx.lineWidth = Math.max(1, this.u);
-      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+
+  /**
+   * 宣纸进度条：细墨线外框，槽为熟宣色（战斗 HUD 等深底处保留深色槽），
+   * 进度用矿物颜料色（石绿 / 赭石 / 石青 / 朱砂），末端一笔浓墨收锋。
+   */
+  private inkBar(x: number, y: number, w: number, h: number, ratio: number, color: string, back: string) {
+    const ctx = this.ctx, u = this.u;
+    const b = Math.max(1, Math.round(u * 1.6));
+    const darkBack = back !== '#1a1210';
+    const pigment = INK_PIGMENT[color.toLowerCase()] || color;
+    ctx.fillStyle = 'rgba(28,22,16,0.18)';
+    ctx.fillRect(x, y + b, w, h);
+    ctx.fillStyle = '#3d3126';
+    ctx.fillRect(x, y, w, h);
+    const ix = x + b, iy = y + b, iw = w - b * 2, ih = h - b * 2;
+    if (darkBack) {
+      ctx.fillStyle = back;
+      ctx.fillRect(ix, iy, iw, ih);
+    } else {
+      const grad = ctx.createLinearGradient(0, iy, 0, iy + ih);
+      grad.addColorStop(0, '#d9cbac');
+      grad.addColorStop(1, '#eadfc6');
+      ctx.fillStyle = grad;
+      ctx.fillRect(ix, iy, iw, ih);
+      this.markPaper(ix, iy, iw, ih);
+    }
+    const fw = Math.max(0, iw * Math.min(1, ratio));
+    if (fw > 0) {
+      ctx.fillStyle = pigment;
+      ctx.fillRect(ix, iy, fw, ih);
+      ctx.fillStyle = 'rgba(255,248,226,0.26)';
+      ctx.fillRect(ix, iy, fw, Math.max(1, ih * 0.34));
+      ctx.fillStyle = 'rgba(20,14,10,0.22)';
+      ctx.fillRect(ix, iy + ih - Math.max(1, ih * 0.22), fw, Math.max(1, ih * 0.22));
+      if (fw < iw) {
+        ctx.fillStyle = 'rgba(30,22,16,0.55)';
+        ctx.fillRect(ix + fw - Math.max(1, u), iy, Math.max(1, u * 1.5), ih);
+      }
     }
   }
 

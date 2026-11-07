@@ -25,7 +25,8 @@ export function guideHint(ui: UI, text: string, y: number) {
     ctx.strokeStyle = '#b5281f';
     ctx.lineWidth = Math.max(1.2, u * 1.4);
     ctx.strokeRect(x + 6 * u, top + 6 * u, w - 12 * u, h - 12 * u);
-    ui.text(text, ui.W / 2, y, 25, ui.preserveTextColors ? C.text : '#1e1814', 'center', ui.preserveTextColors ? '#443328' : null);
+    // 白底提示框里一律用墨字，不加深色描边（战斗里原来白字加描边，糊成一团）。
+    ui.text(text, ui.W / 2, y, 25, '#1e1814', 'center', null);
   }
   ctx.restore();
 }

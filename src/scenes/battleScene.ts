@@ -655,11 +655,28 @@ export class BattleScene implements Scene {
       const a = k < 0.25 ? k / 0.25 : k > 2 ? (2.4 - k) / 0.4 : 1;
       const y = ui.H * 0.3;
       ui.ctx.globalAlpha = clamp(a, 0, 1);
-      ui.ctx.fillStyle = 'rgba(10,6,8,0.6)';
-      ui.ctx.fillRect(0, y - 40 * u, ui.W, 80 * u);
-      ui.ctx.fillStyle = bn.color;
-      ui.ctx.fillRect(0, y - 40 * u, ui.W, 3 * u);
-      ui.ctx.fillRect(0, y + 37 * u, ui.W, 3 * u);
+      if (ui.paperTheme) {
+        // 宣纸横幅：熟宣长条 + 上下浓淡墨线，字色保留原色相、压成墨色调。
+        const g = ui.ctx;
+        g.fillStyle = 'rgba(18,12,8,0.25)';
+        g.fillRect(0, y - 40 * u + 4 * u, ui.W, 80 * u);
+        g.fillStyle = '#efe5cc';
+        g.fillRect(0, y - 40 * u, ui.W, 80 * u);
+        ui.paperTexture(0, y - 40 * u, ui.W, 80 * u, { alpha: 0.6 });
+        g.fillStyle = 'rgba(52,40,28,0.9)';
+        g.fillRect(0, y - 40 * u, ui.W, 3 * u);
+        g.fillRect(0, y + 37 * u, ui.W, 3 * u);
+        g.fillStyle = 'rgba(52,40,28,0.3)';
+        g.fillRect(0, y - 34 * u, ui.W, u);
+        g.fillRect(0, y + 33 * u, ui.W, u);
+        ui.markPaper(0, y - 40 * u, ui.W, 80 * u);
+      } else {
+        ui.ctx.fillStyle = 'rgba(10,6,8,0.6)';
+        ui.ctx.fillRect(0, y - 40 * u, ui.W, 80 * u);
+        ui.ctx.fillStyle = bn.color;
+        ui.ctx.fillRect(0, y - 40 * u, ui.W, 3 * u);
+        ui.ctx.fillRect(0, y + 37 * u, ui.W, 3 * u);
+      }
       ui.text(bn.text, ui.W / 2 + (1 - Math.min(1, k * 4)) * 60 * u, y, 40, bn.color);
       ui.ctx.globalAlpha = 1;
     }
@@ -703,7 +720,15 @@ export class BattleScene implements Scene {
     const kind = nextAutoUnit(d);
     const un = UNITS[kind];
     const count = soldiers(d), full = count >= MAX_ALLIES;
-    ui.pixRect(x, y, bw, bh, 'rgba(10,6,8,0.62)');
+    if (ui.paperTheme) {
+      ui.pixRect(x, y + 3 * u, bw, bh, 'rgba(18,12,8,0.3)', 3 * u);
+      ui.pixRect(x, y, bw, bh, '#2b2119', 3 * u);
+      ui.pixRect(x + 2 * u, y + 2 * u, bw - 4 * u, bh - 4 * u, '#f3ead5', 2 * u);
+      ui.ctx.strokeStyle = 'rgba(90,70,48,0.35)';
+      ui.ctx.lineWidth = Math.max(1, u);
+      ui.ctx.strokeRect(x + 6 * u, y + 6 * u, bw - 12 * u, bh - 12 * u);
+      ui.markPaper(x, y, bw, bh);
+    } else ui.pixRect(x, y, bw, bh, 'rgba(10,6,8,0.62)');
     ui.icon('p_ration', x + 24 * u, y + 24 * u, 30 * u);
     ui.text(`${Math.floor(d.grain)}`, x + 46 * u, y + 18 * u, 22, '#fee761', 'left');
     ui.text(`+${grainRate(d).toFixed(1)}/秒`, x + 46 * u, y + 40 * u, 14, C.textDim, 'left');
@@ -711,8 +736,11 @@ export class BattleScene implements Scene {
     ui.icon(un.icon, x + 30 * u, y + 84 * u, 40 * u, full ? 0.45 : 1);
     ui.text(full ? '兵力已满' : `下一队${un.name}`, x + 56 * u, y + 74 * u, 16, full ? '#a89a86' : '#fff4d6', 'left');
     const k = Math.min(1, d.grain / un.cost);
-    ui.pixRect(x + 56 * u, y + 90 * u, bw - 68 * u, 10 * u, '#231917');
-    ui.pixRect(x + 56 * u, y + 90 * u, (bw - 68 * u) * k, 10 * u, full ? '#6b5a4a' : '#9be37a');
+    if (ui.paperTheme) ui.bar(x + 56 * u, y + 88 * u, bw - 68 * u, 14 * u, k, full ? '#6b5a4a' : '#9be37a');
+    else {
+      ui.pixRect(x + 56 * u, y + 90 * u, bw - 68 * u, 10 * u, '#231917');
+      ui.pixRect(x + 56 * u, y + 90 * u, (bw - 68 * u) * k, 10 * u, full ? '#6b5a4a' : '#9be37a');
+    }
     ui.text(IS_WEB ? `兵力 ${count} 人` : `兵力 ${count}/${MAX_ALLIES}`, x + bw / 2, y + 128 * u, 16, '#d9c6a0');
     // 城池不在屏幕里：屏幕边缘画一个指向城池的箭头（城墙挨打时变红闪烁）
     const [sx, sy] = this.renderer.worldToScreen(0, -8);
@@ -814,6 +842,35 @@ export class BattleScene implements Scene {
     if (b.potionCd > 0) game.ui.toast(`金疮药冷却中（${Math.ceil(b.potionCd)}秒）`);
   }
 
+  /** 宣纸圆盘按钮：墨线外圈、熟宣盘面、矿物色进度环（大招 / 金疮药共用）。 */
+  private paperDial(cx: number, cy: number, r: number, ratio: number, ring: string, ringW: number) {
+    const g = game.ui.ctx, u = game.ui.u, TAU = Math.PI * 2;
+    g.save();
+    g.fillStyle = 'rgba(20,14,8,0.35)';
+    g.beginPath(); g.arc(cx, cy + 3 * u, r, 0, TAU); g.fill();
+    g.fillStyle = '#3d3126';
+    g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+    const face = g.createRadialGradient(cx, cy - r * 0.35, r * 0.1, cx, cy, r);
+    face.addColorStop(0, '#f8f0de');
+    face.addColorStop(1, '#d8c8a6');
+    g.fillStyle = face;
+    g.beginPath(); g.arc(cx, cy, r - 2.5 * u, 0, TAU); g.fill();
+    const rr = r - ringW / 2 - 4 * u;
+    g.lineWidth = ringW;
+    g.strokeStyle = 'rgba(110,88,62,0.22)';
+    g.beginPath(); g.arc(cx, cy, rr, 0, TAU); g.stroke();
+    if (ratio > 0.01) {
+      g.strokeStyle = ring;
+      g.lineCap = 'round';
+      g.beginPath(); g.arc(cx, cy, rr, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, ratio)); g.stroke();
+    }
+    g.lineWidth = Math.max(1, u);
+    g.strokeStyle = 'rgba(70,54,38,0.45)';
+    g.beginPath(); g.arc(cx, cy, rr - ringW / 2 - 3 * u, 0, TAU); g.stroke();
+    g.restore();
+    game.ui.markPaper(cx - r * 0.8, cy - r * 0.8, r * 1.6, r * 1.6);
+  }
+
   /** 金疮药按钮：放在大招按钮旁边，转圈显示冷却 */
   private drawPotionButton() {
     const ui = game.ui;
@@ -837,18 +894,25 @@ export class BattleScene implements Scene {
       g.fillStyle = glow;
       g.beginPath(); g.arc(cx, cy, r * (1.5 + 0.12 * Math.sin(ui.time * 9)), 0, Math.PI * 2); g.fill();
     }
-    g.fillStyle = 'rgba(12,8,16,0.75)';
-    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
-    g.lineWidth = 6 * u;
-    g.strokeStyle = ready ? '#63c74d' : '#3a2c2a';
-    g.beginPath(); g.arc(cx, cy, r - 4 * u, 0, Math.PI * 2); g.stroke();
-    if (!ready) {
-      g.strokeStyle = '#5a6988';
-      g.beginPath(); g.arc(cx, cy, r - 4 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - b.potionCd / b.potionCdMax)); g.stroke();
+    if (ui.paperTheme) {
+      this.paperDial(cx, cy, r, ready ? 1 : 1 - b.potionCd / b.potionCdMax, ready ? '#4a8a52' : '#7d8798', 6 * u);
+      ui.icon('potion', cx, cy - 6 * u, r * 1.05, ready ? 1 : 0.4);
+      if (ready) ui.text('金疮药', cx, cy + r * 0.62, 20, '#2f6b3c', 'center', null);
+      else ui.text(`${Math.ceil(b.potionCd)}s`, cx, cy + r * 0.62, 22, '#4a4038', 'center', null);
+    } else {
+      g.fillStyle = 'rgba(12,8,16,0.75)';
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 6 * u;
+      g.strokeStyle = ready ? '#63c74d' : '#3a2c2a';
+      g.beginPath(); g.arc(cx, cy, r - 4 * u, 0, Math.PI * 2); g.stroke();
+      if (!ready) {
+        g.strokeStyle = '#5a6988';
+        g.beginPath(); g.arc(cx, cy, r - 4 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - b.potionCd / b.potionCdMax)); g.stroke();
+      }
+      ui.icon('potion', cx, cy - 6 * u, r * 1.05, ready ? 1 : 0.4);
+      if (ready) ui.text('金疮药', cx, cy + r * 0.62, 20, '#9be37a', 'center', '#10200c');
+      else ui.text(`${Math.ceil(b.potionCd)}s`, cx, cy + r * 0.62, 22, '#c0cbdc');
     }
-    ui.icon('potion', cx, cy - 6 * u, r * 1.05, ready ? 1 : 0.4);
-    if (ready) ui.text('金疮药', cx, cy + r * 0.62, 20, '#9be37a', 'center', '#10200c');
-    else ui.text(`${Math.ceil(b.potionCd)}s`, cx, cy + r * 0.62, 22, '#c0cbdc');
     if (ui.clicked('potion_btn', cx - r, cy - r, r * 2, r * 2, false)) this.pressPotion();
     // 新手提示：第一次血量偏低时提醒可以喝药
     if (ready && low && b.potionUses === 0 && save.stats.runs < 5 && !game.dialogs.length && !b.dead) {
@@ -909,23 +973,31 @@ export class BattleScene implements Scene {
     // 底盘
     if (full) {
       const glow = g.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 1.6);
-      glow.addColorStop(0, 'rgba(254,231,97,0.55)');
-      glow.addColorStop(1, 'rgba(254,231,97,0)');
+      glow.addColorStop(0, ui.paperTheme ? 'rgba(232,180,80,0.5)' : 'rgba(254,231,97,0.55)');
+      glow.addColorStop(1, ui.paperTheme ? 'rgba(232,180,80,0)' : 'rgba(254,231,97,0)');
       g.fillStyle = glow;
       g.beginPath(); g.arc(cx, cy, r * (1.5 + 0.1 * Math.sin(ui.time * 8)), 0, Math.PI * 2); g.fill();
     }
-    g.fillStyle = 'rgba(12,8,16,0.75)';
-    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
-    g.lineWidth = 10 * u;
-    g.strokeStyle = '#3a2c2a';
-    g.beginPath(); g.arc(cx, cy, r - 6 * u, 0, Math.PI * 2); g.stroke();
-    g.strokeStyle = full ? '#fee761' : b.rageLock > 0 ? '#5a6988' : '#e43b44';
-    g.beginPath(); g.arc(cx, cy, r - 6 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (full ? 1 : ratio)); g.stroke();
     const pulse = full ? 1 + 0.08 * Math.sin(ui.time * 10) : 1;
-    ui.icon(WEAPONS[b.hero.weapon].evoIcon, cx, cy - 10 * u, r * 1.05 * pulse, full ? 1 : 0.45);
-    if (full) ui.text(b.hero.ultName.split('·')[0], cx, cy + r * 0.55, 28, '#fee761', 'center', '#3a0d12');
-    else if (b.rageLock > 0) ui.text(`${Math.ceil(b.rageLock)}s`, cx, cy + r * 0.55, 24, '#c0cbdc');
-    else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#fff');
+    if (ui.paperTheme) {
+      this.paperDial(cx, cy, r, full ? 1 : ratio, full ? '#c9962e' : b.rageLock > 0 ? '#7d8798' : '#b8392f', 10 * u);
+      ui.icon(WEAPONS[b.hero.weapon].evoIcon, cx, cy - 10 * u, r * 1.05 * pulse, full ? 1 : 0.45);
+      if (full) ui.text(b.hero.ultName.split('·')[0], cx, cy + r * 0.55, 28, '#a3281e', 'center', null);
+      else if (b.rageLock > 0) ui.text(`${Math.ceil(b.rageLock)}s`, cx, cy + r * 0.55, 24, '#4a4038', 'center', null);
+      else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#2b2119', 'center', null);
+    } else {
+      g.fillStyle = 'rgba(12,8,16,0.75)';
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 10 * u;
+      g.strokeStyle = '#3a2c2a';
+      g.beginPath(); g.arc(cx, cy, r - 6 * u, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = full ? '#fee761' : b.rageLock > 0 ? '#5a6988' : '#e43b44';
+      g.beginPath(); g.arc(cx, cy, r - 6 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (full ? 1 : ratio)); g.stroke();
+      ui.icon(WEAPONS[b.hero.weapon].evoIcon, cx, cy - 10 * u, r * 1.05 * pulse, full ? 1 : 0.45);
+      if (full) ui.text(b.hero.ultName.split('·')[0], cx, cy + r * 0.55, 28, '#fee761', 'center', '#3a0d12');
+      else if (b.rageLock > 0) ui.text(`${Math.ceil(b.rageLock)}s`, cx, cy + r * 0.55, 24, '#c0cbdc');
+      else ui.text(`${Math.floor(ratio * 100)}%`, cx, cy + r * 0.55, 24, '#fff');
+    }
     if (ui.clicked('ult_btn', cx - r, cy - r, r * 2, r * 2, false)) this.pressUlt();
     // 看视频充满怒气（每局 2 次）
     if (!full && !b.ult && b.adRageUsed < 2 && !NO_ADS) {
@@ -981,8 +1053,18 @@ export class BattleScene implements Scene {
     let y = clamp(this.renderer.worldToScreen(cart.x, cart.y - 70)[1], top, bottom);
     const bannerY = ui.H * 0.3;
     if (this.banners.length && Math.abs(y - bannerY) < 60 * u) y = Math.min(bottom, bannerY + 60 * u);
-    ui.pixRect(x - width / 2, y - 19 * u, width, 38 * u, 'rgba(20,40,35,0.88)', 4 * u);
-    ui.text(text, x, y, 23, '#fff3c4');
+    if (ui.paperTheme) {
+      // 纸签：墨线框 + 熟宣底 + 左侧石绿色条，与提示框同一套样式。
+      ui.pixRect(x - width / 2, y - 19 * u + 3 * u, width, 38 * u, 'rgba(18,12,8,0.3)', 3 * u);
+      ui.pixRect(x - width / 2, y - 19 * u, width, 38 * u, '#2b2119', 3 * u);
+      ui.pixRect(x - width / 2 + 2 * u, y - 17 * u, width - 4 * u, 34 * u, '#f6eedb', 2 * u);
+      ui.ctx.fillStyle = '#4a8a52';
+      ui.ctx.fillRect(x - width / 2 + 2 * u, y - 17 * u, 5 * u, 34 * u);
+      ui.text(text, x + 2 * u, y, 23, '#24452c', 'center', null);
+    } else {
+      ui.pixRect(x - width / 2, y - 19 * u, width, 38 * u, 'rgba(20,40,35,0.88)', 4 * u);
+      ui.text(text, x, y, 23, '#fff3c4');
+    }
   }
 
   private drawOffscreenArrows() {

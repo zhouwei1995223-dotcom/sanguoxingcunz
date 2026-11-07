@@ -87,11 +87,16 @@ function tag(ui: UI, x: number, y: number, text: string, color: string): number 
   return w + 8 * u;
 }
 
+/** 宣纸卡片的内框线：把霓虹色换成同色系的矿物颜料色（石青 / 赭金 / 朱砂 / 石绿 / 紫檀）。 */
+const PAPER_BORDER: Record<string, string> = {
+  '#2ce8f5': '#3d7f9a', '#fee761': '#b0802a', '#feae34': '#a3281e', '#4fb06a': '#4a8a52',
+  '#c89b5c': '#8c765a', '#dc9be9': '#7a3f86', '#dc5bd0': '#7a3f86', '#e43b44': '#a3281e', '#63c74d': '#4a8a52', '#0099db': '#2f6b8a',
+};
 function battleCardFrame(ui: UI, x: number, y: number, w: number, h: number, border: string, fill: string) {
   const edge = 4 * ui.u;
   if (ui.paperTheme) {
     ui.panel(x, y, w, h, 'paper');
-    ui.ctx.strokeStyle = border;
+    ui.ctx.strokeStyle = PAPER_BORDER[border.toLowerCase()] || border;
     ui.ctx.lineWidth = Math.max(1, ui.u * 1.8);
     ui.ctx.strokeRect(x + 2 * edge, y + 2 * edge, w - 4 * edge, h - 4 * edge);
     return;
@@ -694,8 +699,26 @@ export class ReviveDialog implements Dialog {
     if (!this.busy) this.remain -= dt;
     const left = Math.max(0, this.remain);
     ui.text(b.def ? '城池被攻破……是否死守？' : `${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
-    ui.icon('revive', ui.W / 2, f.y + 230 * u, 140 * u);
-    ui.text(String(Math.ceil(left)), ui.W / 2, f.y + 230 * u, 48, '#fff');
+    if (ui.paperTheme) {
+      // 倒计时改成朱砂进度环 + 墨字，原来的金币图标垫在数字下面看不清。
+      const g = ui.ctx, cx = ui.W / 2, cy = f.y + 230 * u, r = 58 * u, TAU = Math.PI * 2;
+      g.save();
+      g.lineWidth = 9 * u;
+      g.strokeStyle = 'rgba(110,88,62,0.2)';
+      g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+      g.strokeStyle = left <= 3 ? '#a3281e' : '#b8392f';
+      g.lineCap = 'round';
+      g.beginPath(); g.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, left / 10)); g.stroke();
+      g.lineWidth = Math.max(1, u);
+      g.strokeStyle = 'rgba(60,46,32,0.5)';
+      g.beginPath(); g.arc(cx, cy, r - 9 * u, 0, TAU); g.stroke();
+      g.restore();
+      const pop = 1 + 0.12 * Math.max(0, (left % 1) - 0.8) / 0.2;
+      ui.text(String(Math.ceil(left)), cx, cy + 2 * u, 52 * pop, left <= 3 ? '#a3281e' : '#2b2119', 'center', null);
+    } else {
+      ui.icon('revive', ui.W / 2, f.y + 230 * u, 140 * u);
+      ui.text(String(Math.ceil(left)), ui.W / 2, f.y + 230 * u, 48, '#fff');
+    }
     let y = f.y + 340 * u;
     const bw = w - 120 * u;
     const bx = ui.W / 2 - bw / 2;
