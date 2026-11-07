@@ -1,38 +1,60 @@
 import { PixelImage } from '../pixel';
-import { arrowTowerImage, crossbowCartFrames, shuCatapultFrames } from './defense';
+import { arrowTowerImage } from './defense';
 import { FIELD_H, FIELD_W, Point, TowerKind, TowerMap } from '../../data/tower';
 
-export function emplacementImage(kind: TowerKind, level: number): PixelImage {
-  if (kind === 'arrow') return arrowTowerImage(level);
+export function emplacementImage(kind: TowerKind, level: number, pose = 0): PixelImage {
+  if (kind === 'arrow') {
+    const p = arrowTowerImage(level).pad(0, 0, 5, 0);
+    const bow = pose === 1 ? 22 : pose === 2 ? 19 : 17;
+    p.line(15, 6, bow, 9, 'y'); p.line(bow, 9, 15, 13, 'u');
+    p.line(15, 6, pose === 1 ? 15 : 11, 9, 'w'); p.line(pose === 1 ? 15 : 11, 9, 15, 13, 'w');
+    return p;
+  }
   const p = new PixelImage(34, 40);
   p.rect(2, 32, 30, 6, 'n');
   p.rect(4, 29, 26, 5, 's');
   p.rect(6, 28, 22, 3, 'S');
   if (kind === 'bolt' || kind === 'stone') {
-    const machine = kind === 'bolt' ? crossbowCartFrames()[0] : shuCatapultFrames()[0];
-    p.blit(machine, Math.floor((34 - machine.w) / 2), 31 - machine.h);
+    for (const x of [7, 24]) {
+      p.disc(x, 25, 4, 'K'); p.disc(x, 25, 3, 'U'); p.set(x, 25, 'y');
+    }
+    p.rect(4, 20, 24, 4, 'u'); p.rect(6, 20, 20, 1, 'y');
+    if (kind === 'stone') {
+      const tipX = [4, 18, 10][pose], tipY = [15, 2, 6][pose];
+      p.line(10, 21, 15, 14, 'G'); p.line(21, 21, 15, 14, 'd');
+      p.line(tipX, tipY, 24, 20, 'U'); p.line(tipX, tipY - 1, 24, 19, 'y');
+      p.disc(15, 14, 2, 'S'); p.rect(tipX - 3, tipY - 2, 6, 3, 'u');
+      if (pose === 0) p.disc(tipX, tipY - 3, 3, 's');
+    } else {
+      const back = [9, 5, 7][pose], arm = [17, 23, 20][pose];
+      p.rect(back, 12, 17, 4, 'G'); p.rect(back - 2, 16, 18, 3, 'U');
+      p.line(arm, 7, back + 4, 13, 'y'); p.line(arm, 19, back + 4, 14, 'u');
+      p.line(arm, 7, back, 13, 'w'); p.line(back, 13, arm, 19, 'w');
+      if (pose !== 1) p.line(back, 13, 28, 13, 'S');
+    }
   } else {
     p.rect(6, 14, 3, 16, 'U');
     p.rect(24, 14, 3, 16, 'U');
     p.rect(5, 13, 23, 3, 'u');
     p.rect(7, 12, 19, 2, 'y');
     if (kind === 'oil') {
-      p.rect(10, 11, 15, 13, 'K');
-      p.rect(8, 13, 19, 7, 'n');
-      p.rect(10, 12, 15, 3, 'u');
-      p.rect(11, 19, 13, 2, 'y');
+      const lift = [0, 4, 2][pose];
+      p.rect(10, 11 - lift, 15, 13, 'K');
+      p.rect(8, 13 - lift, 19, 7, 'n');
+      p.rect(10, 12 - lift, 15, 3, 'u');
+      p.rect(11, 19 - lift, 13, 2, 'y');
+      p.line(6, 18, 11, 14 - lift, 'y'); p.line(26, 18, 23, 14 - lift, 'u');
       p.rect(14, 7, 7, 6, 'R');
-      p.rect(16, 4, 3, 7, 'o');
+      p.rect(15 + pose, 4 - pose, 3, 7 + pose, 'o');
       p.rect(18, 8, 2, 4, 'Y');
     } else {
       p.disc(16, 15, 8, 'r');
       p.disc(15, 14, 7, 'q');
       p.ring(15, 14, 6, 'y');
       p.disc(15, 14, 2, 'R');
-      p.line(6, 5, 13, 11, 'U');
-      p.line(25, 4, 19, 10, 'U');
-      p.disc(6, 5, 2, 'R');
-      p.disc(25, 4, 2, 'R');
+      const a = [7, 12, 9][pose], b = [6, 12, 8][pose];
+      p.line(4, 5, 12, a, 'U'); p.line(27, 4, 20, b, 'U');
+      p.disc(12, a, 2, 'R'); p.disc(20, b, 2, 'R');
     }
   }
   p.rect(28, 8, 1, 20, 'U');

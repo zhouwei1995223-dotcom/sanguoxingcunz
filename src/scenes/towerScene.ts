@@ -1,12 +1,13 @@
 import { game, Scene, Dialog } from '../game';
 import { fmtTime } from '../core/math';
 import { Marcher, TowerBattle } from '../battle/tower';
-import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, MARCH_SECONDS, GATE_HP, commandBonus } from '../data/tower';
+import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, FORMATIONS, TACTIC_IDS, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, MARCH_SECONDS, GATE_HP, commandBonus } from '../data/tower';
 import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { BOSSES } from '../data/enemies';
 import { IS_WEB, IS_WX } from '../data/platformConfig';
 import { getPlatform } from '../platform';
 import { sprite } from '../gfx/atlas';
+import { drawMissile, drawImpact, drawThunder } from '../gfx/towerEffects';
 import { drawTerrain } from '../gfx/art/tower';
 import { drawXuanTexture } from '../ui/xuanPaper';
 import { C, UI } from '../ui/ui';
@@ -155,12 +156,14 @@ export class TowerScene implements Scene {
   update(dt: number) {
     const ui = game.ui, u = ui.u, b = this.battle, g = ui.ctx;
     if (!this.paused && !this.busy && !b.over && !b.offer) {
+      let fired = false;
       this.accumulator += dt * this.speed;
       while (this.accumulator >= 1 / 30 && !b.over) {
         b.update(1 / 30);
         this.accumulator -= 1 / 30;
+        fired ||= b.strikes.some(f => f.age === 0 && (f.kind === 'arrow' || f.kind === 'bolt' || f.kind === 'stone' || f.kind === 'oil'));
       }
-      if (b.strikes.some(f => f.age === 0 && f.kind !== 'command')) playSfx('shoot');
+      if (fired) playSfx('shoot');
     }
     if (b.over || b.offer) this.aiming = false;
     if (b.over) this.finish();
@@ -236,7 +239,18 @@ export class TowerScene implements Scene {
       g.setLineDash([]);
       if (t) {
         const size = 33 + t.level * 2;
-        stamp(g, 'td_' + t.kind + t.level, x, Math.max(y + 3, size * heightRatio), size, heightRatio);
+        const age = b.elapsed - t.firedAt, beat = (b.elapsed + i * .13) % 1.3;
+        const motion = t.kind === 'drum' ? beat : age;
+        const pose = motion < .12 ? 1 : motion < .28 ? 2 : 0;
+        g.save(); g.translate(x, y + 3);
+        if (t.left) g.scale(-1, 1);
+        stamp(g, 'td_' + t.kind + t.level + (pose ? '_p' + pose : ''), 0, 0, size, heightRatio);
+        g.restore();
+        if (t.kind === 'drum' && beat < .45) {
+          g.save(); g.globalAlpha = .5 * (1 - beat / .45);
+          g.strokeStyle = '#f2d56e'; g.lineWidth = 1.5;
+          g.beginPath(); g.ellipse(x, y, 10 + beat * 44, 5 + beat * 22, 0, 0, Math.PI * 2); g.stroke(); g.restore();
+        }
         g.fillStyle = '#443e2c';
         g.fillRect(x - 7, y + 6, 14, 4);
         g.fillStyle = '#efd27d';
@@ -246,7 +260,30 @@ export class TowerScene implements Scene {
       }
     });
     for (const e of b.enemies) {
+      if (e.banner && e.stun <= 0) {
+        g.save(); g.globalAlpha = .30; g.strokeStyle = '#ad561c'; g.lineWidth = 1.3;
+        g.setLineDash([4, 6]); g.lineDashOffset = -b.elapsed * 8;
+        g.beginPath(); g.arc(e.x, e.y, 43, 0, Math.PI * 2); g.stroke(); g.restore();
+      }
       const sz = this.drawEnemy(g, e, heightRatio);
+      if (e.banner) {
+        const py = e.y - 18 * heightRatio, tip = Math.sin(b.elapsed * 9) * 2;
+        g.fillStyle = '#68482e'; g.fillRect(e.x + 8, py - 14, 2, 24);
+        g.fillStyle = e.stun > 0 ? '#9e886a' : '#be3c27';
+        g.beginPath(); g.moveTo(e.x + 10, py - 14); g.lineTo(e.x + 22, py - 12 + tip);
+        g.lineTo(e.x + 17, py - 8 + tip); g.lineTo(e.x + 22, py - 5 + tip); g.lineTo(e.x + 10, py - 6); g.fill();
+      }
+      if (e.shield > 0) {
+        const sx = e.x + (e.left ? -7 : 7), sy = e.y - 8;
+        g.fillStyle = '#6a4b26'; g.fillRect(sx - 4, sy - 7, 9, 10);
+        g.fillStyle = '#e6bd69'; g.fillRect(sx - 3, sy - 6, 7, 7); g.fillRect(sx - 2, sy + 1, 5, 2);
+        if (e.shield < e.maxShield / 2) { g.fillStyle = '#78552b'; g.fillRect(sx, sy - 5, 1.5, 4); g.fillRect(sx - 1, sy - 1, 1.5, 3); }
+      }
+      if (e.frozenUntil > b.elapsed) {
+        g.strokeStyle = '#cdffff'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(e.x - 8, e.y - 1); g.lineTo(e.x - 10, e.y - 8); g.lineTo(e.x - 4, e.y - 4);
+        g.lineTo(e.x, e.y - 12); g.lineTo(e.x + 4, e.y - 4); g.lineTo(e.x + 8, e.y - 7); g.lineTo(e.x + 7, e.y); g.stroke();
+      }
       if (e.gateDamage > 1 || e.hp < e.maxHp) {
         const w = sz * .87;
         g.fillStyle = '#372b22';
@@ -257,13 +294,15 @@ export class TowerScene implements Scene {
     }
     for (const e of b.fallen) this.drawEnemy(g, e, heightRatio);
     for (const a of b.allies) {
-      stamp(g, 'hero_' + a.id + '_' + Math.floor(b.elapsed * 6) % 4 + (a.left ? '_L' : ''), a.x, a.y + 3, 32, heightRatio);
+      const swing = ALLY_CARDS[a.id].interval - a.cooldown;
+      const thrust = swing < .28 ? Math.sin(Math.PI * swing / .28) * (a.id === 'huangzhong' ? -2 : 5) : 0;
+      stamp(g, 'hero_' + a.id + '_' + Math.floor(b.elapsed * 6) % 4 + (a.left ? '_L' : ''), a.x + (a.left ? -thrust : thrust), a.y + 3, 32, heightRatio);
       g.fillStyle = '#31694c'; g.fillRect(a.x - 6, a.y + 4, 12, 2);
     }
     for (const f of b.strikes) {
       const k = f.age / f.life;
       g.save();
-      g.globalAlpha = Math.max(0, 1 - k);
+      g.globalAlpha = f.kind === 'stone' || f.kind === 'oil' ? 1 : Math.max(0, 1 - k);
       if (f.kind === 'command') {
         const dragon = b.hero === 'zhaoyun';
         g.strokeStyle = dragon ? '#fff4ae' : '#f5d3ac';
@@ -292,19 +331,29 @@ export class TowerScene implements Scene {
       } else if (f.kind === 'roar' || f.kind === 'frost' || f.kind === 'slash' || f.kind === 'deploy') {
         g.strokeStyle = f.kind === 'frost' ? '#c3f5ff' : f.kind === 'slash' || f.kind === 'deploy' ? '#b1f1a5' : '#ffd08e';
         g.lineWidth = f.kind === 'slash' ? 5 : 3;
-        g.beginPath(); g.arc(f.tx, f.ty, f.radius * (.4 + .6 * k), -.8, f.kind === 'slash' ? 2.7 : Math.PI * 2 - .8); g.stroke();
-      } else if (f.kind === 'lightning') {
-        g.strokeStyle = '#fff1a7'; g.lineWidth = 3;
-        g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.tx + 5, f.ty - 24); g.lineTo(f.tx - 5, f.ty - 22); g.lineTo(f.tx, f.ty); g.stroke();
+        const radius = f.radius * (.35 + .65 * k);
+        const angle = f.kind === 'slash' ? -1.6 + k * 2.5 : -.8;
+        g.beginPath(); g.arc(f.tx, f.ty, radius, angle, angle + (f.kind === 'slash' ? 2.6 : Math.PI * 2)); g.stroke();
+        if (f.kind === 'frost') {
+          for (let i = 0; i < 8; i++) {
+            const a = i * Math.PI / 4, dx = Math.cos(a), dy = Math.sin(a);
+            const x = f.tx + dx * radius, y = f.ty + dy * radius;
+            g.fillStyle = i % 2 ? '#dfffff' : '#81cef0';
+            g.beginPath(); g.moveTo(x + dx * 6, y + dy * 6); g.lineTo(x - dy * 3, y + dx * 3);
+            g.lineTo(x - dx * 5, y - dy * 5); g.lineTo(x + dy * 3, y - dx * 3); g.fill();
+          }
+        } else if (f.kind === 'roar' || f.kind === 'slash') {
+          g.strokeStyle = f.kind === 'roar' ? '#fff1ba' : '#efffc9'; g.lineWidth = 1.5;
+          g.beginPath(); g.arc(f.tx, f.ty, radius * .76, angle, angle + (f.kind === 'slash' ? 1.9 : Math.PI * 2)); g.stroke();
+        }
+      } else if (f.kind === 'lightning' || f.kind === 'arc') {
+        drawThunder(g, f);
+      } else if (f.kind === 'dust' || f.kind === 'blast' || f.kind === 'breakShield') {
+        drawImpact(g, f);
       } else if (f.kind === 'stone' || f.kind === 'oil') {
         stamp(g, f.kind === 'oil' ? 'pot' : 'stone', f.x + (f.tx - f.x) * k, f.y + (f.ty - f.y) * k - 17 * Math.sin(Math.PI * k), 10, heightRatio);
-      } else {
-        g.strokeStyle = f.kind === 'bolt' ? '#87482b' : '#fff3b7';
-        g.lineWidth = f.kind === 'bolt' ? 2 : 1.2;
-        g.beginPath();
-        g.moveTo(f.x, f.y - 8);
-        g.lineTo(f.tx, f.ty);
-        g.stroke();
+      } else if (f.kind === 'arrow' || f.kind === 'bolt' || f.kind === 'iceShard') {
+        drawMissile(g, f);
       }
       g.restore();
     }
@@ -312,7 +361,7 @@ export class TowerScene implements Scene {
   private drawEnemy(g: CanvasRenderingContext2D, e: Marcher, heightRatio: number) {
     const size = e.gateDamage === 5 ? 43 : e.gateDamage === 2 ? 33 : 24;
     const pose = e.left ? (e.flash > 0 ? '_LW' : '_L') : (e.flash > 0 ? '_W' : '');
-    stamp(g, 'u_' + e.sprite + '_' + Math.floor(this.battle.elapsed * 7) % 4 + pose, e.x, e.y + 3, size, heightRatio);
+    stamp(g, 'u_' + e.sprite + '_' + (e.stun > 0 ? 0 : Math.floor((e.x + e.y) / 5) % 4) + pose, e.x, e.y + 3, size, heightRatio);
     return size;
   }
   private drawActions(ui: UI, y: number, h: number, interactive: boolean) {
@@ -352,25 +401,38 @@ export class TowerScene implements Scene {
       return { label: '武将', color: RED, icon: 'hero_' + card.id + '_0', name: d.name, action: lv === 1 ? '上阵 · ' + d.skill : '强化至 ' + lv + ' 级', desc: d.desc + (lv > 1 ? ' 本将技能伤害提升。' : '') };
     }
     const d = TACTIC_CARDS[card.id], lv = (b.tactics.find(t => t.id === card.id)?.level || 0) + 1;
-    return { label: '特殊效果', color: '#335880', icon: d.icon, name: d.name, action: lv === 1 ? '本局生效' : '强化至 ' + lv + ' 级', desc: d.desc + (lv > 1 ? ' 效果增强。' : '') };
+    return { label: '特殊效果', color: '#335880', icon: d.icon, name: d.name, action: lv === 1 ? '本局生效' : '强化至 ' + lv + ' 级', desc: d.desc };
   }
 
   private drawCards(ui: UI) {
     const b = this.battle, offer = b.offer!, u = ui.u;
     ui.layer = 1; ui.dim(.65); ui.blocker('td_cards_block');
-    const f = dialogFrame(ui, 724 * u, 488 * u, offer.aid ? '援建 · 解锁塔位' : '军阵升级 · Lv.' + b.level);
+    const f = dialogFrame(ui, 724 * u, 602 * u, offer.aid ? '援建 · 解锁塔位' : '军阵升级 · Lv.' + b.level);
     ui.text(offer.aid ? '任选一座，按塔位顺序部署' : '选择一项，本局生效', ui.W / 2, f.y + 85 * u, 25, MUTED, 'center', null);
     offer.cards.forEach((card, i) => {
-      const d = this.cardInfo(card), x = f.x + (17 + i * 232) * u, y = f.y + 126 * u, w = 226 * u, h = 326 * u;
+      const d = this.cardInfo(card), x = f.x + (17 + i * 232) * u, y = f.y + 126 * u, w = 226 * u, h = 440 * u;
       ui.panel(x, y, w, h, 'paper');
       ui.text(d.label, x + w / 2, y + 30 * u, 23, d.color, 'center', null);
       ui.icon(d.icon, x + w / 2, y + 91 * u, 71 * u);
       ui.text(d.name, x + w / 2, y + 157 * u, 31, INK, 'center', null);
       ui.text(d.action, x + w / 2, y + 201 * u, 21, d.color, 'center', null);
       ui.wrapText(d.desc, x + 12 * u, y + 228 * u, w - 24 * u, 21, INK, 1.18, 'left', null);
+      const pair = card.type === 'tactic' ? card.id : card.type === 'tower' ? TACTIC_IDS.find(id => FORMATIONS[id].kind === card.kind) : undefined;
+      if (pair) {
+        const recipe = FORMATIONS[pair];
+        const ready = card.type === 'tactic' ? b.towers.some(t => t?.kind === recipe.kind) : b.tactics.some(t => t.id === pair);
+        const partner = card.type === 'tactic' ? TOWERS[recipe.kind].name : TACTIC_CARDS[pair].name;
+        const state = b.formations.has(pair) ? '已生效' : ready ? '选取即生效' : '需' + partner;
+        ui.ctx.fillStyle = '#bcaa88';
+        ui.ctx.fillRect(x + 14 * u, y + 302 * u, w - 28 * u, u);
+        ui.text(recipe.name, x + w / 2, y + 324 * u, 24, GREEN, 'center', null);
+        ui.text(state, x + w / 2, y + 351 * u, 20, b.formations.has(pair) ? GREEN : ready ? RED : MUTED, 'center', null);
+        ui.wrapText(recipe.effect, x + 12 * u, y + 371 * u, w - 24 * u, 20, INK, 1.08, 'left', null);
+      }
+      const count = b.formations.size;
       if (ui.clicked('td_reward_' + i, x, y, w, h) && b.choose(card)) {
         this.aiming = false; playSfx('levelup');
-        ui.toast(d.name + ' · ' + d.action);
+        ui.toast(pair && b.formations.size > count ? '联动生效 · ' + FORMATIONS[pair].name : d.name + ' · ' + d.action);
       }
     });
     ui.layer = 0;
@@ -384,6 +446,7 @@ export class TowerScene implements Scene {
     const roster = [];
     if (b.allies.length) roster.push('援将　' + b.allies.map(a => ALLY_CARDS[a.id].name + ' Lv.' + a.level).join('　'));
     if (b.tactics.length) roster.push('特效　' + b.tactics.map(t => TACTIC_CARDS[t.id].name + ' Lv.' + t.level).join('　'));
+    if (b.formations.size) roster.push('联动　' + [...b.formations].map(id => FORMATIONS[id].name).join('　'));
     const extra = roster.length * 38 * u;
     const f = dialogFrame(ui, 614 * u, 552 * u + extra, '暂停布阵');
     ui.text(`城门 ${b.hp}/20   ·   已漏 ${b.leaks} 个敌人`, ui.W / 2, f.y + 100 * u, 26, INK, 'center', null);

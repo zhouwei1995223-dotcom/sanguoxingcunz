@@ -168,7 +168,9 @@ export function buildAtlas() {
   // 守城模式
   addSprite('city', cityImage(), 'bottom');
   addSprite('td_gate', passGate(), 'bottom');
-  for (const kind of TOWER_KINDS) for (const lv of [1, 2, 3]) addSprite('td_' + kind + lv, emplacementImage(kind, lv), 'bottom');
+  for (const kind of TOWER_KINDS) for (const lv of [1, 2, 3]) {
+    for (let pose = 0; pose < 3; pose++) addSprite('td_' + kind + lv + (pose ? '_p' + pose : ''), emplacementImage(kind, lv, pose), 'bottom');
+  }
   addUnit('u_siege_ram', ramFrames());
   addUnit('u_siege_cata', catapultFrames());
   addUnit('u_siege_ladder', withLadder(soldierFrames(SOLDIER_STYLES.wei_spear)));

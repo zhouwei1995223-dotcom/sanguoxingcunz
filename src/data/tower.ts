@@ -21,6 +21,12 @@ export const TACTIC_CARDS = {
   lightning: { name: '引雷符', icon: 'w_thunder', desc: '每隔 6 秒雷击最接近城门的三名敌军。', interval: 6 },
   wildfire: { name: '燎原火', icon: 'w_fire', desc: '每隔 6 秒在敌军脚下点燃一片火场。', interval: 6 }
 };
+// 拥有指定建筑和阵法后立即生效；不额外占牌或弹窗。
+export const FORMATIONS: Record<TacticId, { kind: TowerKind; name: string; effect: string }> = {
+  frost: { kind: 'stone', name: '碎冰礌石', effect: '砸中冰封敌军，冰片再击外围两人' },
+  lightning: { kind: 'bolt', name: '惊雷连弩', effect: '贯穿后，雷弧跳向弩线外一人' },
+  wildfire: { kind: 'oil', name: '引火连营', effect: '油罐落入火区，引爆周围敌军' },
+};
 export type TowerCard =
   | { type: 'tower'; kind: TowerKind; slot: number; level: number; branch?: Branch }
   | { type: 'ally'; id: AllyId }
@@ -52,17 +58,17 @@ export const TOWER_MAPS: TowerMap[] = [
     id: 1, name: '柳营驿道', hint: '单路回折，弯道内侧可照应两段驿道', theme: 'changban',
     routes: [[[0, 65], [240, 65], [260, 85], [260, 153], [238, 175], [68, 175], [49, 195], [49, 264], [72, 286], [233, 286], [256, 310], [256, 371]]],
     sites: [[64, 100], [160, 100], [98, 135], [220, 135], [88, 216], [182, 216], [280, 253], [110, 319], [203, 319], [288, 339]],
-    troop: 'wei_spear', shield: 'wei_shield', cavalry: 'wei_cavalry', bosses: ['xiahouen', 'caochun'], strength: 0.85, latePressure: 3.18
+    troop: 'wei_spear', shield: 'wei_shield', cavalry: 'wei_cavalry', bosses: ['xiahouen', 'caochun'], strength: 0.85, latePressure: 3.30
   },
   {
-    id: 2, name: '汉水双渡', hint: '两岸来敌，在渡口汇流后截击', theme: 'hanshui',
+    id: 2, name: '汉水双渡', hint: '传令旗为附近士兵加速，眩晕可打断', theme: 'hanshui',
     routes: [[[0, 59], [95, 59], [116, 81], [116, 128], [145, 156], [197, 156], [220, 178], [220, 245], [194, 269], [99, 269], [76, 291], [76, 367]],
     [[320, 77], [249, 77], [226, 100], [226, 135], [197, 156], [220, 178], [220, 245], [194, 269], [99, 269], [76, 291], [76, 367]]],
     sites: [[68, 98], [155, 98], [270, 98], [79, 193], [158, 193], [260, 193], [116, 232], [174, 232], [262, 250], [44, 315], [123, 315], [202, 315]],
-    troop: 'yuan_spear', shield: 'yuan_shield', cavalry: 'yuan_cavalry', bosses: ['yanliang', 'wenchou'], strength: 1.06, latePressure: 2.36
+    troop: 'yuan_spear', shield: 'yuan_shield', cavalry: 'yuan_cavalry', bosses: ['yanliang', 'wenchou'], strength: 1.06, latePressure: 2.42
   },
   {
-    id: 3, name: '剑阁夹道', hint: '两翼分兵，重甲与快骑在关前会合', theme: 'fengming',
+    id: 3, name: '剑阁夹道', hint: '精英携盾进军，落石与火焰破盾更快', theme: 'fengming',
     routes: [[[0, 53], [85, 53], [109, 77], [109, 139], [79, 166], [54, 166], [36, 187], [36, 253], [62, 278], [131, 278], [158, 306], [158, 370]],
     [[320, 47], [228, 47], [204, 70], [204, 122], [226, 144], [266, 144], [285, 165], [285, 231], [260, 256], [204, 256], [158, 306], [158, 370]]],
     sites: [[60, 92], [154, 92], [249, 92], [49, 137], [157, 170], [241, 170], [78, 217], [205, 217], [103, 244], [157, 255], [28, 304], [255, 304], [112, 328], [205, 328]],
