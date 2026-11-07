@@ -363,7 +363,7 @@ export class HomeScene implements Scene {
   }
 
   private shopRedDot() {
-    return !save.daily.freeGift || CHESTS.some((c) => (save.daily.chestAd[c.id] || 0) < c.adDaily);
+    return !save.daily.freeGift || CHESTS.some((c) => (save.daily.chestAd[c.id] || 0) < c.adDaily || (IS_WEB && !save.daily.chestTenAd?.[c.id]));
   }
   private talentRedDot() {
     return TALENTS.some((t) => (save.talents[t.id] || 0) < t.max && save.maxCleared >= t.unlockChapter && save.gold >= talentCost(t, save.talents[t.id] || 0));
@@ -731,12 +731,12 @@ export class HomeScene implements Scene {
     ui.text(map.name, cx, y + 88 * u, 44, C.text);
     ui.text(map.hint, cx, y + 138 * u, 23, C.textDim);
     const stars = st.stars[map.id] || 0;
-    ui.text(open ? '★'.repeat(stars) + '☆'.repeat(3 - stars) + '   ·   连续进攻' : `通关第 ${map.id - 1} 关解锁`, cx, y + 192 * u, 23, C.gold);
+    ui.text(open ? '★'.repeat(stars) + '☆'.repeat(3 - stars) + `   ·   ${map.waves} 波进攻` : `通关第 ${map.id - 1} 关解锁`, cx, y + 192 * u, 23, C.gold);
     if (map.id > 1 && ui.button('td_prev', 34 * u, y + 56 * u, 76 * u, 82 * u, '◀', C.btnGray)) { st.selected = map.id - 1; markDirty(); }
     if (map.id < TOWER_MAPS.length && ui.button('td_next', ui.W - 110 * u, y + 56 * u, 76 * u, 82 * u, '▶', C.btnGray)) { st.selected = map.id + 1; markDirty(); }
     const hero = towerCommander(), state = save.heroes[hero];
     const pct = Math.round(100 * commandBonus(state.lv, state.star, state.peak || 0));
-    if (ui.button('td_list', 30 * u, L.by, 142 * u, L.bh, '选关', C.btnGray, { size: 27, sub: `${st.cleared}/3` })) game.openDialog(new TowerStageDialog());
+    if (ui.button('td_list', 30 * u, L.by, 142 * u, L.bh, '选关', C.btnGray, { size: 27, sub: `${st.cleared}/${TOWER_MAPS.length}` })) game.openDialog(new TowerStageDialog());
     if (ui.button('td_commander', 182 * u, L.by, 238 * u, L.bh, '将令 · ' + HERO_BY_ID[hero].name, C.btnBlue, { size: 27, sub: `全塔加成 +${pct}% · 换将` })) game.openDialog(new CommanderDialog());
     this.startRect = [432 * u, L.by, 288 * u, L.bh];
     if (ui.button('td_start', ...this.startRect, '布 阵', C.btnRed, { disabled: !open, sub: `体力 ${STAMINA.costPerRun}` })) {
@@ -1236,7 +1236,21 @@ export class HomeScene implements Scene {
         });
       }
       if (ui.button('chest_buy_' + c.id, 490 * u, y + 140 * u, bw, buttonH, String(c.cost), save.yuanbao >= c.cost ? C.btnGold : C.btnGray, { icon: 'yuanbao', size: 28 })) this.buyChests(c, 1);
-      if (IS_WEB && ui.button('chest_ten_' + c.id, 270 * u, y + 221 * u, 420 * u, 65 * u, `十连抽 · ${10 * c.cost}元宝`, save.yuanbao >= 10 * c.cost ? C.btnRed : C.btnGray, { size: 26 })) this.buyChests(c, 10);
+      if (IS_WEB) {
+        // 每个宝箱每天一次：看视频免费十连抽；旁边保留元宝十连。
+        const tenAd = (save.daily.chestTenAd ??= {});
+        const usedTen = !!tenAd[c.id];
+        if (adButton(ui, 'chest_tenad_' + c.id, 270 * u, y + 221 * u, 205 * u, 65 * u, usedTen ? '今日已领' : '免费十连', { disabled: usedTen, sub: '每日1次', size: 24 })) {
+          const day = save.daily.day;
+          getPlatform().showRewardedAd('chest_ten_' + c.id).then((ok) => {
+            if (!ok || save.daily.day !== day || save.daily.chestTenAd?.[c.id]) return;
+            (save.daily.chestTenAd ??= {})[c.id] = true;
+            progressTask('ad', 1);
+            this.openChestNow(c, 10);
+          });
+        }
+        if (ui.button('chest_ten_' + c.id, 485 * u, y + 221 * u, 205 * u, 65 * u, `十连·${10 * c.cost}`, save.yuanbao >= 10 * c.cost ? C.btnRed : C.btnGray, { size: 24, icon: 'yuanbao' })) this.buyChests(c, 10);
+      }
       y += h + 20 * u;
     }
     // 每日补给

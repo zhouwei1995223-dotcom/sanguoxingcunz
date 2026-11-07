@@ -35,6 +35,8 @@ export interface DailyState {
   adGold: number;
   adStamina: number;
   chestAd: Record<string, number>;
+  /** 每个宝箱每天一次：看视频免费十连抽（网页版） */
+  chestTenAd?: Record<string, boolean>;
   freeGift: boolean;
   sidebar: boolean;
   /** 今天点过游戏圈（红点只在每天第一次显示） */
@@ -126,7 +128,7 @@ const VERSION = 1;
 function freshDaily(): DailyState {
   return {
     day: dayKey(), progress: {}, claimed: {}, boxes: {}, adYuanbao: 0, adGold: 0, adStamina: 0,
-    chestAd: {}, freeGift: false, sidebar: false, patrolQuick: 0, levelupAds: 0, adShards: 0,
+    chestAd: {}, chestTenAd: {}, freeGift: false, sidebar: false, patrolQuick: 0, levelupAds: 0, adShards: 0,
   };
 }
 

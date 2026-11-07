@@ -14,7 +14,7 @@ export interface Popup { x: number; y: number; text: string; color: string; age:
 export interface Death { e: Marcher; age: number; life: number; dir: number; size: number; boss: boolean }
 interface Decal { x: number; y: number; r: number; kind: 'crater' | 'scorch' | 'frost'; age: number; life: number; seed: number }
 export interface TowerAnim { fire: number; build: number; level: number; kind: TowerKind }
-export interface Banner { text: string; sub: string; color: string; age: number; life: number }
+export interface Banner { text: string; sub: string; color: string; age: number; life: number; seal: string }
 
 const INK = '#33261a', INK_RED = '#b3311f', INK_GREEN = '#2f6b45';
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -100,7 +100,7 @@ export class TowerFx {
           if (boss) {
             this.shake(5, .45);
             this.flash = .45; this.flashColor = '#fff3c0';
-            this.banner = { text: '斩 将', sub: '敌将已被击溃', color: INK_RED, age: 0, life: 1.6 };
+            this.banner = { text: '斩 将', sub: '敌将已被击溃', color: INK_RED, age: 0, life: 1.6, seal: '斩' };
             this.sounds.add('explode');
           }
           break;
@@ -136,7 +136,7 @@ export class TowerFx {
         }
         case 'boss': {
           this.bossArrived = true;
-          this.banner = { text: (ev.final ? '主将 ' : '敌将 ') + bossName(ev.e), sub: ev.final ? '最后一战 · 守住城门' : '率部出阵', color: '#9e2a20', age: 0, life: 2 };
+          this.banner = { text: (ev.final ? '主将 ' : '敌将 ') + bossName(ev.e), sub: ev.final ? '最后一战 · 守住城门' : '率部出阵', color: '#9e2a20', age: 0, life: 2, seal: '将' };
           this.shake(4, .5);
           this.sounds.add('boss');
           this.burst(ev.e.x, ev.e.y, 16, ['#c8392b', '#ffcc66', '#5b2a1e'], 50);
@@ -172,6 +172,23 @@ export class TowerFx {
           this.burst(ev.x, ev.y, 18, b.hero === 'zhaoyun' ? ['#ffffff', '#8be6f0', '#ffe9a0'] : ['#ffe9a0', '#ffb45c', '#fff'], 90, { glow: true, grav: 40 });
           this.decals.push({ x: ev.x, y: ev.y, r: ev.r * .55, kind: 'crater', age: 0, life: 3, seed: Math.random() * 99 });
           this.sounds.add('explode');
+          break;
+        }
+        case 'wave': {
+          // 波次横幅较短，不盖住敌将横幅。
+          if (!this.banner || this.banner.seal === '战') {
+            this.banner = { text: `第 ${ev.index} 波`, sub: ev.name + (ev.index === ev.total ? ' · 最后一波' : ` · 共 ${ev.total} 波`), color: ev.boss ? INK_RED : '#3d5a44', age: 0, life: 1.3, seal: '战' };
+          }
+          this.sounds.add('thrust');
+          break;
+        }
+        case 'revive': {
+          const [gx, gy] = this.gate;
+          this.banner = { text: '城门重振', sub: `第 ${ev.n} 次复活 · 全塔伤害提升`, color: INK_RED, age: 0, life: 1.6, seal: '振' };
+          this.shake(3, .3);
+          this.flash = .5; this.flashColor = '#fff3c0';
+          this.burst(gx, gy - 10, 26, ['#ffe9a0', '#fff', '#ffb45c'], 120, { glow: true, grav: 30 });
+          this.sounds.add('boss');
           break;
         }
         case 'shield': {

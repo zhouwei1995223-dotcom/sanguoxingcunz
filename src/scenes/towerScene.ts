@@ -1,53 +1,80 @@
 import { game, Scene, Dialog } from '../game';
 import { fmtTime } from '../core/math';
-import { Marcher, OilPatch, TowerBattle } from '../battle/tower';
-import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, FORMATIONS, TACTIC_IDS, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, MARCH_SECONDS, GATE_HP, commandBonus } from '../data/tower';
+import { Marcher, OilPatch, TowerBattle, TOWER_REVIVE_MAX, TOWER_REVIVE_BONUS } from '../battle/tower';
+import { Point, AID_LIMIT, ALLY_CARDS, ALLY_IDS, AllyId, FIELD_H, FIELD_W, FORMATIONS, TACTIC_IDS, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, GATE_HP, commandBonus } from '../data/tower';
 import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { BOSSES } from '../data/enemies';
 import { IS_WEB, IS_WX } from '../data/platformConfig';
 import { getPlatform } from '../platform';
 import { sprite } from '../gfx/atlas';
 import { drawMissile, drawImpact, drawThunder, drawLobShadow } from '../gfx/towerEffects';
-import { drawTerrain, drawSpawnFlag, HANSHUI_RIVER } from '../gfx/art/tower';
+import { drawTerrain, drawSpawnFlag } from '../gfx/art/tower';
 import { Death, TowerFx, arcHeight } from '../gfx/towerFx';
 import { drawXuanTexture } from '../ui/xuanPaper';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, rewardEntries, rewardRow } from '../ui/widgets';
 import { save, markDirty, flushSave } from '../meta/save';
 import { settleTower } from '../meta/run';
-import { progressTask } from '../meta/ops';
+import { progressTask, computeStats } from '../meta/ops';
 import { playBgm, playSfx } from '../audio/sound';
 import { HomeScene } from './homeScene';
 
 const INK = '#30291f', MUTED = '#6a5842', RED = '#a02f24', GREEN = '#365c43';
 const VIDEO = IS_WEB || IS_WX;
+/** 二倍速：微信版每局看一次视频解锁；网页版、小红书、TapTap 免费。 */
+const SPEED_AD = IS_WX;
+
+/** 援将强度 = 局外武将实际攻击（含等级、星级、巅峰、觉醒、装备、军略、暴击期望）÷ 一级新武将攻击。 */
+export function allyPowerOf(id: AllyId) {
+  const st = computeStats(id), base = HERO_BY_ID[id].baseAtk;
+  const eff = st.atk * (1 + (st.dmg || 0) / 100) * (1 + (st.crit || 0) / 100 * (st.critDmg || 50) / 100);
+  return Math.max(1, eff / base);
+}
+/** 局外武将实际攻击（显示用） */
+export function allyAtkOf(id: AllyId) {
+  const st = computeStats(id);
+  return Math.round(st.atk * (1 + (st.dmg || 0) / 100));
+}
 
 export class TowerStageDialog implements Dialog {
   t?: number;
   draw(ui: UI) {
     const u = ui.u, g = ui.ctx;
-    const f = dialogFrame(ui, 660 * u, 690 * u, '布阵选关', this.t, 'td_list_close');
+    const rows = Math.ceil(TOWER_MAPS.length / 2);
+    const f = dialogFrame(ui, 680 * u, (150 + rows * 206) * u, '布阵选关', this.t, 'td_list_close');
     if (f.close) return false;
     for (const [i, map] of TOWER_MAPS.entries()) {
-      const x = f.x + 30 * u, y = f.y + (94 + i * 185) * u, w = 600 * u, h = 163 * u;
-      const open = map.id <= save.tower.cleared + 1;
+      const col = i % 2, row = Math.floor(i / 2);
+      const x = f.x + (26 + col * 320) * u, y = f.y + (92 + row * 206) * u, w = 308 * u, h = 194 * u;
+      const open = map.id <= save.tower.cleared + 1, chosen = save.tower.selected === map.id;
       ui.panel(x, y, w, h, 'paper');
-      g.fillStyle = open ? '#c4c9a0' : '#c9bfaa';
-      g.fillRect(x + 12 * u, y + 13 * u, 138 * u, h - 26 * u);
-      g.lineWidth = 5 * u;
+      // 缩略舆图：纸色底 + 墨线路线
+      const mx = x + 14 * u, my = y + 14 * u, mw = 92 * u, mh = 116 * u;
+      g.fillStyle = open ? '#d6d2ae' : '#cdc3ad';
+      g.fillRect(mx, my, mw, mh);
+      g.strokeStyle = 'rgba(60,46,30,.55)'; g.lineWidth = Math.max(1, u);
+      g.strokeRect(mx, my, mw, mh);
+      g.lineWidth = 4 * u;
+      g.lineJoin = 'round';
       g.strokeStyle = open ? GREEN : MUTED;
       for (const road of map.routes) {
         g.beginPath();
         road.forEach(([px, py], j) => {
-          const sx = x + (20 + px / FIELD_W * 120) * u, sy = y + (20 + py / FIELD_H * 121) * u;
+          const sx = mx + (4 + px / FIELD_W * (mw / u - 8)) * u, sy = my + (4 + py / FIELD_H * (mh / u - 8)) * u;
           if (j) g.lineTo(sx, sy); else g.moveTo(sx, sy);
         });
         g.stroke();
       }
-      ui.text(`第 ${map.id} 关　${map.name}`, x + 177 * u, y + 49 * u, 32, C.text, 'left');
-      ui.text(open ? ['单路回折', '双渡汇流', '两翼夹击'][i] : `通关第 ${i} 关解锁`, x + 177 * u, y + 111 * u, 23, C.textDim, 'left');
+      ui.text(`第 ${map.id} 关`, x + 120 * u, y + 34 * u, 22, open ? RED : MUTED, 'left', null);
+      ui.text(map.name, x + 120 * u, y + 72 * u, 30, open ? INK : MUTED, 'left', null);
+      ui.text(open ? `${map.brief} · ${map.waves} 波` : `通关第 ${map.id - 1} 关解锁`, x + 120 * u, y + 110 * u, 20, C.textDim, 'left', null);
       const stars = save.tower.stars[map.id] || 0;
-      ui.text('★'.repeat(stars) + '☆'.repeat(3 - stars), x + w - 17 * u, y + 111 * u, 24, C.gold, 'right');
+      ui.text('★'.repeat(stars) + '☆'.repeat(3 - stars), x + 14 * u, y + 162 * u, 26, C.gold, 'left', null);
+      if (chosen) {
+        g.strokeStyle = RED; g.lineWidth = 3 * u;
+        g.strokeRect(x + 5 * u, y + 5 * u, w - 10 * u, h - 10 * u);
+        ui.text('已选', x + w - 18 * u, y + 162 * u, 20, RED, 'right', null);
+      }
       if (ui.clicked('td_map_' + map.id, x, y, w, h)) {
         if (!open) { ui.toast(`通关第 ${map.id - 1} 关后解锁`); continue; }
         save.tower.selected = map.id;
@@ -55,7 +82,7 @@ export class TowerStageDialog implements Dialog {
         return false;
       }
     }
-    ui.text('零漏怪得三星，漏过五名以内得二星', ui.W / 2, f.y + 659 * u, 22, C.textDim);
+    ui.text('零漏怪得三星，漏过五名以内得二星', ui.W / 2, f.y + (120 + rows * 206) * u, 22, C.textDim);
   }
 }
 
@@ -105,9 +132,14 @@ export class TowerScene implements Scene {
   private readonly sdk = getPlatform();
   readonly fx: TowerFx;
   private quitArmed = 0;
+  private speedOpen = !SPEED_AD;
+  /** 城门失守后的复活倒计时 */
+  private reviveLeft = 0;
   constructor(level: number) {
     const map = TOWER_MAPS[level - 1] || TOWER_MAPS[0], id = towerCommander(), hero = save.heroes[id];
-    this.battle = new TowerBattle(map, id, commandBonus(hero.lv, hero.star, hero.peak || 0));
+    const power: Partial<Record<AllyId, number>> = {};
+    for (const a of ALLY_IDS) power[a] = allyPowerOf(a);
+    this.battle = new TowerBattle(map, id, commandBonus(hero.lv, hero.star, hero.peak || 0), Math.random, power);
     this.battle.fxOn = true;
     const gate = map.routes[0][map.routes[0].length - 1];
     this.fx = new TowerFx(gate, map.sites, save.settings.lowPower);
@@ -141,6 +173,11 @@ export class TowerScene implements Scene {
     }
     if (leaked && save.settings.vibrate) this.sdk.vibrateShort();
   }
+  private giveUp() {
+    this.battle.quit = true;
+    this.reviveLeft = 0;
+    this.finish();
+  }
   private finish() {
     if (this.result) return;
     const b = this.battle;
@@ -152,16 +189,27 @@ export class TowerScene implements Scene {
     playSfx(b.phase === 'win' ? 'victory' : 'defeat');
     this.sdk.report('battle_end', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: b.leaks, win: b.phase === 'win' ? 1 : 0, kills: b.kills, sec: Math.floor(b.elapsed) });
   }
-  private async reward(kind: 'repair' | 'double' | 'aid') {
+  private async reward(kind: 'repair' | 'double' | 'aid' | 'speed' | 'revive') {
     const b = this.battle;
     if (this.busy || (kind === 'aid' && !b.canReinforce)) return;
+    if (kind === 'revive' && !b.canRevive) return;
     if (kind === 'repair' && (b.over || b.repaired || b.hp >= GATE_HP)) return;
     if (kind === 'double' && (!this.result || this.doubled)) return;
     this.busy = true;
     try {
-      const ok = !VIDEO || await this.sdk.showRewardedAd('tower_' + kind);
+      const needAd = kind === 'speed' ? SPEED_AD : VIDEO;
+      const ok = !needAd || await this.sdk.showRewardedAd('tower_' + kind);
       if (game.scene !== this || !ok) return;
-      if (kind === 'aid') {
+      if (kind === 'speed') {
+        this.speedOpen = true;
+        this.speed = 2;
+        game.ui.toast('本局已开启二倍速');
+      } else if (kind === 'revive') {
+        if (!b.revive()) return;
+        this.reviveLeft = 0;
+        playBgm('bgm_battle');
+        game.ui.toast(`城门重振 · 全塔伤害 +${Math.round(b.reviveBonus * 100)}%`);
+      } else if (kind === 'aid') {
         if (!b.offerAid()) return;
         this.aiming = false;
       } else if (kind === 'repair') {
@@ -174,7 +222,8 @@ export class TowerScene implements Scene {
         save.iron += this.result!.iron;
         markDirty();
       }
-      if (VIDEO) progressTask('ad', 1);
+      const adShown = kind === 'speed' ? SPEED_AD : VIDEO;
+      if (adShown) progressTask('ad', 1);
       flushSave(true);
     } catch { game.ui.toast('视频暂时不可用，请重试'); }
     finally { this.busy = false; }
@@ -198,7 +247,12 @@ export class TowerScene implements Scene {
     this.fx.update(simDt, b);
     this.quitArmed = Math.max(0, this.quitArmed - dt);
     if (b.over || b.offer) this.aiming = false;
-    if (b.over) this.finish();
+    // 城门失守：还能复活时先给 10 秒决定（看视频 / 免费复活），倒计时归零或放弃再结算。
+    if (b.phase === 'loss' && b.canRevive && !this.result) {
+      if (this.reviveLeft <= 0 && !this.busy) this.reviveLeft = 10;
+      if (!this.busy) this.reviveLeft -= dt;
+      if (this.reviveLeft <= 0 && !this.busy) { this.reviveLeft = 0; this.giveUp(); }
+    } else if (b.over) this.finish();
     g.fillStyle = '#e7dcc2';
     g.fillRect(0, 0, ui.W, ui.H);
     drawXuanTexture(g, 0, 0, ui.W, ui.H, u, { alpha: 0.6 });
@@ -206,12 +260,15 @@ export class TowerScene implements Scene {
     const y = ui.safeTop + 4 * u;
     ui.text(`布阵  ·  ${b.map.name}`, 22 * u, y + 32 * u, 31, INK, 'left', null);
     const interact = !this.paused && !this.result && !this.busy && !b.offer;
-    if (ui.button('td_speed', ui.W - 189 * u, y, 78 * u, 66 * u, '×' + this.speed, C.btnGray, { size: 26 }) && interact) this.speed = this.speed === 1 ? 2 : 1;
+    if (ui.button('td_speed', ui.W - 189 * u, y, 78 * u, 66 * u, this.speedOpen ? '×' + this.speed : '×2', this.speedOpen ? C.btnGray : C.btnGold, { size: 26, icon: this.speedOpen ? undefined : 'video' }) && interact) {
+      if (this.speedOpen) this.speed = this.speed === 1 ? 2 : 1;
+      else void this.reward('speed');
+    }
     if (ui.button('td_pause', ui.W - 103 * u, y, 82 * u, 66 * u, '暂停', C.btnGray, { size: 22 }) && interact) this.paused = true;
     const hudY = y + 70 * u, hudH = (compact ? 54 : 68) * u;
     ui.panel(8 * u, hudY, ui.W - 16 * u, hudH, 'paper');
     const gateCol = this.fx.hudHit > 0 && Math.floor(this.fx.hudHit * 10) % 2 === 0 ? '#e0402f' : b.hp <= 6 ? RED : GREEN;
-    const hud = [['城门', b.hp + '/' + GATE_HP, gateCol], ['阵级', String(b.level), RED], ['用时', fmtTime(b.elapsed), INK], ['漏怪', String(b.leaks), RED]];
+    const hud = [['城门', b.hp + '/' + GATE_HP, gateCol], ['阵级', String(b.level), RED], ['波次', `${Math.max(1, Math.min(b.waveTotal, b.waveIdx + (b.resting && b.waveIdx >= 0 ? 2 : 1)))}/${b.waveTotal}`, INK], ['漏怪', String(b.leaks), RED]];
     hud.forEach(([label, value, col], i) => {
       const x = (24 + i * 187) * u;
       ui.text(label, x, hudY + hudH / 2, 22, MUTED, 'left', null);
@@ -254,6 +311,7 @@ export class TowerScene implements Scene {
     }
     this.drawActions(ui, trayY, actionH, interact && !this.paused);
     if (this.result) this.drawResult(ui);
+    else if (b.phase === 'loss' && b.canRevive) this.drawRevive(ui);
     else if (this.paused) this.drawPause(ui);
     else if (b.offer) this.drawCards(ui);
   }
@@ -261,7 +319,7 @@ export class TowerScene implements Scene {
   private drawUnits(g: CanvasRenderingContext2D, heightRatio: number) {
     const b = this.battle, fx = this.fx, t = fx.time;
     // 环境：云影、河面波光
-    if (b.map.id === 2) this.drawRiverGlint(g, t);
+    if (b.map.river) this.drawRiverGlint(g, t, b.map.river);
     fx.drawDecals(g);
     for (const f of b.oil) this.drawFire(g, f, heightRatio);
     b.map.sites.forEach(([x, y], i) => {
@@ -453,8 +511,7 @@ export class TowerScene implements Scene {
     }
   }
 
-  private drawRiverGlint(g: CanvasRenderingContext2D, t: number) {
-    const river = HANSHUI_RIVER;
+  private drawRiverGlint(g: CanvasRenderingContext2D, t: number, river: readonly Point[]) {
     g.fillStyle = 'rgba(235,250,245,.55)';
     for (let i = 0; i < 18; i++) {
       const s = ((i * .37 + t * .015) % 1) * (river.length - 1), j = Math.floor(s), f = s - j;
@@ -710,7 +767,7 @@ export class TowerScene implements Scene {
         g.strokeRect(sx0 + 5 * u, cy - seal / 2 + 5 * u, seal - 10 * u, seal - 10 * u);
         g.font = ui.font(34, true);
         g.fillStyle = '#f7ead2';
-        g.fillText(bn.text.includes('斩') ? '斩' : '将', sx0 + seal / 2, cy + 2 * u);
+        g.fillText(bn.seal, sx0 + seal / 2, cy + 2 * u);
         const tx = ui.W / 2 + 34 * u + slide * fw;
         g.font = ui.font(40, true);
         g.fillStyle = '#2b1f14';
@@ -725,12 +782,21 @@ export class TowerScene implements Scene {
 
   private drawActions(ui: UI, y: number, h: number, interactive: boolean) {
     const b = this.battle, u = ui.u;
-    const next = b.generalsSent === 0 ? 0 : 1;
-    const general = BOSSES[b.map.bosses[next]].name;
-    const arrives = next === 0 ? MARCH_SECONDS / 2 : MARCH_SECONDS;
-    const status = this.aiming ? '点地图指定将令落点' : b.generalsSent === 2 ? '主将已出阵 · 守住城门' : general + '出阵 ' + fmtTime(Math.ceil(arrives - b.elapsed));
+    // 状态行：当前波次 / 休整倒计时；休整时右侧换成「提前出击」。
+    const wave = b.plan[Math.max(0, b.waveIdx)], nextWave = b.plan[b.waveIdx + 1];
+    let status: string;
+    if (this.aiming) status = '点地图指定将令落点';
+    else if (b.allSpawned) status = b.generalsSent >= 2 ? '主将已出阵 · 守住城门' : '最后一波 · 守住城门';
+    else if (b.resting) status = `第 ${b.waveIdx + 2} 波 ${nextWave?.name || ''} · ${Math.ceil(b.restT)} 秒后`;
+    else status = `第 ${b.waveIdx + 1}/${b.waveTotal} 波 · ${wave.name}${wave.boss ? ' · ' + BOSSES[b.map.bosses[wave.boss === 'mid' ? 0 : 1]].name : ''}`;
     ui.text(status, 20 * u, y - 24 * u, 23, GREEN, 'left', null);
-    ui.text(`升级经验 ${b.xp}/${b.xpNeeded}`, ui.W - 20 * u, y - 24 * u, 22, MUTED, 'right', null);
+    if (b.resting && !this.aiming) {
+      const bw = 170 * u, bh = 46 * u;
+      if (ui.button('td_call', ui.W - bw - 12 * u, y - 24 * u - bh / 2, bw, bh, '提前出击', C.btnRed, { size: 21 }) && interactive) {
+        const gain = b.callNext();
+        if (gain) ui.toast(`提前出击 · 军阵经验 +${gain}`);
+      }
+    } else ui.text(`升级经验 ${b.xp}/${b.xpNeeded}`, ui.W - 20 * u, y - 24 * u, 22, MUTED, 'right', null);
     const hero = HERO_BY_ID[b.hero], cmd = b.hero === 'zhaoyun' ? '龙胆突阵' : '鸣金震阵';
     if (ui.button('td_command', 9 * u, y, 360 * u, h, this.aiming ? '取消选点' : cmd, C.btnRed, {
       icon: 'hero_' + hero.id + '_0', size: 25, sub: b.commandCd > 0 ? `冷却 ${Math.ceil(b.commandCd)} 秒` : '指定落点',
@@ -757,7 +823,9 @@ export class TowerScene implements Scene {
     }
     if (card.type === 'ally') {
       const d = ALLY_CARDS[card.id], lv = (b.allies.find(a => a.id === card.id)?.level || 0) + 1;
-      return { label: '武将', color: RED, icon: 'hero_' + card.id + '_0', name: d.name, action: lv === 1 ? '上阵 · ' + d.skill : '强化至 ' + lv + ' 级', desc: d.desc + (lv > 1 ? ' 本将技能伤害提升。' : '') };
+      const owned = save.heroes[card.id]?.owned, pw = b.allyPower[card.id] ?? 1;
+      const stat = `${owned ? '' : '未招募·按一级 '}攻击 ${allyAtkOf(card.id)}，技能伤害×${pw.toFixed(1)}`;
+      return { label: '武将', color: RED, icon: 'hero_' + card.id + '_0', name: d.name, action: lv === 1 ? '上阵 · ' + d.skill : '强化至 ' + lv + ' 级', desc: d.desc + (lv > 1 ? ' 本将技能伤害提升。' : '') + '\n' + stat };
     }
     const d = TACTIC_CARDS[card.id], lv = (b.tactics.find(t => t.id === card.id)?.level || 0) + 1;
     return { label: '特殊效果', color: '#335880', icon: d.icon, name: d.name, action: lv === 1 ? '本局生效' : '强化至 ' + lv + ' 级', desc: d.desc };
@@ -818,12 +886,41 @@ export class TowerScene implements Scene {
     if (ui.button('td_quit', f.x + 50 * u, f.y + extra + 374 * u, 514 * u, 86 * u, this.quitArmed > 0 ? '再点一次确认撤军' : '撤军结算', this.quitArmed > 0 ? C.btnRed : C.btnGray, { disabled: this.busy })) {
       if (this.quitArmed > 0) {
         this.quitArmed = 0;
+        b.quit = true;
         b.phase = 'loss';
         this.finish();
       } else this.quitArmed = 3;
     }
     ui.layer = 0;
   }
+  /** 城门失守：看视频（无广告版免费）复活，最多三次，每次全塔伤害提升一档。 */
+  private drawRevive(ui: UI) {
+    const u = ui.u, b = this.battle, g = ui.ctx;
+    ui.layer = 1;
+    ui.dim(.66);
+    ui.blocker('td_revive_block');
+    const f = dialogFrame(ui, 620 * u, 560 * u, '城门失守');
+    const cx = ui.W / 2;
+    ui.text('敌军攻破城门……是否重振再战？', cx, f.y + 100 * u, 27, INK, 'center', null);
+    const left = Math.max(0, this.reviveLeft), cy = f.y + 205 * u, r = 54 * u, TAU = Math.PI * 2;
+    g.save();
+    g.lineWidth = 9 * u;
+    g.strokeStyle = 'rgba(110,88,62,0.2)';
+    g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+    g.strokeStyle = left <= 3 ? '#a3281e' : '#b8392f';
+    g.lineCap = 'round';
+    g.beginPath(); g.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, left / 10)); g.stroke();
+    g.restore();
+    ui.text(String(Math.ceil(left)), cx, cy + 2 * u, 50, left <= 3 ? RED : INK, 'center', null);
+    const n = b.reviveCount, pct = Math.round(TOWER_REVIVE_BONUS[n] * 100);
+    const sub = `城门回 ${Math.ceil(GATE_HP / 2)} 点 · 全塔伤害+${pct}% · 还可 ${TOWER_REVIVE_MAX - n} 次`;
+    if (ui.button('td_revive', f.x + 55 * u, f.y + 300 * u, 510 * u, 96 * u, VIDEO ? '看视频复活' : '免费复活', C.btnGold, {
+      icon: VIDEO ? 'video' : undefined, size: 30, sub, disabled: this.busy
+    })) void this.reward('revive');
+    if (ui.button('td_giveup', f.x + 55 * u, f.y + 418 * u, 510 * u, 80 * u, '放弃', C.btnGray, { disabled: this.busy })) this.giveUp();
+    ui.layer = 0;
+  }
+
   private drawResult(ui: UI) {
     const u = ui.u, b = this.battle, r = this.result!;
     ui.layer = 1;

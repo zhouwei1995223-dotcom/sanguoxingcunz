@@ -1,6 +1,7 @@
 import { PixelImage } from '../pixel';
 import { arrowTowerImage } from './defense';
 import { FIELD_H, FIELD_W, Point, TowerKind, TowerMap } from '../../data/tower';
+export { HANSHUI_RIVER } from '../../data/tower';
 
 export function emplacementImage(kind: TowerKind, level: number, pose = 0): PixelImage {
   if (kind === 'arrow') {
@@ -95,8 +96,7 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
   let seed = 13791 * map.id;
   const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   // 宣纸舆图：底色压低饱和度，靠淡墨晕染出地势起伏，整体最后再罩一层纸色。
-  const base = ['#c2c39c', '#b3bca2', '#beb594'][map.id - 1];
-  g.fillStyle = base;
+  g.fillStyle = map.ground;
   g.fillRect(0, 0, FIELD_W, FIELD_H);
   for (let i = 0; i < 24; i++) {
     const x = random() * FIELD_W, y = random() * FIELD_H, r = 30 + random() * 60;
@@ -118,9 +118,9 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
     g.beginPath();
     points.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
   };
-  if (map.id === 2) {
-    // 汉水：淡墨青，岸线用浓一点的墨。
-    const river = HANSHUI_RIVER;
+  if (map.river) {
+    // 江河：淡墨青，岸线用浓一点的墨。
+    const river = map.river;
     g.lineJoin = 'round'; g.lineCap = 'round';
     for (const [width, col] of [[31, 'rgba(72,92,84,.45)'], [27, '#93aca2'], [19, '#a7c0b5'], [9, '#b9cfc4']] as const) {
       path(river);
@@ -177,7 +177,7 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
     const x = random() * FIELD_W, y = random() * FIELD_H, size = 7 + random() * 16;
     if (map.routes.some(r => r.some((p, k) => k > 0 && roadDistance(x, y, p, r[k - 1]) < 15 + size * .22))) continue;
     if (map.sites.some(p => Math.hypot(x - p[0], y - p[1]) < 20)) continue;
-    const name = random() < 0.55 ? ['tree', 'reeds', 'pine'][map.id - 1] : 'rock';
+    const name = random() < 0.55 ? map.decor : 'rock';
     decor.push({ x, y, size, name });
   }
   decor.sort((a, b) => a.y - b.y).forEach(o => stamp('env_' + map.theme + '_' + o.name, o.x, o.y, o.size));
@@ -190,8 +190,6 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
   g.beginPath(); g.ellipse(gate[0], gate[1] + 12, 27, 6, 0, 0, Math.PI * 2); g.fill();
 }
 
-/** 汉水双渡的河道（地图与水面波光共用）。 */
-export const HANSHUI_RIVER: Point[] = [[0, 202], [64, 178], [111, 185], [159, 161], [207, 160], [263, 179], [320, 163]];
 
 /** 出兵口的军旗：旗面按时间波动。 */
 export function drawSpawnFlag(g: CanvasRenderingContext2D, x: number, y: number, t: number, phase: number) {

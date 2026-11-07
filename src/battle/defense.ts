@@ -40,7 +40,7 @@ export interface AllyArrow {
 }
 
 /** 建在建造点上的建筑 */
-export interface Building { slot: number; kind: BuildKind; lv: number; cdT: number }
+export interface Building { slot: number; kind: BuildKind; lv: number; cdT: number; /** 画面用：建成 / 升级后的秒数、上次开火后的秒数 */ builtT?: number; firedT?: number }
 
 export interface Log { x: number; y: number; vx: number; vy: number; life: number; hit: Set<number>; dmg: number; rot: number }
 
@@ -311,9 +311,18 @@ export function applyBuild(b: Battle, kind: BuildKind) {
     BUILD_SLOTS.forEach(([x, y], i) => { if (buildingAt(d, i)) return; const dd = (x - p.x) ** 2 + (y - p.y) ** 2; if (dd < bd) { bd = dd; best = i; } });
     if (best < 0) return;
     slot = best;
-    d.builds.push({ slot, kind, lv: 1, cdT: 0.5 });
-  } else { st.up.lv++; slot = st.up.slot; }
+    d.builds.push({ slot, kind, lv: 1, cdT: 0.5, builtT: 0, firedT: 9 });
+  } else { st.up.lv++; st.up.builtT = 0; slot = st.up.slot; }
   const [x, y] = BUILD_SLOTS[slot];
+  // 落地扬尘（新建稍晚一点，等塔从空中落下）+ 金色光点
+  const fresh = 'build' in st;
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * TAU;
+    b.fx.push({ kind: 'particle', x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 5, t: fresh ? -0.22 : 0, dur: 0.55, vx: Math.cos(a) * 90, vy: Math.sin(a) * 40 - 10, color: fresh ? '#d9c6a0' : '#fff3c4', r: 4, real: true });
+  }
+  for (let i = 0; i < 10; i++) {
+    b.fx.push({ kind: 'particle', x: x + rand(-14, 14), y: y - rand(0, 20), t: fresh ? -0.25 : -rand(0, 0.2), dur: 0.8, vx: rand(-10, 10), vy: rand(-70, -40), color: i % 2 ? '#fee761' : '#ffffff', r: 2.5, real: true });
+  }
   b.fx.push({ kind: 'shock', x, y: y - 6, t: 0, dur: 0.45, r: 46, w: 8, color: '#fee761', real: true });
   b.hooks.sfx('evolve');
 }
@@ -324,6 +333,8 @@ function updateBuilds(b: Battle, dt: number) {
   const d = b.def!;
   const atk = b.base.atk * (1 + (b.base.dmg || 0) / 100);
   for (const bd of d.builds) {
+    bd.builtT = (bd.builtT ?? 9) + dt;
+    bd.firedT = (bd.firedT ?? 9) + dt;
     bd.cdT -= dt;
     if (bd.cdT > 0) continue;
     const [x, y] = BUILD_SLOTS[bd.slot];
@@ -332,11 +343,16 @@ function updateBuilds(b: Battle, dt: number) {
       const e = nearestEnemy(b, x, y, 190);
       if (!e) { bd.cdT = 0.2; continue; }
       bd.cdT = 0.65;
+      bd.firedT = 0;
       shoot(b, x, y - 26, e, atk * 1.3 * k, { fire: d.links.has('l_fire') });
+      const a0 = Math.atan2(e.y - y, e.x - x);
+      for (let i = 0; i < 3; i++) b.fx.push({ kind: 'particle', x: x + Math.cos(a0) * 6, y: y - 26, t: 0, dur: 0.18, vx: Math.cos(a0) * rand(60, 120) + rand(-20, 20), vy: Math.sin(a0) * rand(40, 80) + rand(-20, 20), color: i % 2 ? '#fff6c8' : '#ffd36a', r: 1.6 });
     } else if (bd.kind === 'cata') {
       const e = nearestEnemy(b, x, y, 230);
       if (!e) { bd.cdT = 0.3; continue; }
       bd.cdT = 2.2;
+      bd.firedT = 0;
+      for (let i = 0; i < 6; i++) b.fx.push({ kind: 'particle', x: x + rand(-12, 12), y: y + 2, t: 0, dur: 0.45, vx: rand(-30, 30), vy: rand(-25, -5), color: '#d9c6a0', r: 3.5 });
       const dist = Math.hypot(e.x - x, e.y - y);
       d.arrows.push({ x, y: y - 14, tx: e.x, ty: e.y - 6, t: 0, dur: 0.5 + dist / 600, target: null, dmg: atk * 2.6 * k, fire: false, pierce: false, big: true, aoe: 34 + 6 * bd.lv });
       b.hooks.sfx('thrust');

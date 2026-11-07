@@ -29,7 +29,6 @@ import { buildLevel } from '../battle/defense';
 /** 每局可看广告刷新技能的次数 */
 const LEVELUP_AD_LIMIT = IS_WEB ? Infinity : 5;
 /** 每局最多看广告复活几次 */
-const AD_REVIVE_MAX = 3;
 
 interface CardExtra {
   /** 推荐选择 */
@@ -695,10 +694,10 @@ export class ReviveDialog implements Dialog {
     const u = ui.u;
     const b = this.scene.battle;
     const w = ui.W - 100 * u, h = 640 * u;
-    const f = dialogFrame(ui, w, h, b.def ? '城池失守' : '力竭', this.t);
+    const f = dialogFrame(ui, w, h, b.def?.lost ? '城池失守' : b.def ? '武将阵亡' : '力竭', this.t);
     if (!this.busy) this.remain -= dt;
     const left = Math.max(0, this.remain);
-    ui.text(b.def ? '城池被攻破……是否死守？' : `${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
+    ui.text(b.def?.lost ? '城池被攻破……是否死守？' : `${this.scene.battle.hero.name}力竭倒地……是否再战？`, ui.W / 2, f.y + 110 * u, 30, '#fff4d6');
     if (ui.paperTheme) {
       // 倒计时改成朱砂进度环 + 墨字，原来的金币图标垫在数字下面看不清。
       const g = ui.ctx, cx = ui.W / 2, cy = f.y + 230 * u, r = 58 * u, TAU = Math.PI * 2;
@@ -722,17 +721,24 @@ export class ReviveDialog implements Dialog {
     let y = f.y + 340 * u;
     const bw = w - 120 * u;
     const bx = ui.W / 2 - bw / 2;
-    if (b.revives > 0) {
-      if (ui.button('rv_free', bx, y, bw, 96 * u, `免费复活（${b.revives}）`, C.btnGold)) {
+    // 每局最多复活 REVIVE_MAX 次：先用免费次数（军略「不屈」、新手免费），其余看视频（无广告版花元宝）。
+    const used = b.reviveCount, left3 = Battle.REVIVE_MAX - used;
+    const bonus = Battle.reviveBonusText(used + 1);
+    const sub = `第${used + 1}次复活${bonus ? ' · ' + bonus : ''}`;
+    if (left3 <= 0) {
+      ui.text(`本局已复活 ${Battle.REVIVE_MAX} 次`, ui.W / 2, y + 40 * u, 26, '#a89a86');
+      y += 96 * u;
+    } else if (b.revives > 0) {
+      if (ui.button('rv_free', bx, y, bw, 96 * u, `免费复活（${b.revives}）`, C.btnGold, { sub })) {
         b.revives--;
         this.scene.revive();
         return false;
       }
       y += 116 * u;
-    } else if (!b.adReviveUsed && NO_ADS) {
-      // 无广告版本：花元宝复活（每局一次）
+    } else if (NO_ADS) {
+      // 无广告版本：花元宝复活
       const cost = NO_ADS_PRICE.revive;
-      if (ui.button('rv_yb', bx, y, bw, 96 * u, `${cost}元宝复活`, save.yuanbao >= cost ? C.btnGold : C.btnGray, { icon: 'yuanbao' })) {
+      if (ui.button('rv_yb', bx, y, bw, 96 * u, `${cost}元宝复活`, save.yuanbao >= cost ? C.btnGold : C.btnGray, { icon: 'yuanbao', sub })) {
         if (save.yuanbao < cost) ui.toast(`元宝不足（拥有${save.yuanbao}）`);
         else {
           save.yuanbao -= cost;
@@ -743,10 +749,8 @@ export class ReviveDialog implements Dialog {
         }
       }
       y += 116 * u;
-    } else if (!NO_ADS && b.adRevives < AD_REVIVE_MAX) {
-      const next = b.adRevives + 1;
-      const bonus = Battle.reviveBonusText(next);
-      if (adButton(ui, 'rv_ad', bx, y, bw, 96 * u, '看视频复活', { sub: bonus ? `并获得：${bonus}` : `本局还可复活${AD_REVIVE_MAX - b.adRevives}次` }) && !this.busy) {
+    } else {
+      if (adButton(ui, 'rv_ad', bx, y, bw, 96 * u, '看视频复活', { sub: `${sub} · 还可${left3}次` }) && !this.busy) {
         this.busy = true;
         getPlatform().showRewardedAd('revive').then((ok) => {
           this.busy = false;
@@ -755,7 +759,7 @@ export class ReviveDialog implements Dialog {
           if (ok) {
             b.adRevives++;
             progressTask('ad', 1);
-            this.scene.revive(b.adRevives);
+            this.scene.revive();
             this.closed = true;
           }
         });

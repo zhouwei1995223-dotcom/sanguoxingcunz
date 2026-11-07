@@ -28,7 +28,6 @@ import { DEBUG } from '../debug';
 import { funnel } from '../meta/telemetry';
 import { IS_WEB, NO_ADS } from '../data/platformConfig';
 import { HEROES } from '../data/heroes';
-import { heroBase } from '../meta/ops';
 import { createDefense, HeroInfo, grainRate, nextAutoUnit, soldiers, buildStepText } from '../battle/defense';
 import { UNITS, MAX_ALLIES, BUILDS, BUILD_CARD_MAX, REPAIR_PCT, HERO_SUMMON_TIME } from '../data/defense';
 import { ORDERS, LINKS, defenseChapter } from '../data/defense';
@@ -155,7 +154,11 @@ export class BattleScene implements Scene {
     // 守城：城池、粮草、可召唤的武将（强度按各自的等级 / 星级 / 巅峰等级）
     if (this.chapter.defense) {
       const heroes: Record<string, HeroInfo> = {};
-      for (const h of HEROES) if (save.heroes[h.id]?.owned) { const hb = heroBase(h.id); heroes[h.id] = { atk: hb.atk, hp: hb.hp, name: h.name, ultName: h.ultName.split('·')[0], sprite: heroSpriteName(h.id) }; }
+      // 召唤武将的属性与局外武将页一致：等级、星级、巅峰、觉醒、装备、军略都算（攻击含伤害加成）。
+      for (const h of HEROES) if (save.heroes[h.id]?.owned) {
+        const st = computeStats(h.id);
+        heroes[h.id] = { atk: Math.round(st.atk * (1 + (st.dmg || 0) / 100)), hp: st.hp, name: h.name, ultName: h.ultName.split('·')[0], sprite: heroSpriteName(h.id) };
+      }
       this.battle.def = createDefense(this.battle, heroes);
       this.renderer.clearCenter = true;
     }
@@ -481,8 +484,8 @@ export class BattleScene implements Scene {
     }
   }
 
-  revive(adRevive = 0) {
-    this.battle.revive(adRevive);
+  revive() {
+    this.battle.revive();
     this.reviveShown = false;
   }
 
@@ -1226,7 +1229,7 @@ export function choiceInfo(c: Choice): { icon: string; name: string; desc: strin
     }
     case 'hero': {
       const h = infoBattle?.def?.heroes[c.id];
-      return { icon: h ? `${h.sprite}_0` : 'star', name: `${h?.name || ''}助阵`, desc: `召唤${h?.name || '武将'}出城作战 ${HERO_SUMMON_TIME} 秒（强度按武将自己的等级、星级）`, lv: 0, max: 0, isNew: false, evo: false };
+      return { icon: h ? `${h.sprite}_0` : 'star', name: `${h?.name || ''}助阵`, desc: `召唤${h?.name || '武将'}出城作战 ${HERO_SUMMON_TIME} 秒，属性同武将页${h ? `（攻击 ${h.atk} · 生命 ${h.hp}）` : ''}`, lv: 0, max: 0, isNew: false, evo: false };
     }
     case 'repair':
       return { icon: 'p_armor', name: '修城', desc: `立即修复 ${Math.round(REPAIR_PCT * 100)}% 城池生命`, lv: 0, max: 0, isNew: false, evo: false };

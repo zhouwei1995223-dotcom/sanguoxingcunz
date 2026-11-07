@@ -780,12 +780,9 @@ export class Battle {
       this.hooks.sfx('evolve');
     }
     if (p.hp <= 0 && !this.dead) {
-      // 守城：武将倒下只是回城重整，城池失守才算输
-      if (this.def) heroDown(this);
-      else {
-        this.dead = true;
-        this.hooks.vibrate(true);
-      }
+      // 各模式统一：武将阵亡即判负，可复活（守城里城池失守同样判负）。
+      this.dead = true;
+      this.hooks.vibrate(true);
     }
   }
 
@@ -2529,29 +2526,30 @@ export class Battle {
     return out;
   }
 
-  /** 复活：回满血并震开周围敌人 */
-  /** 第 n 次看广告复活的本局加成：第 2 次伤害 +20%、移速 +10%；第 3 次伤害再 +30%、3 秒无敌、震开更大范围 */
+  /** 每局最多复活次数（免费次数与看广告合计） */
+  static readonly REVIVE_MAX = 3;
+  /** 第 n 次复活的本局加成：第 1 次伤害 +15%；第 2 次伤害 +20%、移速 +10%；第 3 次伤害再 +30%、3 秒无敌 */
   static reviveBonusText(n: number): string {
-    return n === 2 ? '本局伤害+20%、移速+10%' : n === 3 ? '本局伤害再+30%、3秒无敌' : '';
+    return n === 1 ? '本局伤害+15%' : n === 2 ? '本局伤害+20%、移速+10%' : n === 3 ? '本局伤害再+30%、3秒无敌' : '';
   }
 
-  revive(adRevive = 0) {
+  revive() {
     if (this.bossTimedOut) return;
     const p = this.player;
     this.dead = false;
     this.reviveCount++;
-    if (adRevive === 2) { this.reviveDmg += 0.2; this.reviveSpd += 0.1; }
-    if (adRevive === 3) this.reviveDmg += 0.3;
-    if (adRevive >= 2) {
-      this.recalc();
-      this.hooks.banner(Battle.reviveBonusText(adRevive), '#fee761');
-    }
-    // 守城：复活的是城池
-    if (this.def) { reviveCity(this); return; }
+    const n = this.reviveCount;
+    if (n === 1) this.reviveDmg += 0.15;
+    if (n === 2) { this.reviveDmg += 0.2; this.reviveSpd += 0.1; }
+    if (n === 3) this.reviveDmg += 0.3;
+    this.recalc();
+    if (Battle.reviveBonusText(n)) this.hooks.banner(Battle.reviveBonusText(n), '#fee761');
+    // 守城：城池失守时先把城池救回来；武将同时回满血
+    if (this.def && this.def.lost) reviveCity(this);
     p.hp = p.maxHp;
     if (this.stratSet.has('qixing')) this.qixingBuff = true;
-    p.iframe = adRevive === 3 ? 3 : 2.5;
-    const R = adRevive === 3 ? 180 : 120;
+    p.iframe = n === 3 ? 3 : 2.5;
+    const R = n === 3 ? 180 : 120;
     this.hooks.sfx('evolve');
     this.fx.push({ kind: 'ring', x: p.x, y: p.y, t: 0, dur: 0.6, r: R, color: '#fee761' });
     for (const e of this.enemies) {

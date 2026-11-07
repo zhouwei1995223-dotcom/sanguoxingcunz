@@ -1,5 +1,5 @@
 import { BOSSES, ENEMIES } from '../data/enemies';
-import { AID_LIMIT, ALLY_WEIGHT, ALLY_CARDS, ALLY_IDS, AllyId, Branch, FORMATIONS, GATE_HP, Point, TACTIC_CARDS, TACTIC_IDS, TacticId, TowerCard, TowerKind, TowerMap, TOWERS, TOWER_KINDS, MARCH_SECONDS, towerRange } from '../data/tower';
+import { AID_LIMIT, ALLY_WEIGHT, ALLY_CARDS, ALLY_IDS, AllyId, Branch, FORMATIONS, GATE_HP, Point, TACTIC_CARDS, TACTIC_IDS, TacticId, TowerCard, TowerKind, TowerMap, TOWERS, TOWER_KINDS, WAVE_NAMES, towerRange } from '../data/tower';
 
 export interface Emplacement { kind: TowerKind; level: number; cooldown: number; firedAt: number; left: boolean; branch?: Branch }
 export interface TowerAlly { id: AllyId; level: number; x: number; y: number; left: boolean; cooldown: number }
@@ -27,7 +27,33 @@ export type TowerEvent =
   | { t: 'tactic'; id: TacticId; x: number; y: number }
   | { t: 'ally'; id: AllyId; x: number; y: number; tx: number; ty: number }
   | { t: 'command'; x: number; y: number; r: number }
-  | { t: 'shield'; x: number; y: number };
+  | { t: 'shield'; x: number; y: number }
+  | { t: 'wave'; index: number; total: number; name: string; boss: boolean }
+  | { t: 'revive'; n: number };
+
+export type WaveKind = 'first' | 'troop' | 'mounted' | 'armored' | 'swarm' | 'boss';
+export interface WavePlan { kind: WaveKind; count: number; gap: number; elites: number; boss?: 'mid' | 'final'; name: string }
+/** 两波之间的休整秒数；第一波前的准备秒数。 */
+export const WAVE_REST = 7, FIRST_REST = 4;
+/** 布阵复活：最多次数与每次的全塔增伤 */
+export const TOWER_REVIVE_MAX = 3;
+export const TOWER_REVIVE_BONUS = [0.1, 0.15, 0.2];
+
+/** 按关卡波数生成固定的波次表：每三波穿插一次骑兵 / 盾阵，第四波起偶尔大军压境，中间一波敌将、最后一波主将。 */
+export function wavePlan(map: TowerMap): WavePlan[] {
+  const n = map.waves, mid = Math.floor((n - 1) / 2), plan: WavePlan[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = n > 1 ? i / (n - 1) : 1;
+    const boss = i === mid ? 'mid' as const : i === n - 1 ? 'final' as const : undefined;
+    const kind: WaveKind = i === 0 ? 'first' : boss ? 'boss' : i % 3 === 2 ? (Math.floor(i / 3) % 2 ? 'armored' : 'mounted') : i % 4 === 3 ? 'swarm' : 'troop';
+    const count = Math.round((9 + 15 * p) * (kind === 'swarm' ? 1.4 : kind === 'mounted' ? 1.1 : 1));
+    const gap = (kind === 'swarm' ? .78 : 1.15) - .35 * p;
+    const elites = i < 2 ? 0 : 1 + Math.floor(i / 4);
+    const name = boss ? (boss === 'final' ? '主将亲征' : '敌将率部') : WAVE_NAMES[kind as keyof typeof WAVE_NAMES];
+    plan.push({ kind, count, gap, elites, boss, name });
+  }
+  return plan;
+}
 
 const distance = (x: number, y: number, a: number, b: number) => Math.hypot(x - a, y - b);
 const routeLength = (path: Point[]) => path.slice(1).reduce((s, p, i) => s + distance(...p, ...path[i]), 0);
@@ -56,20 +82,47 @@ export class TowerBattle {
   phase: 'fight' | 'win' | 'loss' = 'fight';
   commandCd = 0;
   repaired = false;
-  private nextSpawn = 0;
-  private nextElite = 36;
   generalsSent = 0;
-  constructor(readonly map: TowerMap, readonly hero: string, readonly bonus: number, private random = Math.random) {
+  /** 波次 */
+  readonly plan: WavePlan[];
+  waveIdx = -1;
+  restT = FIRST_REST;
+  allSpawned = false;
+  private queue: ('troop' | 'armored' | 'mounted' | 'elite' | 'mid' | 'final')[] = [];
+  private queueT = 0;
+  private waveCount = 0;
+  /** 复活 */
+  reviveCount = 0;
+  reviveBonus = 0;
+  /** 玩家主动撤军（不提供复活） */
+  quit = false;
+  /** 援将强度倍率：按局外武将实际攻击（含等级、星级、装备、军略）折算，1 = 一级新武将 */
+  readonly allyPower: Partial<Record<AllyId, number>>;
+  constructor(readonly map: TowerMap, readonly hero: string, readonly bonus: number, private random = Math.random, allyPower: Partial<Record<AllyId, number>> = {}) {
     this.towers = map.sites.map(() => null);
     this.towers[0] = { kind: 'arrow', level: 1, cooldown: 0, firedAt: -1, left: false };
     this.lengths = map.routes.map(routeLength);
+    this.plan = wavePlan(map);
+    this.allyPower = allyPower;
   }
+  get waveTotal() { return this.plan.length; }
+  /** 当前（或下一）波的序号，从 1 起 */
+  get waveNo() { return Math.min(this.waveTotal, this.waveIdx + 1 + (this.queue.length || this.waveIdx < 0 ? 0 : 0)); }
+  get resting() { return !this.allSpawned && !this.queue.length && this.restT > 0; }
+  get canRevive() { return this.phase === 'loss' && !this.quit && this.reviveCount < TOWER_REVIVE_MAX; }
+  /** 全塔伤害倍率：将令加成 + 复活加成 */
+  private get towerPower() { return 1 + this.bonus + this.reviveBonus; }
   private emit(ev: TowerEvent) {
     if (this.fxOn && this.events.length < 400) this.events.push(ev);
   }
   get over() { return this.phase === 'win' || this.phase === 'loss'; }
   get stars() { return this.phase !== 'win' ? 0 : this.leaks === 0 ? 3 : this.leaks <= 5 ? 2 : 1; }
-  get progress() { return Math.min(1, this.elapsed / MARCH_SECONDS); }
+  get progress() {
+    if (this.allSpawned) return 1;
+    if (this.waveIdx < 0) return 0;
+    const w = this.plan[this.waveIdx], total = w.count + w.elites + (w.boss ? 1 : 0);
+    return Math.min(1, (this.waveIdx + (total - this.queue.length) / total) / this.waveTotal);
+  }
   get openSites() { return this.towers.length - AID_LIMIT + this.aidUsed; }
   get xpNeeded() { return this.level === 1 ? 8 : 14 + this.level * 4; }
   get canReinforce() { return !this.over && !this.offer && this.aidUsed < AID_LIMIT; }
@@ -177,29 +230,72 @@ export class TowerBattle {
     this.finishStep();
     return true;
   }
-  private spawn(rank: 'troop' | 'elite' | 'mid' | 'final') {
+  /** 开始下一波：按波次类型排好出兵顺序（精英均匀穿插，敌将在中段出阵）。 */
+  private startWave() {
+    this.waveIdx++;
+    const w = this.plan[this.waveIdx], p = this.waveTotal > 1 ? this.waveIdx / (this.waveTotal - 1) : 1;
+    const q: typeof this.queue = [];
+    const armorShare = w.kind === 'armored' ? .65 : w.kind === 'first' ? 0 : .25 * Math.min(1, p * 3);
+    const cavalryShare = w.kind === 'mounted' ? .7 : w.kind === 'first' ? 0 : .3 * Math.min(1, p * 2.2);
+    for (let i = 0; i < w.count; i++) {
+      const mix = this.random();
+      q.push(w.kind === 'swarm' ? 'troop' : mix < armorShare ? 'armored' : mix > 1 - cavalryShare ? 'mounted' : 'troop');
+    }
+    for (let k = 0; k < w.elites; k++) q.splice(Math.round((k + 1) * q.length / (w.elites + 1)), 0, 'elite');
+    if (w.boss) q.splice(Math.ceil(q.length / 2), 0, w.boss);
+    this.queue = q;
+    this.queueT = 0;
+    this.waveCount = 0;
+    this.emit({ t: 'wave', index: this.waveIdx + 1, total: this.waveTotal, name: w.name, boss: !!w.boss });
+  }
+  /** 休整中提前出击：剩余秒数按 1.5 倍折成军阵经验。 */
+  callNext() {
+    if (!this.resting || this.over || this.offer) return 0;
+    const gain = Math.round(this.restT * 1.5);
+    this.xp += gain;
+    this.restT = 0;
+    this.checkLevel();
+    return gain;
+  }
+  /** 城门失守后复活：城门恢复一半，清掉逼近城门的敌人，全塔增伤一档。 */
+  revive() {
+    if (!this.canRevive) return false;
+    this.reviveBonus += TOWER_REVIVE_BONUS[this.reviveCount];
+    this.reviveCount++;
+    this.hp = Math.ceil(GATE_HP / 2);
+    this.phase = 'fight';
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      if (e.remaining > 80 || e.gateDamage === 5) continue;
+      this.enemies.splice(i, 1);
+      this.fallen.push(e);
+      this.emit({ t: 'kill', e });
+    }
+    this.emit({ t: 'revive', n: this.reviveCount });
+    return true;
+  }
+  private spawn(rank: 'troop' | 'armored' | 'mounted' | 'elite' | 'mid' | 'final') {
     const p = this.progress, boss = rank === 'mid' || rank === 'final', elite = rank === 'elite';
-    const mix = this.random(), armorShare = .25 * Math.min(1, this.elapsed / 75);
-    const cavalryShare = .30 * Math.min(1, Math.max(0, this.elapsed - 15) / 105);
-    const armored = !boss && mix < armorShare, mounted = !boss && mix > 1 - cavalryShare;
-    const armorId = mix < armorShare * p / 3 ? 'wei_heavy' : this.map.shield;
+    const armored = rank === 'armored', mounted = rank === 'mounted';
+    const armorId = armored && this.random() < p / 3 ? 'wei_heavy' : this.map.shield;
     const id = boss ? this.map.bosses[rank === 'mid' ? 0 : 1] : armored ? armorId : mounted ? this.map.cavalry : this.map.troop;
-    // 双路关卡先从首塔一侧进入，另一入口在头半分钟逐渐加入。
-    const rightShare = this.map.routes.length > 1 ? .5 * Math.min(1, this.elapsed / 30) : 0;
-    const route = this.random() < rightShare ? 1 : 0;
+    // 只从已开放的路线出兵；首波偏向首塔一侧。
+    const open = this.map.routes.map((_, i) => i).filter(i => (this.map.routeWave?.[i] ?? 0) <= Math.max(0, this.waveIdx));
+    const route = open.length === 1 || (this.waveIdx === 0 && this.random() < .6) ? open[0] : open[Math.floor(this.random() * open.length)];
     const [x, y] = this.map.routes[route][0];
     const pressure = 1 + (this.map.latePressure - 1) * p * (2 - p);
     const hp = Math.round((27 + 138 * p) * this.map.strength * pressure * (.96 + .08 * this.random())
       * (rank === 'final' ? 12 : rank === 'mid' ? 7 : elite ? 2.5 : armored ? 1.32 : mounted ? .84 : 1));
-    const shield = elite && this.map.id === 3 ? Math.round(hp * .18) : 0;
+    const shieldy = this.map.elite === 'shield' || this.map.elite === 'both', bannered = this.map.elite === 'banner' || this.map.elite === 'both';
+    const shield = elite && shieldy ? Math.round(hp * .18) : 0;
     this.enemies.push({
       x, y, route, next: 1, remaining: this.lengths[route], hp, maxHp: hp,
       speed: (boss ? 17 : mounted ? 36 : armored ? 21 : 26) * (1 + .08 * p) * (.96 + .08 * this.random()),
       armor: armored, gateDamage: boss ? 5 : elite ? 2 : 1, bounty: boss ? 34 : elite ? 12 : 4,
       sprite: (boss ? BOSSES[id] : ENEMIES[id]).sprite, left: false, stun: 0, flash: 0, frozenUntil: 0,
-      banner: elite && this.map.id === 2, shield, maxShield: shield, name: boss ? BOSSES[id].name : undefined
+      banner: elite && bannered, shield, maxShield: shield, name: boss ? BOSSES[id].name : undefined
     });
-    if (boss) this.emit({ t: 'boss', e: this.enemies[this.enemies.length - 1], final: rank === 'final' });
+    if (boss) { this.generalsSent++; this.emit({ t: 'boss', e: this.enemies[this.enemies.length - 1], final: rank === 'final' }); }
   }
   private hit(e: Marcher, damage: number, siege = false) {
     if (e.hp <= 0) return;
@@ -230,7 +326,7 @@ export class TowerBattle {
     }
   }
   private attack(t: Emplacement, x: number, y: number, target: Marcher) {
-    const kind = t.kind, spec = TOWERS[kind], damage = spec.damage * (1 + this.bonus) * (1 + 0.55 * (t.level - 1));
+    const kind = t.kind, spec = TOWERS[kind], damage = spec.damage * this.towerPower * (1 + 0.55 * (t.level - 1));
     const heavy = t.branch === 0, wide = t.branch === 1;
     const tx = target.x, ty = target.y;
     t.firedAt = this.elapsed;
@@ -292,7 +388,7 @@ export class TowerBattle {
       }
       if (a.cooldown > 0) continue;
       a.cooldown = spec.interval;
-      const damage = spec.damage * (1 + (a.level - 1) * 0.65);
+      const damage = spec.damage * (1 + (a.level - 1) * 0.65) * (this.allyPower[a.id] ?? 1);
       this.emit({ t: 'ally', id: a.id, x: a.x, y: a.y, tx: target.x, ty: target.y });
       if (a.id === 'huangzhong') {
         this.strikes.push({ kind: 'arrow', x: a.x, y: a.y - 14, tx: target.x, ty: target.y, age: 0, life: .18, radius: 0,
@@ -380,8 +476,8 @@ export class TowerBattle {
     if (this.over || this.offer || dt <= 0) return;
     const before = this.elapsed;
     this.elapsed += dt;
-    // 存活经验按整秒结算，即使暂时没能击杀，也能逐渐补强。
-    this.xp += Math.floor(Math.min(this.elapsed, MARCH_SECONDS)) - Math.floor(Math.min(before, MARCH_SECONDS));
+    // 存活经验按整秒结算（出兵结束前），即使暂时没能击杀，也能逐渐补强。
+    if (!this.allSpawned) this.xp += Math.floor(this.elapsed) - Math.floor(before);
     for (const e of this.enemies) e.flash = Math.max(0, e.flash - dt);
     for (let i = this.fallen.length - 1; i >= 0; i--) {
       if ((this.fallen[i].flash -= dt) <= 0) this.fallen.splice(i, 1);
@@ -395,19 +491,23 @@ export class TowerBattle {
       if (s.impactDamage) this.impact(s);
       this.strikes.splice(i, 1);
     }
-    while (this.nextSpawn <= this.elapsed && this.nextSpawn < MARCH_SECONDS) {
-      const elite = this.nextSpawn >= this.nextElite;
-      this.spawn(elite ? 'elite' : 'troop');
-      if (elite) this.nextElite += 20;
-      this.nextSpawn += (1.55 - .55 * this.progress) * (.92 + .16 * this.random());
-    }
-    if (this.generalsSent === 0 && this.elapsed >= MARCH_SECONDS / 2) {
-      this.spawn('mid');
-      this.generalsSent++;
-    }
-    if (this.generalsSent === 1 && this.elapsed >= MARCH_SECONDS) {
-      this.spawn('final');
-      this.generalsSent++;
+    if (!this.allSpawned) {
+      if (this.queue.length) {
+        this.queueT -= dt;
+        const w = this.plan[this.waveIdx];
+        while (this.queue.length && this.queueT <= 0) {
+          this.spawn(this.queue.shift()!);
+          this.waveCount++;
+          this.queueT += w.gap * (.92 + .16 * this.random());
+        }
+        if (!this.queue.length) {
+          if (this.waveIdx >= this.waveTotal - 1) this.allSpawned = true;
+          else this.restT = WAVE_REST;
+        }
+      } else {
+        this.restT -= dt;
+        if (this.restT <= 0) { this.restT = 0; this.startWave(); }
+      }
     }
     // 同种鼓效果取最高，攻击塔可以利用布在拐角处的同一座战鼓。
     const drums: { p: Point; range: number; haste: number; slow: number }[] = [];
@@ -487,7 +587,7 @@ export class TowerBattle {
   }
 
   private finishStep() {
-    if (this.generalsSent === 2 && !this.enemies.length) this.phase = 'win';
+    if (this.allSpawned && !this.enemies.length) this.phase = 'win';
     this.checkLevel();
   }
 }

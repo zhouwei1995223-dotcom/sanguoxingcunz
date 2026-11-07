@@ -51,6 +51,7 @@ export default async function({ page }) {
   const seen = await page.evaluate(() => {
     const sc = window.__game.scene, b = sc.battle;
     let deaths = 0, banner = '', maxParticles = 0, decals = 0, popups = 0;
+    const banners = new Set();
     for (let i = 0; i < 30 * 135 && !b.over; i++) {
       if (b.offer) b.choose(b.offer.cards.find(c => c.type === 'tower') || b.offer.cards[0]);
       b.update(1 / 30);
@@ -60,13 +61,15 @@ export default async function({ page }) {
       maxParticles = Math.max(maxParticles, sc.fx.particles.length);
       decals = Math.max(decals, sc.fx.decals.length);
       popups = Math.max(popups, sc.fx.popups.length);
-      if (sc.fx.banner) banner = sc.fx.banner.text;
+      if (sc.fx.banner) banners.add(sc.fx.banner.text);
     }
+    banner = [...banners].join('|');
     return { deaths, banner, maxParticles, decals, popups, t: b.elapsed };
   });
   console.log(JSON.stringify(seen));
   assert.ok(seen.deaths > 0, '敌人有倒地动画');
   assert.ok(seen.banner.includes('夏侯恩'), '敌将出阵横幅带名字');
+  assert.ok(seen.banner.includes('第 2 波') && seen.banner.includes('第 5 波'), '每波开始有波次横幅');
   assert.ok(seen.maxParticles <= 320, '粒子数量有上限');
   assert.ok(seen.popups <= 40, '伤害数字有上限');
   await page.waitForTimeout(300);

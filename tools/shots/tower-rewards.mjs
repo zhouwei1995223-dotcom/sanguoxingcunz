@@ -24,37 +24,68 @@ export default async function({ page }) {
     });
   }
   assert.deepEqual(await enter(), [1, 'arrow', 0, 1]);
-  // 不选牌时，从开场到主将入场必须持续发兵。固定随机数后比较同兵种的成长幅度。
+  // 波次制：不选牌时按波次出兵，波内间隔均匀，波间休整；中间一波出敌将、最后一波出主将；同兵种血量逐波不降。
   const march = await page.evaluate(() => {
     const live = window.__game.scene.battle;
     const b = new live.constructor(live.map, live.hero, live.bonus, () => .5);
     b.towers.fill(null);
-    const generals = [], arrivals = [], ordinaryHP = [];
-    while (b.elapsed < 240.1) {
+    const generals = [], arrivals = [], ordinaryHP = [], waveStarts = [];
+    let lastWave = -1;
+    while (!b.allSpawned || b.enemies.length) {
       b.xp = 0;
       b.update(1 / 30);
+      if (b.waveIdx !== lastWave) { lastWave = b.waveIdx; waveStarts.push(b.elapsed); }
       for (const e of b.enemies.splice(0)) {
-        if (e.gateDamage === 5) generals.push(b.elapsed);
-        else arrivals.push(b.elapsed);
-        if (e.gateDamage === 1) ordinaryHP.push(e.maxHp);
+        if (e.gateDamage === 5) generals.push(b.waveIdx);
+        arrivals.push([b.waveIdx, b.elapsed]);
+        if (e.gateDamage === 1 && !e.armor && e.speed < 30) ordinaryHP.push(e.maxHp);
       }
-      if (b.over) break;
+      if (b.over || b.elapsed > 900) break;
     }
     b.update(1 / 30);
-    return { generals, arrivals, ordinaryHP, phase: b.phase };
+    return { generals, arrivals, ordinaryHP, waveStarts, total: b.waveTotal, mid: Math.floor((b.waveTotal - 1) / 2), phase: b.phase };
   });
-  assert.deepEqual(march.generals.map(Math.round), [120, 240]);
-  assert.ok(march.arrivals[0] < .1 && march.arrivals.at(-1) > 238);
-  assert.ok(march.arrivals.slice(1).every((t, i) => t - march.arrivals[i] < 1.7));
-  assert.ok(march.ordinaryHP.slice(1).every((hp, i) => hp >= march.ordinaryHP[i] && hp <= march.ordinaryHP[i] + 9));
+  assert.equal(march.waveStarts.length, march.total, '每一波都开始了');
+  assert.deepEqual(march.generals, [march.mid, march.total - 1], '中间一波敌将、最后一波主将');
+  for (let w = 0; w < march.total; w++) {
+    const ts = march.arrivals.filter(a => a[0] === w).map(a => a[1]);
+    assert.ok(ts.length >= 8, '每波至少 8 名敌人');
+    assert.ok(ts.slice(1).every((t, i) => t - ts[i] < 1.7), '波内出兵不断档');
+  }
+  assert.ok(march.waveStarts.slice(1).every((t, i) => t - march.waveStarts[i] > 7), '波与波之间有休整');
+  assert.ok(march.ordinaryHP.slice(1).every((hp, i) => hp >= march.ordinaryHP[i] - 1), '同兵种血量逐波不降');
   assert.equal(march.phase, 'win');
+  // 提前出击：休整中可以跳过，剩余秒数折成经验。
+  const call = await page.evaluate(() => {
+    const live = window.__game.scene.battle;
+    const b = new live.constructor(live.map, live.hero, live.bonus, () => .5);
+    b.towers.fill(null);
+    while (!b.resting || b.waveIdx < 0) { b.update(1 / 30); for (const e of b.enemies.splice(0)); if (b.offer) b.choose(b.offer.cards[0]); }
+    const before = b.xp, idx = b.waveIdx;
+    const gain = b.callNext();
+    b.update(1 / 30);
+    return { gain, xp: b.xp - before, next: b.waveIdx === idx + 1 };
+  });
+  assert.ok(call.gain > 0 && call.xp >= call.gain && call.next, '提前出击立即开下一波并给经验');
+  // 城门失守可复活三次，每次全塔增伤，撤军不给复活。
+  const revive = await page.evaluate(() => {
+    const live = window.__game.scene.battle;
+    const b = new live.constructor(live.map, live.hero, live.bonus, () => .5);
+    const out = [];
+    for (let i = 0; i < 4; i++) { b.hp = 0; b.phase = 'loss'; out.push([b.canRevive, b.revive(), b.hp, Math.round(b.reviveBonus * 100)]); }
+    const q = new live.constructor(live.map, live.hero, live.bonus, () => .5);
+    q.quit = true; q.phase = 'loss';
+    return { out, quit: q.canRevive };
+  });
+  assert.deepEqual(revive.out, [[true, true, 10, 10], [true, true, 10, 25], [true, true, 10, 45], [false, false, 0, 45]]);
+  assert.equal(revive.quit, false);
   const flash = await page.evaluate(() => {
     const live = window.__game.scene.battle;
     const b = new live.constructor(live.map, live.hero, live.bonus, () => .5);
-    for (let i = 0; i < 120 && !b.enemies.some(e => e.flash > 0); i++) b.update(1 / 30);
+    for (let i = 0; i < 600 && !b.enemies.some(e => e.flash > 0); i++) b.update(1 / 30);
     const e = b.enemies.find(e => e.flash > 0 && e.hp < e.maxHp);
     if (!e || !b.cast(e.x, e.y) || !b.fallen.includes(e)) return false;
-    for (let i = 0; i < 4; i++) b.update(1 / 30);
+    for (let i = 0; i < 4; i++) { if (b.offer) b.choose(b.offer.cards[0]); b.update(1 / 30); }
     return !b.fallen.includes(e) && b.kills === 1;
   });
   assert.ok(flash, '箭塔命中和将令击杀都要白闪，击杀只能结算一次');

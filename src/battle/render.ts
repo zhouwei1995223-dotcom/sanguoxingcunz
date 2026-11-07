@@ -1100,10 +1100,13 @@ export class WorldRenderer {
     BUILD_SLOTS.forEach(([x, y], i) => {
       const bd = buildingAt(d, i);
       if (!bd) return;
+      const bt = bd.builtT ?? 9, ft = bd.firedT ?? 9;
       if (bd.kind === 'spike') {
-        g.globalAlpha = 0.25; g.fillStyle = '#5a6988'; this.ellipse(x, y, 36, 26); g.globalAlpha = 1;
+        // 鹿角阵：新建时尖桩从中心向外铺开
+        const spread = bt < 0.4 ? 0.3 + 0.7 * (1 - (1 - bt / 0.4) ** 2) : 1;
+        g.globalAlpha = 0.25; g.fillStyle = '#5a6988'; this.ellipse(x, y, 36 * spread, 26 * spread); g.globalAlpha = 1;
         for (let k = 0; k < 10 + bd.lv * 4; k++) {
-          const a = (k / (10 + bd.lv * 4)) * TAU, rr = 10 + (k % 3) * 9;
+          const a = (k / (10 + bd.lv * 4)) * TAU, rr = (10 + (k % 3) * 9) * spread;
           const sx = Math.round(x + Math.cos(a) * rr - this.camX), sy = Math.round(y + Math.sin(a) * rr * 0.7 - this.camY);
           g.fillStyle = '#733e39'; g.fillRect(sx - 3, sy, 7, 2);
           g.fillStyle = '#c0cbdc'; g.fillRect(sx - 3, sy - 1, 1, 1); g.fillRect(sx + 3, sy - 1, 1, 1);
@@ -1111,8 +1114,35 @@ export class WorldRenderer {
         return;
       }
       this.list.push({ y, draw: () => {
-        if (bd.kind === 'tower') this.blit(sprite('b_tower' + bd.lv), x, y + 2);
-        else this.blit(sprite(`u_shu_cata_${bd.cdT > 1.9 ? 2 : 0}${x > 0 ? '_L' : ''}`), x, y + 2);
+        // 建造：从空中落下、落地压扁回弹；升级：放大一下并泛金光；开火：轻微回弹。
+        let sx = 1, sy = 1, lift = 0;
+        if (bt < 0.5 && bd.lv === 1) {
+          if (bt < 0.22) { const f = 1 - bt / 0.22; lift = 46 * f * f; sx = 0.94; sy = 1.08; }
+          else { const f = Math.sin(Math.PI * Math.min(1, (bt - 0.22) / 0.26)); sy = 1 - 0.16 * f; sx = 1 + 0.12 * f; }
+        } else if (bt < 0.35) {
+          sx = sy = 1 + 0.18 * Math.sin(Math.PI * bt / 0.35);
+        } else if (ft < 0.16) {
+          const f = Math.sin(Math.PI * ft / 0.16); sy = 1 - 0.07 * f; sx = 1 + 0.05 * f;
+        }
+        // 影子与三级光环
+        g.globalAlpha = 0.28 * (lift > 0 ? Math.max(0.3, 1 - lift / 46) : 1);
+        g.fillStyle = '#181425'; this.ellipse(x, y + 3, 16, 6);
+        g.globalAlpha = 1;
+        if (bd.lv >= 3) {
+          const p = 0.5 + 0.5 * Math.sin(b.t * 3 + bd.slot);
+          g.globalAlpha = 0.35 + 0.3 * p; g.strokeStyle = '#fee761'; g.lineWidth = 1.5;
+          this.ellipse(x, y + 3, 17 + p * 2, 7 + p, true);
+          g.globalAlpha = 1;
+        }
+        const spr = bd.kind === 'tower' ? sprite('b_tower' + bd.lv) : sprite(`u_shu_cata_${bd.cdT > 1.9 ? 2 : 0}${x > 0 ? '_L' : ''}`);
+        this.blitSquash(spr, x, y + 2, sx, sy, lift);
+        if (bt < 0.3 && bd.lv > 1) {
+          g.globalAlpha = 0.3 * (1 - bt / 0.3);
+          g.globalCompositeOperation = 'lighter';
+          g.fillStyle = '#fee761'; this.ellipse(x, y - 14, 16, 20);
+          g.globalCompositeOperation = 'source-over';
+          g.globalAlpha = 1;
+        }
         // 等级星
         g.fillStyle = '#fee761';
         for (let k = 0; k < bd.lv; k++) g.fillRect(Math.round(x - this.camX) - 4 + k * 3, Math.round(y - this.camY) + 4, 2, 2);
@@ -1194,6 +1224,17 @@ export class WorldRenderer {
   blit(s: Sprite, x: number, y: number) {
     const ss = scaled(s, this.scale);
     this.ctx.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(x - s.ax - this.camX), Math.round(y - s.ay - this.camY), s.w, s.h);
+  }
+
+  /** 以脚底为基准的非等比缩放（建筑落地压扁 / 开火回弹），lift 为离地高度。 */
+  blitSquash(s: Sprite, x: number, y: number, sx: number, sy: number, lift = 0) {
+    if (sx === 1 && sy === 1 && !lift) return this.blit(s, x, y);
+    const g = this.ctx, ss = scaled(s, this.scale);
+    g.save();
+    g.translate(Math.round(x - this.camX), Math.round(y - lift - this.camY));
+    g.scale(sx, sy);
+    g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, -s.ax, -s.ay, s.w, s.h);
+    g.restore();
   }
 
   blitScaled(s: Sprite, x: number, y: number, sc: number) {
