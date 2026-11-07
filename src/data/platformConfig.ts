@@ -10,11 +10,12 @@ export const IS_TAP = process.env.TARGET === 'tap';
 /** 微信小游戏版本 */
 export const IS_WX = process.env.TARGET === 'wx';
 /**
- * 新版玩法与数值（原「网页版专属」）：网页版先做、确认后同步到微信版（2026-11-07 起微信版整体换成网页版）。
- * 调试参数、网页测试档、模拟广告仍只认 IS_WEB。小红书 / TapTap 暂时保持旧版。
+ * 新版玩法与数值（原「网页版专属」）：网页版先做，确认后同步。2026-11-07 起微信版、小红书版整体换成网页版。
+ * 调试参数、网页测试档、模拟广告仍只认 IS_WEB。小红书没有广告接口，看视频的点位全部直接免费（NO_ADS）。
+ * 抖音 / TapTap 暂不维护，保持旧版。
  */
-export const WEB_RULES = IS_WEB || IS_WX;
-/** 水墨宣纸 UI 与精细像素美术开关（网页版、微信版） */
+export const WEB_RULES = IS_WEB || IS_WX || IS_XHS;
+/** 水墨宣纸 UI 与精细像素美术开关（网页版、微信版、小红书版） */
 export const NEW_UI = WEB_RULES;
 /** 离线 H5 版本（小红书 / TapTap）：不接平台 SDK，没有分享和好友排行，音效运行时合成 */
 export const IS_H5 = IS_XHS || IS_TAP;

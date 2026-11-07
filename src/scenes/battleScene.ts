@@ -92,7 +92,8 @@ export class BattleScene implements Scene {
   weekly: WeeklyDef | null = null;
   private speedMul = 1;
   private normalSpeed: 1 | 1.5 = 1;
-  private doubleSpeedUnlocked = false;
+  /** 二倍速每局看一次视频解锁；小红书没有广告，开局即解锁 */
+  private doubleSpeedUnlocked = NO_ADS;
   private doubleSpeedActive = false;
   private speedAdPending = false;
   private get userSpeed() { return this.doubleSpeedActive ? 2 : this.normalSpeed; }

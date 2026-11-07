@@ -1,6 +1,6 @@
 import { DEBUG } from '../debug';
 import type { Platform, SoundHandle, TouchKind, TouchPoint } from './types';
-import { IS_H5 } from '../data/platformConfig';
+import { IS_H5, IS_XHS } from '../data/platformConfig';
 
 // 浏览器实现：用于开发调试与验收。广告用 2 秒模拟弹窗代替。
 
@@ -62,8 +62,10 @@ export function createWebPlatform(): Platform {
     safeArea.bottom = (parseFloat(cs.paddingBottom) || 0) * dpr;
     probe.remove();
   } catch (e) {}
-  // 小红书容器可能在顶部叠加按钮，至少留出一点空隙
-  if (IS_H5) safeArea.top = Math.max(safeArea.top, 20 * dpr);
+  // 小红书容器在右上角叠加「··· / 关闭」按钮：在系统安全区下面再留 44 像素（与微信按胶囊按钮底边留空的效果相当，
+  // iPhone 上约 91 像素），顶部的资源栏、战斗计时和暂停按钮都不会被挡住。TapTap 只留最小空隙。
+  if (IS_XHS) safeArea.top = Math.max(safeArea.top, 20 * dpr) + 44 * dpr;
+  else if (IS_H5) safeArea.top = Math.max(safeArea.top, 20 * dpr);
 
   const listeners: ((k: TouchKind, t: TouchPoint[]) => void)[] = [];
   const emit = (k: TouchKind, t: TouchPoint[]) => listeners.forEach((l) => l(k, t));
