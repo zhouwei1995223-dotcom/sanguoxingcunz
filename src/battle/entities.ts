@@ -53,6 +53,10 @@ export interface Enemy {
   ty: number;
   /** 冲锋路线或跳劈落点，起手后保持锁定。 */
   bossWarning?: Warning;
+  /** 守城：敌将当前锁定的士兵（技能瞄准它）；为空时瞄准武将 */
+  focus?: { x: number; y: number; dead?: boolean } | null;
+  /** 守城：本次冲锋已经撞过的士兵（每次冲锋每人只结算一次） */
+  chargeHits?: Set<object>;
   /** 本场用的技能表（新手试炼只用基础技能） */
   bskills: string[];
   /** 护盾：剩余量 / 总量 / 剩余时间；shieldDone 表示这场已经开过盾 */

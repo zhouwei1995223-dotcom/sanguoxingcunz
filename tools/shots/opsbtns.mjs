@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 运营能力入口：主界面「推荐」「更新提醒」、设置页「联系客服 / 反馈」、结算页「推荐给好友」（浏览器里用 __clubTest 打开显示）
 export default async function ({ page, wait, shot, tap }) {
   await page.evaluate(() => { window.__clubTest = true; });
@@ -14,7 +15,7 @@ export default async function ({ page, wait, shot, tap }) {
   await shot('ops_settings');
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(300);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await wait(1200);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; const b = g.scene.battle; b.finalBossSec = 50; b.won = true; g.scene.finish(true); });
   await wait(1500);

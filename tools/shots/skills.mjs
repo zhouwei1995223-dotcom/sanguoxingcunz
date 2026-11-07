@@ -1,10 +1,11 @@
+import { startCampaign } from './_lib.mjs';
 // 新技能、技能卡片、封禁、进化表、专属联动
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(400);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(200);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(300);
   const hero = await page.evaluate(() => window.__game.scene.battle.hero.id);

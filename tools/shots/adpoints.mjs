@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 广告点位：锦囊免费刷新（每局一次）、复活（看广告最多三次）、军资箱每天第一次免费
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
@@ -7,7 +8,7 @@ export default async function ({ page, wait, shot, tap }) {
   await shot('ad_shop');
   await page.evaluate(() => { const g = window.__game; g.scene.tab = 'battle'; });
   await wait(300);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await wait(1200);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; const b = g.scene.battle; b.t = 119.5; });
   await wait(1500);

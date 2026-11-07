@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 每位武将的专属联动形态实战
 export default async function ({ page, wait, shot, tap }) {
   const L = { zhaoyun: ['sword', 'horse'], guanyu: ['drum', 'horse'], zhangfei: ['drum', 'rock'], zhuge: ['crossbow', 'fire'], lvbu: ['crossbow', 'catapult'] };
@@ -7,7 +8,7 @@ export default async function ({ page, wait, shot, tap }) {
     await wait(300);
     await page.evaluate((h) => { window.__saveMod.save.hero = h; window.__game.dialogs.length = 0; }, hero);
     await wait(200);
-    await tap(195, 722);
+    await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
     await page.waitForFunction(() => window.__game.scene.battle);
     await page.evaluate((ws) => {
       const g = window.__game; const b = g.scene.battle; g.dialogs.length = 0;

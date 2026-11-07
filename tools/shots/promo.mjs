@@ -1,10 +1,11 @@
+import { startCampaign } from './_lib.mjs';
 // 推广图素材：主界面、满屏割草、大招、升级三选一、锦囊、首领登场
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(800);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(600);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(400);
   const clear = () => page.evaluate(() => { const g = window.__game; const b = g.scene.battle; g.dialogs.length = 0; b.pendingLevelUps = 0; b.pendingChests.length = 0; if (b.pendingStrats) b.pendingStrats.length = 0; });

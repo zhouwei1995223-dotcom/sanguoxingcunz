@@ -1,10 +1,11 @@
+import { startCampaign } from './_lib.mjs';
 // 一次性提示：可破坏物、道具、精英、敌将红圈、锦囊首次、封禁提示
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(400);
   await page.evaluate(() => { window.__game.dialogs.length = 0; window.__saveMod.save.tips = {}; });
   await wait(300);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(500);
   const clear = () => page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; const b = g.scene.battle; b.pendingLevelUps = 0; b.pendingChests.length = 0; b.pendingStrats.length = 0; b.player.hp = b.player.maxHp; });

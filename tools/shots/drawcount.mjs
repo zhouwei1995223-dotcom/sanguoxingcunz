@@ -1,10 +1,11 @@
+import { startCampaign } from './_lib.mjs';
 // 统计一帧里各种绘制调用的次数和覆盖面积（找出最费 GPU 的部分）
 export default async function ({ page, wait, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(500);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(200);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(500);
   await page.evaluate(() => {

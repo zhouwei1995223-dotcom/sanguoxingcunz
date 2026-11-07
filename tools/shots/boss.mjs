@@ -1,9 +1,10 @@
+import { startCampaign } from './_lib.mjs';
 // 首领战 / 宝箱进化 / 结算
 export default async function ({ page, wait, shot, tap }) {
   await wait(2600);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(300);
-  await tap(195, 722); // 出征
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await wait(1500);
   const dlgName = () => page.evaluate(() => { const g = window.__game; return g.dialogs.length ? g.dialogs[g.dialogs.length - 1].constructor.name : ''; });
   // 强化：给满武器以便看到各种特效

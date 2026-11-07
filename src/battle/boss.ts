@@ -36,7 +36,7 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
       if (skill === 'spin') { e.x += dx * spd * 0.3 * dt; e.y += dy * spd * 0.3 * dt; }
       if (e.stateT <= 0) {
         e.state = 'act';
-        if (skill === 'charge') { e.stateT = CHARGE_DURATION; }
+        if (skill === 'charge') { e.stateT = CHARGE_DURATION; e.chargeHits = new Set(); }
         else if (skill === 'spin') { e.stateT = 1.8; e.life = 0; }
         else if (skill === 'slam') { e.stateT = 0.35; e.vx = e.x; e.vy = e.y; }
         else if (skill === 'throw') { e.stateT = 1.05; e.life = 0; }
@@ -61,6 +61,7 @@ export function updateBoss(b: Battle, e: Enemy, dt: number, dx: number, dy: numb
           } else {
             b.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.4, r: 46, color: '#feae34' });
             if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 46 * 46) b.hurtPlayer(e.dmg * 1.5);
+            b.bossHitAllies(e.x, e.y, 46, e.dmg * 1.5);
           }
         }
         e.bossWarning = undefined;
@@ -82,7 +83,8 @@ function callout(b: Battle, e: Enemy, text: string) {
 }
 
 function startSkill(b: Battle, e: Enemy, skill: string, dx: number, dy: number) {
-  const p = b.player;
+  // 技能瞄准点：守城里锁定士兵时砸向士兵，其他情况仍是武将
+  const aim = b.bossAim(e);
   e.state = 'tele';
   switch (skill) {
     case 'charge': {
@@ -104,7 +106,7 @@ function startSkill(b: Battle, e: Enemy, skill: string, dx: number, dy: number) 
       break;
     case 'slam': {
       e.stateT = 0.9;
-      e.tx = p.x; e.ty = p.y;
+      e.tx = aim.x; e.ty = aim.y;
       const w: Warning = { kind: 'circle', x: e.tx, y: e.ty, r: 46, a: 0, len: 0, t: 0, dur: 1.25 };
       if (b.isWebCampaignOrDefense) {
         w.caster = e;
@@ -134,10 +136,10 @@ function startSkill(b: Battle, e: Enemy, skill: string, dx: number, dy: number) 
       // 箭雨 / 落石：玩家脚下一个，周围再落几个，先后砸下
       const n = e.enraged ? 7 : 5;
       e.stateT = 0.5;
-      b.warnings.push({ kind: 'circle', x: p.x, y: p.y, r: 30, a: 0, len: 0, t: 0, dur: 1.0, dmg: e.dmg * 1.1, hitFx: 'explo' });
+      b.warnings.push({ kind: 'circle', x: aim.x, y: aim.y, r: 30, a: 0, len: 0, t: 0, dur: 1.0, dmg: e.dmg * 1.1, hitFx: 'explo' });
       for (let i = 1; i < n; i++) {
         const a = rand(TAU), r = rand(40, 100);
-        b.warnings.push({ kind: 'circle', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r * 0.8, r: 30, a: 0, len: 0, t: 0, dur: 1.0 + i * 0.12, dmg: e.dmg * 1.1, hitFx: 'explo' });
+        b.warnings.push({ kind: 'circle', x: aim.x + Math.cos(a) * r, y: aim.y + Math.sin(a) * r * 0.8, r: 30, a: 0, len: 0, t: 0, dur: 1.0 + i * 0.12, dmg: e.dmg * 1.1, hitFx: 'explo' });
       }
       callout(b, e, e.boss!.proj === 'stone' ? '飞石如雨' : '万箭齐发');
       break;
@@ -180,6 +182,8 @@ function act(b: Battle, e: Enemy, skill: string, dt: number, dx: number, dy: num
         const advance = Math.min(step, Math.max(0, path.len - along));
         e.x += dx * advance;
         e.y += dy * advance;
+        // 冲锋路上撞到的士兵各挨一下
+        b.bossHitAllies(e.x, e.y, e.r + 10, e.dmg, e.chargeHits);
       } else {
         e.x += e.tx * e.speed * CHARGE_SPEED * dt;
         e.y += e.ty * e.speed * CHARGE_SPEED * dt;
@@ -196,6 +200,7 @@ function act(b: Battle, e: Enemy, skill: string, dt: number, dx: number, dy: num
         e.life = 0.3;
         b.fx.push({ kind: 'ring', x: e.x, y: e.y - 8, t: 0, dur: 0.3, r: 44, color: '#ffffff' });
         if (d < 44 + p.r) b.hurtPlayer(e.dmg * 0.6);
+        b.bossHitAllies(e.x, e.y, 44, e.dmg * 0.6);
       }
       e.left = !e.left;
       break;

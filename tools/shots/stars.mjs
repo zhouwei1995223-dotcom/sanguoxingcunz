@@ -1,9 +1,10 @@
+import { startCampaign } from './_lib.mjs';
 // 1.0.4 三星评价：结算页的三颗星、直取敌将确认框（看广告）、章节卡片上的星
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(400);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await wait(1200);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; if (g.scene.battle) g.scene.battle.t = 30; });
   console.log('scene', await page.evaluate(() => window.__game.scene.constructor.name + ' ' + window.__game.dialogs.map((d) => d.constructor.name).join(',')));

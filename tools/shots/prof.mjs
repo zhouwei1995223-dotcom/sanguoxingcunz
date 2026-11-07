@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // CPU 剖析：满武器 + 大量敌人时，各函数占用的时间（自身耗时排行）
 import fs from 'node:fs';
 export default async function ({ page, wait, tap }) {
@@ -5,7 +6,7 @@ export default async function ({ page, wait, tap }) {
   await wait(500);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(200);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(500);
   await page.evaluate(() => {

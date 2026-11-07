@@ -1064,6 +1064,7 @@ export class Battle {
       if (IS_WEB && !e.convoyGuard && !e.boss && !e.fixedDir && (e.state === 'troopWindup' ||
           (!tgt?.city && !tgt?.path && this.startTroopSkill(e, dx, dy, d, !!tgt?.ally)))) continue;
       if (e.boss) {
+        if (IS_WEB && this.def) e.focus = tgt?.ally ?? null;
         updateBoss(this, e, dt, dx, dy, d);
       } else if (e.fixedDir) {
         e.x += e.vx * dt;
@@ -2246,6 +2247,21 @@ export class Battle {
   }
 
   /** 预警结束：放出特效，玩家还在范围里就受伤 */
+  /** 敌将技能瞄准点：守城里锁定了士兵就瞄士兵，否则瞄武将 */
+  bossAim(e: Enemy): { x: number; y: number } {
+    return e.focus && !e.focus.dead ? e.focus : this.player;
+  }
+
+  /** 守城：敌将的近身范围攻击也打到范围内的士兵（武将的受伤判定保持原样） */
+  bossHitAllies(x: number, y: number, r: number, dmg: number, once?: Set<object>) {
+    if (!IS_WEB || !this.def) return;
+    for (const a of this.def.allies) {
+      if (a.dead || once?.has(a) || (a.x - x) ** 2 + (a.y - y) ** 2 > (r + a.r) ** 2) continue;
+      hurtAlly(this, a, dmg);
+      once?.add(a);
+    }
+  }
+
   fireWarning(w: Warning) {
     const p = this.player;
     if (w.hitFx === 'arrows') {

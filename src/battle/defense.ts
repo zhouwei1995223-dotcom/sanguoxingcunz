@@ -133,9 +133,34 @@ const heroesOut = (d: DefenseState) => d.allies.filter((a) => !a.dead && a.kind 
 /** 已解锁的兵种（自动出兵按这个顺序轮流） */
 export const unlockedUnits = (d: DefenseState) => UNIT_ORDER.filter((k) => unitUnlocked(d, k));
 /** 自动出兵下一队是什么 */
+/** 兵种营等级（枪兵没有营，按枪兵军令等级算） */
+function unitOrderLv(d: DefenseState, kind: UnitKind) {
+  const oid = (Object.keys(ORDERS) as OrderId[]).find((k) => ORDERS[k].unit === kind);
+  return oid ? orderLv(d, oid) : 0;
+}
+/** 编制：每个兵种应有的在场人数。枪兵 2 队起，其余兵种 1 队起，营每升一级多 1 队。 */
+export function unitQuota(d: DefenseState, kind: UnitKind) {
+  const u = UNITS[kind];
+  return u.count * ((kind === 'spear' ? 2 : 1) + unitOrderLv(d, kind));
+}
+export const aliveUnits = (d: DefenseState, kind: UnitKind) => d.allies.reduce((n, a) => n + (!a.dead && a.kind === kind ? 1 : 0), 0);
+
+/**
+ * 下一队出什么兵：先按编制补员（在场人数 / 编制 最低的兵种优先，粮草不够就攒着等它，
+ * 不让便宜的枪兵插队），所有兵种都满编后再按顺序轮流扩充。
+ */
 export function nextAutoUnit(d: DefenseState): UnitKind {
   const ks = unlockedUnits(d);
-  return ks[d.nextUnit % ks.length];
+  let best: UnitKind | null = null, low = 1;
+  for (const k of ks) {
+    const r = aliveUnits(d, k) / unitQuota(d, k);
+    if (r < low) { low = r; best = k; }
+  }
+  return best ?? ks[d.nextUnit % ks.length];
+}
+/** 当前是不是在补员（UI 显示用） */
+export function refilling(d: DefenseState) {
+  return unlockedUnits(d).some((k) => aliveUnits(d, k) < unitQuota(d, k));
 }
 
 /** 出一队兵（不花粮草）：驻守在武将所在一侧（离武将最近的出怪口方向）的城外。返回实际出了几个 */
@@ -381,7 +406,19 @@ export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: 
   const siege = e.def && (e.def.ai === 'siege' || e.def.id === 'siege_cata');
   if (!siege) {
     const heroUp = d.downT <= 0;
-    if (e.boss) return heroUp ? { x: p.x, y: p.y, ally: null, city: false } : { x: 0, y: 0, ally: null, city: true };
+    if (e.boss) {
+      // 网页版：武将不在近处时，敌将先砍身边的士兵（原来只追武将，被士兵围住也不还手）
+      if (IS_WEB && (!heroUp || (p.x - e.x) ** 2 + (p.y - e.y) ** 2 > 100 * 100)) {
+        let best: Ally | null = null, bd = 110 * 110;
+        for (const a of d.allyGrid.query(e.x, e.y, 110, nearbyAllies)) {
+          if (a.dead) continue;
+          const dd = (a.x - e.x) ** 2 + (a.y - e.y) ** 2;
+          if (dd < bd) { bd = dd; best = a; }
+        }
+        if (best) return { x: best.x, y: best.y, ally: best, city: false };
+      }
+      return heroUp ? { x: p.x, y: p.y, ally: null, city: false } : { x: 0, y: 0, ally: null, city: true };
+    }
     const heroDistance = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
     const heroNear = heroUp && heroDistance < 90 * 90;
     const specialist = e.def?.skill === 'fireVolley' || e.def?.skill === 'breaker';
@@ -426,6 +463,11 @@ export function enemyContact(b: Battle, e: Enemy, tgt: { ally: Ally | null; city
     if ((a.x - e.x) ** 2 + (a.y - e.y) ** 2 < (a.r + e.r) ** 2 && e.atkCd <= 0) {
       e.atkCd = 1.1;
       hurtAlly(b, a, e.dmg);
+      // 敌将一刀横扫身边一圈士兵
+      if (e.boss) {
+        b.bossHitAllies(e.x, e.y, e.r + 22, e.dmg * 0.6, new Set([a]));
+        b.fx.push({ kind: 'slash', x: e.x, y: e.y - 8, t: 0, dur: 0.25, r: e.r + 22, w: 1.6, a: Math.atan2(a.y - e.y, a.x - e.x), color: '#e43b44' });
+      }
       if (a.kind === 'shield' && d.links.has('l_iron')) b.allyDamage(e, e.dmg * 0.5 + a.atk * 0.5);
     }
     return true;

@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 新造型游戏内效果：首页 + 武将页 + 战斗（需 Q='?skip=1&art=v2'）
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
@@ -10,7 +11,7 @@ export default async function ({ page, wait, shot, tap }) {
   await shot('art_hero');
   await page.evaluate(() => { window.__game.scene.tab = 'battle'; });
   await wait(300);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(800);
   await page.evaluate(() => { const b = window.__game.scene.battle; b.player.maxHp = b.player.hp = 1e6; b.t = 200; });

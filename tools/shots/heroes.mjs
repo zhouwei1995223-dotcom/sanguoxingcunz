@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 每位武将：战斗中的武器效果 + 大招
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
@@ -11,7 +12,7 @@ export default async function ({ page, wait, shot, tap }) {
     await page.evaluate((id) => { window.__saveMod.save.hero = id; window.__game.dialogs.length = 0; }, id);
     await tap(195, 805); await wait(400);
     await page.evaluate(() => { window.__game.dialogs.length = 0; });
-    await tap(195, 722);
+    await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
     await page.waitForFunction(() => window.__game.scene.battle);
     await page.evaluate(() => {
       const b = window.__game.scene.battle;

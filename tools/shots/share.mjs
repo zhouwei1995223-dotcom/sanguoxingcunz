@@ -1,10 +1,11 @@
+import { startCampaign } from './_lib.mjs';
 // 按场景分享：锦囊「问好友」、结算「炫耀战绩」
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
   await wait(500);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(200);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(600);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; g.scene.openStrategyForTest(2, 2); });

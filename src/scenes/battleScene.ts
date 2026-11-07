@@ -28,7 +28,7 @@ import { DEBUG } from '../debug';
 import { funnel } from '../meta/telemetry';
 import { IS_WEB, NO_ADS } from '../data/platformConfig';
 import { HEROES } from '../data/heroes';
-import { createDefense, HeroInfo, grainRate, nextAutoUnit, soldiers, buildStepText } from '../battle/defense';
+import { createDefense, HeroInfo, grainRate, nextAutoUnit, aliveUnits, unitQuota, soldiers, buildStepText } from '../battle/defense';
 import { UNITS, MAX_ALLIES, BUILDS, BUILD_CARD_MAX, REPAIR_PCT, HERO_SUMMON_TIME } from '../data/defense';
 import { ORDERS, LINKS, defenseChapter } from '../data/defense';
 
@@ -737,7 +737,7 @@ export class BattleScene implements Scene {
     ui.text(`+${grainRate(d).toFixed(1)}/秒`, x + 46 * u, y + 40 * u, 14, C.textDim, 'left');
     // 下一队：图标 + 进度条
     ui.icon(un.icon, x + 30 * u, y + 84 * u, 40 * u, full ? 0.45 : 1);
-    ui.text(full ? '兵力已满' : `下一队${un.name}`, x + 56 * u, y + 74 * u, 16, full ? '#a89a86' : '#fff4d6', 'left');
+    ui.text(full ? '兵力已满' : `${aliveUnits(d, kind) < unitQuota(d, kind) ? '补员' : '下一队'}${un.name}`, x + 56 * u, y + 74 * u, 16, full ? '#a89a86' : '#fff4d6', 'left');
     const k = Math.min(1, d.grain / un.cost);
     if (ui.paperTheme) ui.bar(x + 56 * u, y + 88 * u, bw - 68 * u, 14 * u, k, full ? '#6b5a4a' : '#9be37a');
     else {

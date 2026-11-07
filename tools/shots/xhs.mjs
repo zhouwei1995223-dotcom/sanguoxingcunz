@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 小红书无广告版：首页、商店、签到、巡营、体力、设置、战斗（无充满）、元宝复活、结算
 export default async function ({ page, wait, shot, tap }) {
   await page.waitForFunction(() => window.__game && window.__game.scene && window.__game.scene.constructor.name === 'HomeScene');
@@ -36,7 +37,7 @@ export default async function ({ page, wait, shot, tap }) {
   // 战斗
   await page.evaluate(() => { const s = window.__game.scene; s.tab = 'battle'; window.__game.dialogs.length = 0; });
   await wait(400);
-  await tap(195, 722);
+  await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
   await page.waitForFunction(() => window.__game.scene.battle);
   await wait(1200);
   await page.evaluate(() => { window.__game.dialogs.length = 0; });

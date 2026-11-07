@@ -1,3 +1,4 @@
+import { startCampaign } from './_lib.mjs';
 // 1.0.3 新武将：武将页两行列表、详情，以及每人的专属武器和大招
 const IDS = ['huangzhong', 'machao', 'sunshangxiang', 'dianwei', 'jiangwei'];
 export default async function ({ page, wait, shot, tap }) {
@@ -18,7 +19,7 @@ export default async function ({ page, wait, shot, tap }) {
       g.scene.tab = 'battle';
     }, id);
     await wait(300);
-    await tap(195, 722); // 出征
+    await startCampaign(page); // 出征（按 id 点击，网页版自动选 5 分钟）
     await wait(1200);
     await page.evaluate(() => {
       const g = window.__game;
