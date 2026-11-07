@@ -225,11 +225,10 @@ export class TowerScene implements Scene {
     // 两侧只留纸边。竖向按设备可用高度排布，所有命中和射程使用同一投影。
     const x = 9 * u, fw = ui.W - 2 * x, scaleX = fw / FIELD_W;
     const room = trayY - 50 * u - top;
-    const fh = Math.min(room, FIELD_H * scaleX * 1.20), scaleY = fh / FIELD_H;
+    // 纵向最多拉伸 1.32 倍（单位精灵按 heightRatio 反向补偿，不会变形），尽量少留空白。
+    const fh = Math.min(room, FIELD_H * scaleX * 1.32), scaleY = fh / FIELD_H;
     const fy = top + (room - fh) / 2;
     const mapX = (ui.px - x) / scaleX, mapY = (ui.py - fy) / scaleY;
-    g.fillStyle = '#6c6149';
-    g.fillRect(x - 3 * u, fy - 3 * u, fw + 6 * u, fh + 6 * u);
     const [shx, shy] = save.settings.screenShake ? this.fx.shakeOffset : [0, 0];
     g.save();
     // 先按屏幕坐标裁剪，再整体晃动：震屏时地图边缘不会露出空隙。
@@ -248,6 +247,7 @@ export class TowerScene implements Scene {
     g.beginPath(); g.rect(x, fy, fw, fh); g.clip();
     this.drawOverlay(ui, x + shx * scaleX, fy + shy * scaleY, scaleX, scaleY, fw, fh);
     g.restore();
+    this.drawMapFrame(g, x, fy, fw, fh, u);
     if (interact && !this.paused && this.aiming && ui.clicked('td_target', x, fy, fw, fh)) {
       if (b.cast(mapX, mapY)) playSfx('thrust');
       this.aiming = false;
@@ -425,6 +425,34 @@ export class TowerScene implements Scene {
   }
   private readonly drawList: { y: number; kind: number; i: number }[] = [];
 
+  /** 舆图边缘：四周晕进纸色，外加浓淡两道墨线，像画在宣纸上的军图。 */
+  private drawMapFrame(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, u: number) {
+    const fade = 16 * u, paper = 'rgba(231,220,194,';
+    const edge = (x0: number, y0: number, x1: number, y1: number, rx: number, ry: number, rw: number, rh: number) => {
+      const grad = g.createLinearGradient(x0, y0, x1, y1);
+      grad.addColorStop(0, paper + '.92)');
+      grad.addColorStop(.45, paper + '.35)');
+      grad.addColorStop(1, paper + '0)');
+      g.fillStyle = grad;
+      g.fillRect(rx, ry, rw, rh);
+    };
+    edge(x, 0, x + fade, 0, x, y, fade, h);
+    edge(x + w, 0, x + w - fade, 0, x + w - fade, y, fade, h);
+    edge(0, y, 0, y + fade, x, y, w, fade);
+    edge(0, y + h, 0, y + h - fade, x, y + h - fade, w, fade);
+    g.strokeStyle = 'rgba(48,38,28,.85)';
+    g.lineWidth = 2.5 * u;
+    g.strokeRect(x - 2 * u, y - 2 * u, w + 4 * u, h + 4 * u);
+    g.strokeStyle = 'rgba(48,38,28,.35)';
+    g.lineWidth = 1 * u;
+    g.strokeRect(x + 4 * u, y + 4 * u, w - 8 * u, h - 8 * u);
+    // 四角朱红小方印角
+    g.fillStyle = '#a8352a';
+    for (const [cx, cy] of [[x - 2 * u, y - 2 * u], [x + w + 2 * u, y - 2 * u], [x - 2 * u, y + h + 2 * u], [x + w + 2 * u, y + h + 2 * u]]) {
+      g.fillRect(cx - 4 * u, cy - 4 * u, 8 * u, 8 * u);
+    }
+  }
+
   private drawRiverGlint(g: CanvasRenderingContext2D, t: number) {
     const river = HANSHUI_RIVER;
     g.fillStyle = 'rgba(235,250,245,.55)';
@@ -491,7 +519,7 @@ export class TowerScene implements Scene {
     g.scale(sx, sy);
     stamp(g, 'td_' + tw.kind + tw.level + (pose ? '_p' + pose : ''), 0, 0, size, heightRatio);
     if (anim && anim.level > 1 && anim.build < .3) {
-      g.globalAlpha = .6 * (1 - anim.build / .3);
+      g.globalAlpha = .28 * (1 - anim.build / .3);
       g.globalCompositeOperation = 'lighter';
       g.fillStyle = '#ffe9a0';
       g.beginPath(); g.ellipse(0, -size * .45 * heightRatio, size * .45, size * .5 * heightRatio, 0, 0, Math.PI * 2); g.fill();
@@ -652,33 +680,45 @@ export class TowerScene implements Scene {
       const px = ox + p.x * sx, py = oy + (p.y - 14 * rise) * sy;
       g.globalAlpha = k < .7 ? 1 : (1 - k) / .3;
       g.font = ui.font(p.size * sx * pop / u, true);
-      g.lineWidth = 3.2 * sx / 2.2;
-      g.strokeStyle = '#2b1d12';
+      g.lineWidth = 3.4 * sx / 2.2;
+      g.strokeStyle = 'rgba(246,238,216,.95)';
       g.strokeText(p.text, px, py);
       g.fillStyle = p.color;
       g.fillText(p.text, px, py);
     }
     const bn = fx.banner;
     if (bn) {
+      // 宣纸横幅：纸色长条 + 上下墨线 + 左侧朱印，字从右侧滑入。
       const k = bn.age / bn.life;
       const slide = k < .14 ? 1 - k / .14 : 0, fade = k > .8 ? 1 - (k - .8) / .2 : 1;
-      const cy = oy + fh * .4, bh = 92 * u;
-      g.globalAlpha = .85 * fade;
-      g.fillStyle = '#1f150e';
-      g.fillRect(ox, cy - bh / 2, fw, bh);
-      g.fillStyle = bn.color;
-      g.fillRect(ox, cy - bh / 2, fw, 4 * u);
-      g.fillRect(ox, cy + bh / 2 - 4 * u, fw, 4 * u);
-      g.globalAlpha = fade;
-      const tx = ui.W / 2 + slide * fw;
-      g.font = ui.font(42, true);
-      g.lineWidth = 6 * u; g.strokeStyle = '#2b1d12';
-      g.strokeText(bn.text, tx, cy - 12 * u);
-      g.fillStyle = '#ffe2a0';
-      g.fillText(bn.text, tx, cy - 12 * u);
-      g.font = ui.font(21, false);
-      g.fillStyle = '#e9d6b0';
-      g.fillText(bn.sub, ui.W / 2 - slide * fw, cy + 26 * u);
+      const cy = oy + fh * .4, bh = 96 * u, open = Math.min(1, k / .1);
+      g.globalAlpha = .94 * fade;
+      g.fillStyle = '#efe5cc';
+      g.fillRect(ox, cy - bh / 2 * open, fw, bh * open);
+      g.fillStyle = 'rgba(60,46,30,.9)';
+      g.fillRect(ox, cy - bh / 2 * open, fw, 3 * u);
+      g.fillRect(ox, cy + bh / 2 * open - 3 * u, fw, 3 * u);
+      g.fillStyle = 'rgba(60,46,30,.35)';
+      g.fillRect(ox, cy - bh / 2 * open + 7 * u, fw, u);
+      g.fillRect(ox, cy + bh / 2 * open - 8 * u, fw, u);
+      if (open >= 1) {
+        g.globalAlpha = fade;
+        const seal = 62 * u, sx0 = ox + 26 * u - slide * fw * .3;
+        g.fillStyle = bn.color;
+        g.fillRect(sx0, cy - seal / 2, seal, seal);
+        g.strokeStyle = '#f3e3c8'; g.lineWidth = 2 * u;
+        g.strokeRect(sx0 + 5 * u, cy - seal / 2 + 5 * u, seal - 10 * u, seal - 10 * u);
+        g.font = ui.font(34, true);
+        g.fillStyle = '#f7ead2';
+        g.fillText(bn.text.includes('斩') ? '斩' : '将', sx0 + seal / 2, cy + 2 * u);
+        const tx = ui.W / 2 + 34 * u + slide * fw;
+        g.font = ui.font(40, true);
+        g.fillStyle = '#2b1f14';
+        g.fillText(bn.text, tx, cy - 13 * u);
+        g.font = ui.font(21, false);
+        g.fillStyle = bn.color;
+        g.fillText(bn.sub, ui.W / 2 + 34 * u - slide * fw, cy + 26 * u);
+      }
     }
     g.restore();
   }

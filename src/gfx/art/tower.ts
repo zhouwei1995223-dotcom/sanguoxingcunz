@@ -94,31 +94,52 @@ function roadDistance(x: number, y: number, a: Point, b: Point) {
 export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: Stamp) {
   let seed = 13791 * map.id;
   const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const base = ['#acba82', '#9cad8a', '#aba17d'][map.id - 1];
+  // 宣纸舆图：底色压低饱和度，靠淡墨晕染出地势起伏，整体最后再罩一层纸色。
+  const base = ['#c2c39c', '#b3bca2', '#beb594'][map.id - 1];
   g.fillStyle = base;
   g.fillRect(0, 0, FIELD_W, FIELD_H);
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 24; i++) {
+    const x = random() * FIELD_W, y = random() * FIELD_H, r = 30 + random() * 60;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    const dark = i % 3 !== 0;
+    grad.addColorStop(0, dark ? 'rgba(78,92,62,.13)' : 'rgba(246,236,206,.22)');
+    grad.addColorStop(1, dark ? 'rgba(78,92,62,0)' : 'rgba(246,236,206,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < 420; i++) {
     const x = Math.floor(random() * FIELD_W), y = Math.floor(random() * FIELD_H);
-    const w = 4 + Math.floor(random() * 23);
-    g.fillStyle = i % 3 ? 'rgba(64,91,54,.07)' : 'rgba(243,226,148,.16)';
-    g.fillRect(x, y, w, 3);
-    g.fillRect(x + 3, y - 2, w - 4, 7);
+    const w = 4 + Math.floor(random() * 20);
+    g.fillStyle = i % 3 ? 'rgba(64,80,50,.06)' : 'rgba(246,234,196,.14)';
+    g.fillRect(x, y, w, 2);
+    g.fillRect(x + 3, y - 1, w - 5, 4);
   }
   const path = (points: Point[]) => {
     g.beginPath();
     points.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
   };
   if (map.id === 2) {
+    // 汉水：淡墨青，岸线用浓一点的墨。
     const river = HANSHUI_RIVER;
-    for (const [width, col] of [[28, '#83967a'], [22, '#719b91'], [12, '#80aaa0']] as const) {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    for (const [width, col] of [[31, 'rgba(72,92,84,.45)'], [27, '#93aca2'], [19, '#a7c0b5'], [9, '#b9cfc4']] as const) {
       path(river);
       g.lineWidth = width;
       g.strokeStyle = col;
       g.stroke();
     }
+    g.strokeStyle = 'rgba(70,96,92,.35)'; g.lineWidth = 1;
+    for (let i = 0; i < 26; i++) {
+      const k = random() * (river.length - 1), j = Math.floor(k), f = k - j;
+      const [ax, ay] = river[j], [bx, by] = river[j + 1];
+      const x = ax + (bx - ax) * f, y = ay + (by - ay) * f + (random() - .5) * 12;
+      g.beginPath(); g.moveTo(x - 4, y); g.quadraticCurveTo(x, y - 2, x + 4, y); g.stroke();
+    }
+    g.lineCap = 'butt';
   }
-  g.lineJoin = 'bevel';
-  for (const [width, color] of [[25, '#8a825e'], [22, '#b7a37c'], [18, '#dac399'], [12, '#e3cea7']] as const) {
+  // 驿道：墨线勾边，纸色路面。
+  g.lineJoin = 'round';
+  for (const [width, color] of [[25, '#5e4f3d'], [22, '#b6a37f'], [18, '#d6c5a0'], [11, '#e4d5b3']] as const) {
     g.lineWidth = width;
     g.strokeStyle = color;
     for (const line of map.routes) {
@@ -128,16 +149,23 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
   }
   for (const line of map.routes) for (let i = 1; i < line.length; i++) {
     const a = line[i - 1], b = line[i], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
+    const nx = -dy / l, ny = dx / l;
+    // 飞白：沿两侧路沿点几笔干墨，让墨线有毛笔的断续感。
+    for (let s = 2; s < l; s += 3 + random() * 5) {
+      const f = s / l, side = random() < .5 ? -1 : 1, off = side * (11.2 + random() * 1.4), len = 2 + random() * 5;
+      g.fillStyle = random() < .5 ? 'rgba(232,220,192,.75)' : 'rgba(52,42,30,.45)';
+      g.fillRect(Math.round(a[0] + dx * f + nx * off), Math.round(a[1] + dy * f + ny * off), Math.max(1, Math.round(Math.abs(dx / l) * len)) || 1, Math.max(1, Math.round(Math.abs(dy / l) * len)) || 1);
+    }
     for (let s = 3; s < l; s += 5) {
-      const f = s / l, j = (random() - 0.5) * 16;
-      g.fillStyle = '#c7b18b';
+      const f = s / l, j = (random() - 0.5) * 14;
+      g.fillStyle = '#c9b691';
       g.fillRect(Math.round(a[0] + dx * f - dy * j / l), Math.round(a[1] + dy * f + dx * j / l), 2, 1);
     }
     if (l > 70) {
       g.save();
       g.translate(a[0] + dx * .57, a[1] + dy * .57);
       g.rotate(Math.atan2(dy, dx));
-      g.strokeStyle = '#ae926e';
+      g.strokeStyle = '#8c7457';
       g.lineWidth = 1.5;
       path([[-3, -3], [1, 0], [-3, 3]]);
       g.stroke();
@@ -153,6 +181,9 @@ export function drawTerrain(g: CanvasRenderingContext2D, map: TowerMap, stamp: S
     decor.push({ x, y, size, name });
   }
   decor.sort((a, b) => a.y - b.y).forEach(o => stamp('env_' + map.theme + '_' + o.name, o.x, o.y, o.size));
+  // 整张罩一层宣纸色，像素树石的颜色退一档，和纸面 UI 融成一体。
+  g.fillStyle = 'rgba(236,224,196,.30)';
+  g.fillRect(0, 0, FIELD_W, FIELD_H);
   // 出兵旗与城门每帧单独绘制（旗帜飘动、城门受击晃动），这里只画地面痕迹。
   const gate = map.routes[0][map.routes[0].length - 1];
   g.fillStyle = 'rgba(60,46,30,.22)';

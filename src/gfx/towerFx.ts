@@ -16,6 +16,7 @@ interface Decal { x: number; y: number; r: number; kind: 'crater' | 'scorch' | '
 export interface TowerAnim { fire: number; build: number; level: number; kind: TowerKind }
 export interface Banner { text: string; sub: string; color: string; age: number; life: number }
 
+const INK = '#33261a', INK_RED = '#b3311f', INK_GREEN = '#2f6b45';
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 export class TowerFx {
@@ -60,8 +61,11 @@ export class TowerFx {
     this.shakeT = Math.max(this.shakeT, t);
   }
   private popup(x: number, y: number, text: string, color: string, size: number, life = .8, e?: Marcher, amount = 0) {
-    if (this.popups.length >= 40) this.popups.shift();
-    this.popups.push({ x, y, text, color, age: 0, life, size, e, amount });
+    if (this.popups.length >= 16) this.popups.shift();
+    // 附近已有刚冒出的数字时往上错开，避免叠成一串。
+    let lift = 0;
+    for (const p of this.popups) if (p.age < .35 && Math.abs(p.x - x) < 12 && Math.abs(p.y - (y - lift)) < 7) lift += 7;
+    this.popups.push({ x, y: y - Math.min(lift, 21), text, color, age: 0, life, size, e, amount });
   }
 
   consume(b: TowerBattle, events: TowerEvent[], dmgNum: boolean) {
@@ -69,15 +73,17 @@ export class TowerFx {
       switch (ev.t) {
         case 'hit': {
           if (!dmgNum || ev.dmg < 1) break;
-          const old = this.popups.find(p => p.e === ev.e && p.age < .22);
+          // 同一个敌人 0.4 秒内的伤害合并成一个数字。
+          const old = this.popups.find(p => p.e === ev.e && p.age < .4);
           if (old) {
             old.amount += ev.dmg;
             old.text = String(Math.round(old.amount));
-            old.size = Math.min(15, 9 + old.amount / 40);
-            old.age = Math.min(old.age, .05);
+            old.size = Math.min(13, 8.5 + old.amount / 50);
+            if (ev.dmg >= 80) old.color = INK_RED;
+            old.age = Math.min(old.age, .1);
           } else {
-            const big = ev.dmg >= 60;
-            this.popup(ev.e.x + rand(-4, 4), ev.e.y - 16, String(Math.round(ev.dmg)), big ? '#ffd84a' : '#fff6df', big ? 13 : 9.5, .7, ev.e, ev.dmg);
+            const big = ev.dmg >= 80;
+            this.popup(ev.e.x + rand(-3, 3), ev.e.y - 16, String(Math.round(ev.dmg)), big ? INK_RED : INK, big ? 11 : 8.5, .75, ev.e, ev.dmg);
           }
           break;
         }
@@ -89,12 +95,12 @@ export class TowerFx {
           for (let i = 0; i < (boss ? 10 : 3); i++) {
             this.spawn({ x: e.x + rand(-5, 5), y: e.y, vx: rand(-8, 8), vy: rand(-3, 3), drag: 3, life: rand(.5, .8), size: rand(4, 7), grow: 9, color: 'rgba(214,196,160,.55)', shape: 2 });
           }
-          if (dmgNum) this.popup(e.x, e.y - 22, '+' + e.bounty, '#9fe39a', 8.5, .9);
+          if (dmgNum && e.gateDamage > 1) this.popup(e.x, e.y - 24, '+' + e.bounty + ' 经验', INK_GREEN, 9, 1);
           this.sounds.add('kill');
           if (boss) {
             this.shake(5, .45);
             this.flash = .45; this.flashColor = '#fff3c0';
-            this.banner = { text: '斩 将', sub: '敌将已被击溃', color: '#c8392b', age: 0, life: 1.6 };
+            this.banner = { text: '斩 将', sub: '敌将已被击溃', color: INK_RED, age: 0, life: 1.6 };
             this.sounds.add('explode');
           }
           break;
@@ -104,7 +110,7 @@ export class TowerFx {
           this.gateHit = .5; this.hudHit = .9;
           this.shake(dmg >= 5 ? 6 : 2.5, dmg >= 5 ? .5 : .25);
           this.flash = Math.max(this.flash, dmg >= 2 ? .4 : .22); this.flashColor = '#d6342a';
-          this.popup(gx, gy - 30, '城门 -' + dmg, '#ff5a45', 12, 1.1);
+          this.popup(gx, gy - 30, '城门 -' + dmg, INK_RED, 12, 1.1);
           this.burst(gx, gy - 6, 10, ['#8f8676', '#c9bfa8', '#5f574a'], 46);
           this.sounds.add('hurt');
           break;
@@ -120,7 +126,7 @@ export class TowerFx {
           for (let i = 0; i < 14; i++) {
             const a = i / 14 * Math.PI * 2;
             this.spawn({ x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 5, vx: Math.cos(a) * 42, vy: Math.sin(a) * 18, drag: 4, delay: first ? .22 : 0,
-              life: rand(.4, .7), size: rand(4, 7), grow: 10, color: first ? 'rgba(216,197,154,.7)' : 'rgba(255,226,120,.6)', shape: 2 });
+              life: rand(.4, .7), size: rand(4, 7), grow: 10, color: first ? 'rgba(216,197,154,.7)' : 'rgba(250,242,214,.55)', shape: 2 });
           }
           for (let i = 0; i < (first ? 8 : 16); i++) {
             this.spawn({ x: x + rand(-12, 12), y: y + rand(-3, 4), vz: rand(25, 60), drag: 1, delay: first ? .25 : rand(0, .25), life: rand(.6, 1),
@@ -170,7 +176,7 @@ export class TowerFx {
         }
         case 'shield': {
           this.burst(ev.x, ev.y - 8, 12, ['#ffe79a', '#d9a64a', '#fff'], 60, { shape: 0 });
-          this.popup(ev.x, ev.y - 26, '破盾', '#ffd35a', 10.5, .9);
+          this.popup(ev.x, ev.y - 26, '破盾', '#8a5a12', 10.5, .9);
           this.sounds.add('hit');
           break;
         }

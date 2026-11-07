@@ -22,6 +22,8 @@ export default async function({ page }) {
       b.update(1 / 30);
     }
     if (b.offer) b.choose(b.offer.cards[0]);
+    // 快进产生的事件不要一次性冒出来。
+    b.events.length = 0;
   }, until);
   const frames = Number(process.env.N || 6);
   for (let i = 0; i < frames; i++) {
