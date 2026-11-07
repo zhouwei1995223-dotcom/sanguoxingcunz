@@ -18,6 +18,7 @@ export const DEBUG = {
   webPlaytest: IS_WEB && param('playtest') !== '0',
   speed: Number(param('speed') || 1),
   rich: param('rich') === '1',
+  tower: IS_WEB ? Number(param('tower') || 0) : 0,
   chapter: Number(param('ch') || 0),
   skipGuide: param('skip') === '1',
   reset: param('reset') === '1',

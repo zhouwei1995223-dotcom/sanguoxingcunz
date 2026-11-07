@@ -8,6 +8,7 @@ import { save } from './meta/save';
 // 全局游戏对象：场景切换、弹窗栈、主循环
 
 export interface Scene {
+  readonly paperTheme?: boolean;
   readonly preserveTextColors?: boolean;
   enter?(): void;
   exit?(): void;
@@ -87,6 +88,7 @@ class Game {
     if (this.nextScene) {
       if (this.scene && this.scene.exit) this.scene.exit();
       this.scene = this.nextScene;
+      this.ui.paperTheme = NEW_UI || !!this.scene.paperTheme;
       this.ui.preserveTextColors = NEW_UI && !!this.scene.preserveTextColors;
       this.nextScene = null;
       (globalThis as any).__sceneName = this.scene.constructor.name;

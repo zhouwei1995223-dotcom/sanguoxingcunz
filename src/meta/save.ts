@@ -75,7 +75,8 @@ export interface SaveData {
   selectedChapter: number;
   selectedDiff: number;
   /** 主界面选中的模式与守城关卡 */
-  homeMode?: 'chapter' | 'defense';
+  homeMode?: 'chapter' | 'defense' | 'tower';
+  tower: { selected: number; commander?: string; cleared: number; stars: Record<number, number>; runs: number; wins: number; leaks: number; kills: number };
   selectedDefense?: number;
   endlessBest: number;
   endlessRuns: number;
@@ -135,6 +136,10 @@ function freshHeroes(): Record<string, HeroState> {
   return h;
 }
 
+function freshTower(): SaveData['tower'] {
+  return { selected: 1, cleared: 0, stars: {}, runs: 0, wins: 0, leaks: 0, kills: 0 };
+}
+
 function freshSave(): SaveData {
   const now = Date.now();
   if (save && save.staminaTs > now) save.staminaTs = now;
@@ -160,6 +165,7 @@ function freshSave(): SaveData {
     chapterBest: {},
     firstClear: {},
     selectedChapter: 1,
+    tower: freshTower(),
     clears: {},
     bests: {},
     stars: {},
@@ -242,6 +248,7 @@ export function loadSave() {
       // 用新存档补齐缺失字段，兼容旧版本
       const base = freshSave();
       save = Object.assign(base, data);
+      save.tower = { ...freshTower(), ...data.tower, stars: { ...data.tower?.stars } };
       save.settings = Object.assign(base.settings, data.settings || {});
       save.stats = Object.assign(base.stats, data.stats || {});
       save.daily = Object.assign(freshDaily(), data.daily || {});

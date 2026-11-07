@@ -3,6 +3,8 @@ import { IS_WEB } from '../data/platformConfig';
 import { zhaoyunFramesV2 } from './art/zhaoyun';
 import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
+import { emplacementImage, passGate } from './art/tower';
+import { TOWER_KINDS } from '../data/tower';
 import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
 import { awakenFrames } from './art/awaken';
 import { tentImage, weaponRackImage, suppliesImage, stakeImage, torchPoleImage } from './art/camp';
@@ -165,6 +167,8 @@ export function buildAtlas() {
   addSprite('camp_torch', torchPoleImage(), 'bottom');
   // 守城模式
   addSprite('city', cityImage(), 'bottom');
+  addSprite('td_gate', passGate(), 'bottom');
+  for (const kind of TOWER_KINDS) for (const lv of [1, 2, 3]) addSprite('td_' + kind + lv, emplacementImage(kind, lv), 'bottom');
   addUnit('u_siege_ram', ramFrames());
   addUnit('u_siege_cata', catapultFrames());
   addUnit('u_siege_ladder', withLadder(soldierFrames(SOLDIER_STYLES.wei_spear)));

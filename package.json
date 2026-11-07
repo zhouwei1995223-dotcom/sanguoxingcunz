@@ -8,7 +8,8 @@
     "dev": "node tools/build.mjs --watch",
     "audio": "node tools/gen-audio.mjs",
     "typecheck": "tsc --noEmit",
-    "sim": "node tools/build.mjs --sim && node dist/sim/sim.js"
+    "sim": "node tools/build.mjs --sim && node dist/sim/sim.js",
+    "towersim": "esbuild tools/towersim.ts --bundle --platform=node --outfile=dist/sim/tower.js && node dist/sim/tower.js"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

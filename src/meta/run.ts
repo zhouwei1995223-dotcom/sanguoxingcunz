@@ -6,6 +6,8 @@ import { save, markDirty } from './save';
 import { newItem, randomItemTemplate, progressTask, grantHero, grantShards, randomShardHero } from './ops';
 import type { EquipItem } from './save';
 import { getPlatform } from '../platform';
+import { TOWER_MAPS } from '../data/tower';
+import type { TowerBattle } from '../battle/tower';
 
 // 单局结算
 
@@ -236,6 +238,27 @@ export function settleDefense(level: number, win: boolean, t: number | null, coi
   if (bossKills) progressTask('boss', bossKills);
   markDirty();
   return { win, firstClear, gold, iron, yuanbao, items, newBest, shardReward, defense: { waves, dailyFirst }, stars };
+}
+
+export function settleTower(b: TowerBattle) {
+  const state = save.tower, level = b.map.id, stars = b.stars;
+  const old = state.stars[level] || 0;
+  const first = stars > 0 && old === 0;
+  const perfect = stars === 3 && old < 3;
+  const gold = level * (b.cleared * 18 + (stars ? 150 : 0));
+  const iron = level * (Math.floor(b.cleared / 3) + (stars ? 5 : 0));
+  const yuanbao = (stars ? 12 * level : 0) + (first ? 60 * level : 0) + (perfect ? 40 * level : 0);
+  const shards = stars ? { hero: randomShardHero(true), n: level + 1 } : undefined;
+  if (stars) {
+    state.stars[level] = Math.max(stars, old);
+    while (state.cleared < TOWER_MAPS.length && state.stars[state.cleared + 1]) state.cleared++;
+    state.wins++;
+  }
+  state.runs++; state.leaks += b.leaks; state.kills += b.kills;
+  save.gold += gold; save.iron += iron; save.yuanbao += yuanbao;
+  if (shards) grantShards(shards.hero, shards.n);
+  markDirty();
+  return { gold, iron, yuanbao, shards, first, perfect, stars };
 }
 
 /** 无尽模式结算：按坚持时间发奖励，每 5 分钟额外送碎片 */

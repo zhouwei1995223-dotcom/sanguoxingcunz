@@ -51,7 +51,7 @@ export const C = {
 };
 
 export class UI {
-  readonly paperTheme = NEW_UI;
+  paperTheme = NEW_UI;
   preserveTextColors = false;
   ctx: CanvasRenderingContext2D;
   W: number;

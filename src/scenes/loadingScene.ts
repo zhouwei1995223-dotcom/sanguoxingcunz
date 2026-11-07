@@ -10,6 +10,9 @@ import { HomeScene } from './homeScene';
 import { BattleScene } from './battleScene';
 import { reportDailyLogin } from '../meta/telemetry';
 import { PrivacyDialog } from './homeDialogs';
+import { DEBUG } from '../debug';
+import { TowerScene } from './towerScene';
+import { TOWER_MAPS } from '../data/tower';
 
 // 启动页：健康游戏忠告 + 资源生成
 
@@ -61,6 +64,11 @@ export class LoadingScene implements Scene {
   }
 
   private route() {
+    if (DEBUG.webPlaytest && Number.isInteger(DEBUG.tower) && TOWER_MAPS[DEBUG.tower - 1]) {
+      save.homeMode = 'tower';
+      game.setScene(new TowerScene(DEBUG.tower, DEBUG.rich));
+      return;
+    }
     if (save.guide === 0) {
       // 新玩家直接进入一分钟的新手试炼（不消耗体力，不算通关第一章）
       game.setScene(new BattleScene(-2));

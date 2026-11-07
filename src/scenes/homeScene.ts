@@ -32,6 +32,8 @@ import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
 import { GAME_INFO, IS_WEB, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
+import { TOWER_MAPS, commandBonus } from '../data/tower';
+import { TowerScene, TowerStageDialog, CommanderDialog, towerCommander } from './towerScene';
 
 /** 战力达到推荐战力的几倍可以碾压（免挑战直接拿胜利奖励） */
 const SWEEP_K = 2;
@@ -382,7 +384,7 @@ export class HomeScene implements Scene {
   }
 
   private drawBattleTab(ui: UI) {
-    if (IS_WEB) {
+    if (IS_WEB && save.homeMode !== 'tower') {
       const { defense, chapter } = selectedPreparationStage();
       const key = `${save.hero}:${defense}:${chapter}`;
       if (this.lastPreparationStage && key !== this.lastPreparationStage) {
@@ -480,7 +482,7 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
-      ...(IS_WEB ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
+      ...(IS_WEB && save.homeMode !== 'tower' ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();
@@ -540,15 +542,16 @@ export class HomeScene implements Scene {
     // 模式切换：征战 / 守城（章节卡上方两个轻盈宣纸/篆印页签）
     const mode = save.homeMode || 'chapter';
     {
-      const mw = 206 * u, mh = 54 * u, my = L.cy - mh - 8 * u;
+      const mw = 164 * u, mh = 66 * u, my = L.cy - mh - 8 * u;
       const today = new Date().toISOString().slice(0, 10);
-      (['chapter', 'defense'] as const).forEach((m, i) => {
-        const mx = ui.W / 2 - mw - 6 * u + i * (mw + 12 * u);
+      (['chapter', 'defense', 'tower'] as const).forEach((m, i) => {
+        const mx = (ui.W - mw) / 2 + (i - 1) * (mw + 10 * u);
+        const label = { chapter: '征 战', defense: '守 城', tower: '布 阵' }[m];
         const on = mode === m;
         if (!NEW_UI) {
           ui.pixRect(mx, my, mw, mh, on ? (m === 'chapter' ? '#a22633' : '#2f7a3a') : 'rgba(20,12,10,0.78)');
           ui.pixRect(mx, my + mh - 4 * u, mw, 4 * u, on ? '#fee761' : '#5a4038');
-          ui.text(m === 'chapter' ? '征 战' : '守 城', mx + mw / 2, my + mh / 2 - 2 * u, 28, on ? '#fff4d6' : '#a89a86', 'center', on ? '#3a0d12' : null);
+          ui.text(label, mx + mw / 2, my + mh / 2 - 2 * u, 28, on ? '#fff4d6' : '#a89a86', 'center', on ? '#3a0d12' : null);
         } else {
           const p = Math.max(2, Math.round(u * 2.5));
           const b = Math.max(1.5, Math.round(u * 1.6));
@@ -574,15 +577,16 @@ export class HomeScene implements Scene {
             ctx.lineWidth = Math.max(1, u);
             ctx.strokeRect(mx + b * 2.2, my + b * 2.2, mw - b * 4.4, mh - b * 4.4);
           }
-          const iconName = m === 'chapter' ? 'atk' : 'p_armor';
+          const iconName = m === 'chapter' ? 'atk' : m === 'defense' ? 'p_armor' : 'td_arrow1';
           ui.icon(iconName, mx + mw / 2 - 46 * u, my + mh / 2, 28 * u, on ? 1 : 0.72);
-          ui.text(m === 'chapter' ? '征 战' : '守 城', mx + mw / 2 + 14 * u, my + mh / 2, 25, on ? '#fbf4e4' : '#2e241c', 'center', on ? (m === 'chapter' ? '#4a100b' : '#102e19') : null);
+          ui.text(label, mx + mw / 2 + 14 * u, my + mh / 2, 25, on ? '#fbf4e4' : '#2e241c', 'center', on ? (m === 'chapter' ? '#4a100b' : '#102e19') : null);
         }
         if (m === 'defense' && !on && save.defense?.day !== today) ui.redDot(mx + mw - 8 * u, my + 6 * u);
         if (ui.clicked('mode_' + m, mx, my, mw, mh)) { save.homeMode = m; markDirty(); }
       });
     }
     if (mode === 'defense') { this.drawDefenseCard(ui, L); return; }
+    if (mode === 'tower') { this.drawTowerCard(ui, L); return; }
 
     // 章节卡（含难度切换）
     const ch = CHAPTERS[Math.min(CHAPTERS.length, save.selectedChapter) - 1];
@@ -717,6 +721,30 @@ export class HomeScene implements Scene {
     if (ui.button('chapters', ui.W - ew - 20 * u, by, ew, bh, '章节', C.btnBlue, { size: 32, sub: `${save.maxCleared}/${CHAPTERS.length}` })) game.openDialog(new ChapterListDialog((c, dd) => { save.selectedChapter = c; save.selectedDiff = dd; markDirty(); }));
   }
   private startRect: [number, number, number, number] = [0, 0, 0, 0];
+
+  private drawTowerCard(ui: UI, L: { chH: number; bh: number; by: number; cy: number }) {
+    const u = ui.u, st = save.tower;
+    const map = TOWER_MAPS[st.selected - 1] || TOWER_MAPS[0];
+    const open = map.id <= st.cleared + 1, y = L.cy, cx = ui.W / 2;
+    ui.panel(40 * u, y, ui.W - 80 * u, L.chH, 'paper');
+    ui.text(`布阵 · 第 ${map.id} 关`, cx, y + 40 * u, 23, C.gold);
+    ui.text(map.name, cx, y + 88 * u, 44, C.text);
+    ui.text(map.hint, cx, y + 138 * u, 23, C.textDim);
+    const stars = st.stars[map.id] || 0;
+    ui.text(open ? '★'.repeat(stars) + '☆'.repeat(3 - stars) + '   ·   十五波' : `通关第 ${map.id - 1} 关解锁`, cx, y + 192 * u, 23, C.gold);
+    if (map.id > 1 && ui.button('td_prev', 34 * u, y + 56 * u, 76 * u, 82 * u, '◀', C.btnGray)) { st.selected = map.id - 1; markDirty(); }
+    if (map.id < TOWER_MAPS.length && ui.button('td_next', ui.W - 110 * u, y + 56 * u, 76 * u, 82 * u, '▶', C.btnGray)) { st.selected = map.id + 1; markDirty(); }
+    const hero = towerCommander(), state = save.heroes[hero];
+    const pct = Math.round(100 * commandBonus(state.lv, state.star, state.peak || 0));
+    if (ui.button('td_list', 30 * u, L.by, 142 * u, L.bh, '选关', C.btnGray, { size: 27, sub: `${st.cleared}/3` })) game.openDialog(new TowerStageDialog());
+    if (ui.button('td_commander', 182 * u, L.by, 238 * u, L.bh, '将令 · ' + HERO_BY_ID[hero].name, C.btnBlue, { size: 27, sub: `全塔加成 +${pct}% · 换将` })) game.openDialog(new CommanderDialog());
+    this.startRect = [432 * u, L.by, 288 * u, L.bh];
+    if (ui.button('td_start', ...this.startRect, '布 阵', C.btnRed, { disabled: !open, sub: `体力 ${STAMINA.costPerRun}` })) {
+      if (!spendStamina()) { game.openDialog(new StaminaDialog()); return; }
+      if (save.guide === 6) save.guide = 99;
+      flushSave(true); game.setScene(new TowerScene(map.id));
+    }
+  }
 
   /** 守城关卡卡片：和章节卡同样的位置与布局，十关依次解锁 */
   private drawDefenseCard(ui: UI, L: { chH: number; bh: number; by: number; cy: number }) {
