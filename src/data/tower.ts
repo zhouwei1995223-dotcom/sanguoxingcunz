@@ -1,10 +1,12 @@
 /** 所有地图以 320 × 400 的沙盘坐标定义，画面和战斗使用同一路线。 */
 export type Point = readonly [number, number];
-export const FIELD_W = 320, FIELD_H = 400, WAVES = 15, GATE_HP = 20;
+export const FIELD_W = 320, FIELD_H = 400, MARCH_SECONDS = 240, GATE_HP = 20;
 export const TOWER_KINDS = ['arrow', 'bolt', 'stone', 'oil', 'drum'] as const;
 export type TowerKind = typeof TOWER_KINDS[number];
 export type Branch = 0 | 1;
 export const AID_LIMIT = 3;
+// 每张援将牌相对一张建筑或阵法牌的抽取权重。
+export const ALLY_WEIGHT = 0.4;
 export const ALLY_IDS = ['guanyu', 'zhangfei', 'huangzhong'] as const;
 export const TACTIC_IDS = ['frost', 'lightning', 'wildfire'] as const;
 export type AllyId = typeof ALLY_IDS[number];
@@ -43,35 +45,28 @@ export function towerRange(kind: TowerKind, branch?: Branch) {
 
 export interface TowerMap {
   id: number; name: string; hint: string; theme: string; routes: Point[][]; sites: Point[];
-  starter: number; aidSites: readonly [number, number, number];
   troop: string; shield: string; cavalry: string; bosses: [string, string]; strength: number; latePressure: number;
 }
 export const TOWER_MAPS: TowerMap[] = [
   {
     id: 1, name: '柳营驿道', hint: '单路回折，弯道内侧可照应两段驿道', theme: 'changban',
-    starter: 2, aidSites: [13, 14, 11],
     routes: [[[0, 65], [240, 65], [260, 85], [260, 153], [238, 175], [68, 175], [49, 195], [49, 264], [72, 286], [233, 286], [256, 310], [256, 371]]],
-    sites: [[68, 101], [165, 102], [220, 127], [102, 139], [85, 225], [187, 216], [134, 250], [208, 326], [280, 253],
-    [38, 32], [146, 34], [34, 146], [294, 130], [126, 202], [162, 314], [294, 338]],
-    troop: 'wei_spear', shield: 'wei_shield', cavalry: 'wei_cavalry', bosses: ['xiahouen', 'caochun'], strength: 0.85, latePressure: 2.95
+    sites: [[64, 100], [160, 100], [98, 135], [220, 135], [88, 216], [182, 216], [280, 253], [110, 319], [203, 319], [288, 339]],
+    troop: 'wei_spear', shield: 'wei_shield', cavalry: 'wei_cavalry', bosses: ['xiahouen', 'caochun'], strength: 0.85, latePressure: 3.18
   },
   {
     id: 2, name: '汉水双渡', hint: '两岸来敌，在渡口汇流后截击', theme: 'hanshui',
-    starter: 3, aidSites: [14, 13, 16],
     routes: [[[0, 59], [95, 59], [116, 81], [116, 128], [145, 156], [197, 156], [220, 178], [220, 245], [194, 269], [99, 269], [76, 291], [76, 367]],
     [[320, 77], [249, 77], [226, 100], [226, 135], [197, 156], [220, 178], [220, 245], [194, 269], [99, 269], [76, 291], [76, 367]]],
-    sites: [[59, 98], [154, 100], [269, 123], [159, 193], [258, 200], [175, 233], [116, 228], [126, 315], [43, 243],
-    [70, 30], [190, 62], [274, 34], [78, 154], [202, 298], [42, 330], [130, 362], [266, 250], [126, 46]],
-    troop: 'yuan_spear', shield: 'yuan_shield', cavalry: 'yuan_cavalry', bosses: ['yanliang', 'wenchou'], strength: 1.06, latePressure: 1.975
+    sites: [[68, 98], [155, 98], [270, 98], [79, 193], [158, 193], [260, 193], [116, 232], [174, 232], [262, 250], [44, 315], [123, 315], [202, 315]],
+    troop: 'yuan_spear', shield: 'yuan_shield', cavalry: 'yuan_cavalry', bosses: ['yanliang', 'wenchou'], strength: 1.06, latePressure: 2.36
   },
   {
     id: 3, name: '剑阁夹道', hint: '两翼分兵，重甲与快骑在关前会合', theme: 'fengming',
-    starter: 7, aidSites: [12, 16, 17],
     routes: [[[0, 53], [85, 53], [109, 77], [109, 139], [79, 166], [54, 166], [36, 187], [36, 253], [62, 278], [131, 278], [158, 306], [158, 370]],
     [[320, 47], [228, 47], [204, 70], [204, 122], [226, 144], [266, 144], [285, 165], [285, 231], [260, 256], [204, 256], [158, 306], [158, 370]]],
-    sites: [[61, 94], [155, 94], [245, 92], [84, 212], [237, 195], [102, 246], [207, 220], [157, 258], [112, 328], [205, 326],
-    [50, 30], [150, 46], [42, 138], [178, 170], [298, 106], [26, 306], [254, 294], [210, 30], [122, 170], [298, 254]],
-    troop: 'wu_spear', shield: 'wu_shield', cavalry: 'wu_cavalry', bosses: ['zhuran', 'luxun'], strength: 0.90, latePressure: 2.025
+    sites: [[60, 92], [154, 92], [249, 92], [49, 137], [157, 170], [241, 170], [78, 217], [205, 217], [103, 244], [157, 255], [28, 304], [255, 304], [112, 328], [205, 328]],
+    troop: 'wu_spear', shield: 'wu_shield', cavalry: 'wu_cavalry', bosses: ['zhuran', 'luxun'], strength: 0.90, latePressure: 2.60
   },
 ];
 export function commandBonus(level: number, star: number, peak: number) {

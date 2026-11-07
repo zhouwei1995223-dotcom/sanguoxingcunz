@@ -731,7 +731,7 @@ export class HomeScene implements Scene {
     ui.text(map.name, cx, y + 88 * u, 44, C.text);
     ui.text(map.hint, cx, y + 138 * u, 23, C.textDim);
     const stars = st.stars[map.id] || 0;
-    ui.text(open ? '★'.repeat(stars) + '☆'.repeat(3 - stars) + '   ·   十五波' : `通关第 ${map.id - 1} 关解锁`, cx, y + 192 * u, 23, C.gold);
+    ui.text(open ? '★'.repeat(stars) + '☆'.repeat(3 - stars) + '   ·   连续进攻' : `通关第 ${map.id - 1} 关解锁`, cx, y + 192 * u, 23, C.gold);
     if (map.id > 1 && ui.button('td_prev', 34 * u, y + 56 * u, 76 * u, 82 * u, '◀', C.btnGray)) { st.selected = map.id - 1; markDirty(); }
     if (map.id < TOWER_MAPS.length && ui.button('td_next', ui.W - 110 * u, y + 56 * u, 76 * u, 82 * u, '▶', C.btnGray)) { st.selected = map.id + 1; markDirty(); }
     const hero = towerCommander(), state = save.heroes[hero];

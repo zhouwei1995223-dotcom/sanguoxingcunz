@@ -1,6 +1,7 @@
 import { game, Scene, Dialog } from '../game';
-import { TowerBattle } from '../battle/tower';
-import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, WAVES, GATE_HP, commandBonus } from '../data/tower';
+import { fmtTime } from '../core/math';
+import { Marcher, TowerBattle } from '../battle/tower';
+import { AID_LIMIT, ALLY_CARDS, FIELD_H, FIELD_W, TACTIC_CARDS, TOWER_MAPS, TOWERS, TowerCard, MARCH_SECONDS, GATE_HP, commandBonus } from '../data/tower';
 import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { BOSSES } from '../data/enemies';
 import { IS_WEB, IS_WX } from '../data/platformConfig';
@@ -122,7 +123,7 @@ export class TowerScene implements Scene {
     this.paused = false;
     playBgm(null);
     playSfx(b.phase === 'win' ? 'victory' : 'defeat');
-    this.sdk.report('battle_end', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: b.leaks, win: b.phase === 'win' ? 1 : 0, waves: b.cleared, kills: b.kills, sec: Math.floor(b.elapsed) });
+    this.sdk.report('battle_end', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: b.leaks, win: b.phase === 'win' ? 1 : 0, kills: b.kills, sec: Math.floor(b.elapsed) });
   }
   private async reward(kind: 'repair' | 'double' | 'aid') {
     const b = this.battle;
@@ -161,7 +162,7 @@ export class TowerScene implements Scene {
       }
       if (b.strikes.some(f => f.age === 0 && f.kind !== 'command')) playSfx('shoot');
     }
-    if (b.phase !== 'wave' || b.offer) this.aiming = false;
+    if (b.over || b.offer) this.aiming = false;
     if (b.over) this.finish();
     g.fillStyle = '#e7dcc2';
     g.fillRect(0, 0, ui.W, ui.H);
@@ -174,7 +175,7 @@ export class TowerScene implements Scene {
     if (ui.button('td_pause', ui.W - 103 * u, y, 82 * u, 66 * u, '暂停', C.btnGray, { size: 22 }) && interact) this.paused = true;
     const hudY = y + 70 * u, hudH = (compact ? 54 : 68) * u;
     ui.panel(8 * u, hudY, ui.W - 16 * u, hudH, 'paper');
-    const hud = [['城门', b.hp + '/' + GATE_HP, b.hp <= 6 ? RED : GREEN], ['阵级', String(b.level), RED], ['波次', b.wave + '/' + WAVES, INK], ['漏怪', String(b.leaks), RED]];
+    const hud = [['城门', b.hp + '/' + GATE_HP, b.hp <= 6 ? RED : GREEN], ['阵级', String(b.level), RED], ['用时', fmtTime(b.elapsed), INK], ['漏怪', String(b.leaks), RED]];
     hud.forEach(([label, value, col], i) => {
       const x = (24 + i * 187) * u;
       ui.text(label, x, hudY + hudH / 2, 22, MUTED, 'left', null);
@@ -223,7 +224,7 @@ export class TowerScene implements Scene {
       for (let j = 0; j < 3; j++) stamp(g, 'flame' + Math.floor((b.elapsed * 8 + j) % 2), f.x + (j - 1) * 8, f.y + 3 + (j % 2) * 4, 11, heightRatio);
     }
     b.map.sites.forEach(([x, y], i) => {
-      const t = b.towers[i], reserve = b.map.aidSites.includes(i);
+      const t = b.towers[i], reserve = i >= b.openSites;
       g.beginPath();
       g.ellipse(x, y, 17, 10, 0, 0, Math.PI * 2);
       g.fillStyle = reserve && !t ? '#cbb988' : '#dbccab';
@@ -245,8 +246,7 @@ export class TowerScene implements Scene {
       }
     });
     for (const e of b.enemies) {
-      const sz = e.gateDamage === 5 ? 43 : e.gateDamage === 2 ? 33 : 24;
-      stamp(g, 'u_' + e.sprite + '_' + Math.floor(b.elapsed * 7) % 4 + (e.left ? '_L' : ''), e.x, e.y + 3, sz, heightRatio);
+      const sz = this.drawEnemy(g, e, heightRatio);
       if (e.gateDamage > 1 || e.hp < e.maxHp) {
         const w = sz * .87;
         g.fillStyle = '#372b22';
@@ -255,6 +255,7 @@ export class TowerScene implements Scene {
         g.fillRect(e.x - w / 2 + 1, e.y - sz * heightRatio, Math.max(0, (w - 2) * e.hp / e.maxHp), 1.5);
       }
     }
+    for (const e of b.fallen) this.drawEnemy(g, e, heightRatio);
     for (const a of b.allies) {
       stamp(g, 'hero_' + a.id + '_' + Math.floor(b.elapsed * 6) % 4 + (a.left ? '_L' : ''), a.x, a.y + 3, 32, heightRatio);
       g.fillStyle = '#31694c'; g.fillRect(a.x - 6, a.y + 4, 12, 2);
@@ -308,24 +309,29 @@ export class TowerScene implements Scene {
       g.restore();
     }
   }
+  private drawEnemy(g: CanvasRenderingContext2D, e: Marcher, heightRatio: number) {
+    const size = e.gateDamage === 5 ? 43 : e.gateDamage === 2 ? 33 : 24;
+    const pose = e.left ? (e.flash > 0 ? '_LW' : '_L') : (e.flash > 0 ? '_W' : '');
+    stamp(g, 'u_' + e.sprite + '_' + Math.floor(this.battle.elapsed * 7) % 4 + pose, e.x, e.y + 3, size, heightRatio);
+    return size;
+  }
   private drawActions(ui: UI, y: number, h: number, interactive: boolean) {
-    const b = this.battle, u = ui.u, wave = b.phase === 'ready' ? b.wave + 1 : b.wave;
-    const foe = wave === 8 || wave === WAVES ? BOSSES[b.map.bosses[wave === 8 ? 0 : 1]].name + '出阵' : '第 ' + wave + ' 波';
-    const status = this.aiming ? '点地图指定将令落点' : b.phase === 'ready' ? foe + ' · ' + Math.ceil(b.countdown) + ' 秒后出兵' : foe + ' · 防守中';
+    const b = this.battle, u = ui.u;
+    const next = b.generalsSent === 0 ? 0 : 1;
+    const general = BOSSES[b.map.bosses[next]].name;
+    const arrives = next === 0 ? MARCH_SECONDS / 2 : MARCH_SECONDS;
+    const status = this.aiming ? '点地图指定将令落点' : b.generalsSent === 2 ? '主将已出阵 · 守住城门' : general + '出阵 ' + fmtTime(Math.ceil(arrives - b.elapsed));
     ui.text(status, 20 * u, y - 24 * u, 23, GREEN, 'left', null);
     ui.text(`升级经验 ${b.xp}/${b.xpNeeded}`, ui.W - 20 * u, y - 24 * u, 22, MUTED, 'right', null);
     const hero = HERO_BY_ID[b.hero], cmd = b.hero === 'zhaoyun' ? '龙胆突阵' : '鸣金震阵';
-    if (ui.button('td_command', 9 * u, y, 238 * u, h, this.aiming ? '取消选点' : cmd, C.btnRed, {
+    if (ui.button('td_command', 9 * u, y, 360 * u, h, this.aiming ? '取消选点' : cmd, C.btnRed, {
       icon: 'hero_' + hero.id + '_0', size: 25, sub: b.commandCd > 0 ? `冷却 ${Math.ceil(b.commandCd)} 秒` : '指定落点',
-      disabled: b.phase !== 'wave' || b.commandCd > 0
+      disabled: b.over || b.commandCd > 0
     }) && interactive) this.aiming = !this.aiming;
-    if (ui.button('td_aid', 254 * u, y, 238 * u, h, VIDEO ? '援建' : '免费援建', C.btnGold, {
+    if (ui.button('td_aid', 381 * u, y, 360 * u, h, VIDEO ? '援建' : '免费援建', C.btnGold, {
       icon: VIDEO ? 'video' : 'td_arrow1', size: 25, sub: `额外塔位 ${AID_LIMIT - b.aidUsed}/${AID_LIMIT}`,
       disabled: !b.canReinforce || this.busy
     }) && interactive) void this.reward('aid');
-    if (ui.button('td_send', 499 * u, y, 242 * u, h, b.phase === 'ready' ? '提前出兵' : '敌军行进中', C.btnGreen, {
-      size: 25, sub: b.phase === 'ready' ? `+${b.earlyXP} 经验` : '第 ' + b.wave + ' 波', disabled: b.phase !== 'ready'
-    }) && interactive) { b.startWave(); playSfx('boss'); }
   }
 
   private cardInfo(card: TowerCard) {
@@ -353,7 +359,7 @@ export class TowerScene implements Scene {
     const b = this.battle, offer = b.offer!, u = ui.u;
     ui.layer = 1; ui.dim(.65); ui.blocker('td_cards_block');
     const f = dialogFrame(ui, 724 * u, 488 * u, offer.aid ? '援建 · 解锁塔位' : '军阵升级 · Lv.' + b.level);
-    ui.text(offer.aid ? '任选一座，立即部署在援建位' : '选择一项，本局生效', ui.W / 2, f.y + 85 * u, 25, MUTED, 'center', null);
+    ui.text(offer.aid ? '任选一座，按塔位顺序部署' : '选择一项，本局生效', ui.W / 2, f.y + 85 * u, 25, MUTED, 'center', null);
     offer.cards.forEach((card, i) => {
       const d = this.cardInfo(card), x = f.x + (17 + i * 232) * u, y = f.y + 126 * u, w = 226 * u, h = 326 * u;
       ui.panel(x, y, w, h, 'paper');
@@ -401,7 +407,7 @@ export class TowerScene implements Scene {
     const cx = ui.W / 2;
     ui.text(b.map.name, cx, f.y + 89 * u, 37, INK, 'center', null);
     ui.text('★'.repeat(r.stars) + '☆'.repeat(3 - r.stars), cx, f.y + 153 * u, 46, RED, 'center', null);
-    ui.text(`守住 ${b.cleared}/15 波   ·   漏怪 ${b.leaks}   ·   城门 ${b.hp}/20`, cx, f.y + 222 * u, 23, MUTED, 'center', null);
+    ui.text(`坚守 ${fmtTime(b.elapsed)}   ·   漏怪 ${b.leaks}   ·   城门 ${b.hp}/20`, cx, f.y + 222 * u, 23, MUTED, 'center', null);
     if (r.first || r.perfect) ui.text([r.first ? '首通元宝 +' + 60 * b.map.id : '', r.perfect ? '首次三星 +' + 40 * b.map.id : ''].filter(Boolean).join('   '), cx, f.y + 284 * u, 24, RED, 'center', null);
     const m = this.doubled ? 2 : 1;
     rewardRow(ui, rewardEntries({ ...r, gold: r.gold * m, iron: r.iron * m }), cx, f.y + 340 * u, 100 * u);

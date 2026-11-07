@@ -245,8 +245,8 @@ export function settleTower(b: TowerBattle) {
   const old = state.stars[level] || 0;
   const first = stars > 0 && old === 0;
   const perfect = stars === 3 && old < 3;
-  const gold = level * (b.cleared * 18 + (stars ? 150 : 0));
-  const iron = level * (Math.floor(b.cleared / 3) + (stars ? 5 : 0));
+  const gold = level * (Math.floor(b.progress * 270) + (stars ? 150 : 0));
+  const iron = level * (Math.floor(b.progress * 5) + (stars ? 5 : 0));
   const yuanbao = (stars ? 12 * level : 0) + (first ? 60 * level : 0) + (perfect ? 40 * level : 0);
   const shards = stars ? { hero: randomShardHero(true), n: level + 1 } : undefined;
   if (stars) {

@@ -1,11 +1,11 @@
 import { BOSSES, ENEMIES } from '../data/enemies';
-import { AID_LIMIT, ALLY_CARDS, ALLY_IDS, AllyId, Branch, GATE_HP, Point, TACTIC_CARDS, TACTIC_IDS, TacticId, TowerCard, TowerKind, TowerMap, TOWERS, TOWER_KINDS, WAVES, towerRange } from '../data/tower';
+import { AID_LIMIT, ALLY_WEIGHT, ALLY_CARDS, ALLY_IDS, AllyId, Branch, GATE_HP, Point, TACTIC_CARDS, TACTIC_IDS, TacticId, TowerCard, TowerKind, TowerMap, TOWERS, TOWER_KINDS, MARCH_SECONDS, towerRange } from '../data/tower';
 
 export interface Emplacement { kind: TowerKind; level: number; cooldown: number; branch?: Branch }
 export interface TowerAlly { id: AllyId; level: number; x: number; y: number; left: boolean; cooldown: number }
 export interface Marcher {
   x: number; y: number; route: number; next: number; remaining: number; hp: number; maxHp: number;
-  speed: number; armor: boolean; gateDamage: number; bounty: number; sprite: string; left: boolean; stun: number;
+  speed: number; armor: boolean; gateDamage: number; bounty: number; sprite: string; left: boolean; stun: number; flash: number;
 }
 export interface Strike {
   kind: TowerKind | 'command' | 'slash' | 'roar' | 'frost' | 'lightning' | 'deploy'; x: number; y: number; tx: number; ty: number;
@@ -21,6 +21,7 @@ export class TowerBattle {
   readonly enemies: Marcher[] = [];
   readonly strikes: Strike[] = [];
   readonly oil: OilPatch[] = [];
+  readonly fallen: Marcher[] = [];
   private readonly lengths: number[];
   level = 1;
   xp = 0;
@@ -29,82 +30,60 @@ export class TowerBattle {
   readonly allies: TowerAlly[] = [];
   readonly tactics: { id: TacticId; level: number; cooldown: number }[] = [];
   hp = GATE_HP;
-  wave = 0;
-  cleared = 0;
   leaks = 0;
   kills = 0;
   elapsed = 0;
-  phase: 'ready' | 'wave' | 'win' | 'loss' = 'ready';
-  countdown = 6;
+  phase: 'fight' | 'win' | 'loss' = 'fight';
   commandCd = 0;
   repaired = false;
-  private remainingSpawns = 0;
-  private spawnTimer = 0;
-  private waveScale = 1;
+  private nextSpawn = 0;
+  private nextElite = 36;
+  generalsSent = 0;
   constructor(readonly map: TowerMap, readonly hero: string, readonly bonus: number, private random = Math.random) {
     this.towers = map.sites.map(() => null);
-    this.towers[map.starter] = { kind: 'arrow', level: 1, cooldown: 0 };
+    this.towers[0] = { kind: 'arrow', level: 1, cooldown: 0 };
     this.lengths = map.routes.map(routeLength);
   }
   get over() { return this.phase === 'win' || this.phase === 'loss'; }
   get stars() { return this.phase !== 'win' ? 0 : this.leaks === 0 ? 3 : this.leaks <= 5 ? 2 : 1; }
-  get earlyXP() { return Math.ceil(Math.max(0, this.countdown) / 2); }
+  get progress() { return Math.min(1, this.elapsed / MARCH_SECONDS); }
+  get openSites() { return this.towers.length - AID_LIMIT + this.aidUsed; }
   get xpNeeded() { return this.level === 1 ? 8 : 14 + this.level * 4; }
   get canReinforce() { return !this.over && !this.offer && this.aidUsed < AID_LIMIT; }
 
 
-  /** 优先覆盖更多道路；战鼓额外考虑周围已有的攻击塔。 */
-  private siteScore(slot: number, kind: TowerKind) {
-    const [x, y] = this.map.sites[slot], range = TOWERS[kind].range;
-    let score = 0;
-    for (const road of this.map.routes) {
-      for (let i = 1; i < road.length; i++) {
-        const [ax, ay] = road[i - 1], [bx, by] = road[i];
-        const length = distance(ax, ay, bx, by), steps = Math.ceil(length / 12);
-        for (let j = 0; j < steps; j++) {
-          const f = (j + 0.5) / steps;
-          if (distance(x, y, ax + (bx - ax) * f, ay + (by - ay) * f) < range) score += length / steps;
-        }
-      }
-    }
-    if (kind === 'drum') this.towers.forEach((t, i) => {
-      if (t && t.kind !== 'drum' && distance(x, y, ...this.map.sites[i]) <= range) score += 120;
-    });
-    return score;
-  }
-
   /** 新建、已有塔的有效升级/分支、援将及阵法共同参与抽取。 */
   private rewardPool(): TowerCard[] {
-    const pool: TowerCard[] = [], free: number[] = [];
+    const pool: TowerCard[] = [];
     this.towers.forEach((t, slot) => {
-      if (!t) {
-        if (!this.map.aidSites.includes(slot)) free.push(slot);
-      } else if (t.level === 1) {
+      if (!t) return;
+      if (t.level === 1) {
         pool.push({ type: 'tower', kind: t.kind, slot, level: 2 });
       } else if (t.level === 2) {
         for (const branch of [0, 1] as const) pool.push({ type: 'tower', kind: t.kind, slot, level: 3, branch });
       }
     });
-    if (free.length) {
-      for (const kind of TOWER_KINDS) {
-        let slot = free[0], best = -1;
-        for (const i of free) {
-          const score = this.siteScore(i, kind);
-          if (score > best) { best = score; slot = i; }
-        }
-        pool.push({ type: 'tower', kind, slot, level: 1 });
-      }
+    const slot = this.towers.indexOf(null);
+    if (slot >= 0 && slot < this.openSites) {
+      for (const kind of TOWER_KINDS) pool.push({ type: 'tower', kind, slot, level: 1 });
     }
     for (const id of ALLY_IDS) pool.push({ type: 'ally', id });
     for (const id of TACTIC_IDS) pool.push({ type: 'tactic', id });
     return pool;
   }
 
-  /** 从候选奖励中等概率、不放回抽取三项。 */
+  /** 从候选奖励中按单牌权重、不放回抽取三项。 */
   private drawThree(pool: TowerCard[]) {
     const cards: TowerCard[] = [];
-    while (cards.length < 3) {
-      const [card] = pool.splice(Math.floor(this.random() * pool.length), 1);
+    const weight = (card: TowerCard) => card.type === 'ally' ? ALLY_WEIGHT : 1;
+    while (cards.length < 3 && pool.length) {
+      let ticket = this.random() * pool.reduce((sum, c) => sum + weight(c), 0);
+      let i = 0;
+      while (i < pool.length - 1 && ticket >= weight(pool[i])) {
+        ticket -= weight(pool[i]);
+        i++;
+      }
+      const [card] = pool.splice(i, 1);
       cards.push(card);
     }
     return cards;
@@ -119,7 +98,8 @@ export class TowerBattle {
 
   offerAid() {
     if (!this.canReinforce) return false;
-    const slot = this.map.aidSites[this.aidUsed];
+    const slot = this.towers.indexOf(null);
+    if (slot < 0) return false;
     const pool: TowerCard[] = TOWER_KINDS.map(kind => ({ type: 'tower', kind, slot, level: 1 }));
     this.offer = { aid: true, cards: this.drawThree(pool) };
     return true;
@@ -150,18 +130,6 @@ export class TowerBattle {
     this.checkLevel();
     return true;
   }
-  startWave(early = true) {
-    if (this.phase !== 'ready' || this.offer) return false;
-    if (early) this.xp += this.earlyXP;
-    this.phase = 'wave';
-    this.wave++;
-    this.countdown = 0;
-    this.remainingSpawns = 5 + this.wave;
-    this.spawnTimer = 0;
-    this.waveScale = 0.86 + 0.28 * this.random();
-    this.checkLevel();
-    return true;
-  }
   repair() {
     if (this.over || this.repaired || this.hp >= GATE_HP) return false;
     this.hp = Math.min(GATE_HP, this.hp + 5);
@@ -169,11 +137,11 @@ export class TowerBattle {
     return true;
   }
   cast(x: number, y: number) {
-    if (this.offer || this.phase !== 'wave' || this.commandCd > 0) return false;
+    if (this.offer || this.over || this.commandCd > 0) return false;
     const dragon = this.hero === 'zhaoyun', radius = dragon ? 69 : 80;
     this.strikes.push({ kind: 'command', x, y, tx: x, ty: y, age: 0, life: 0.8, radius });
     for (const e of this.enemies) if (distance(x, y, e.x, e.y) <= radius) {
-      e.hp -= (dragon ? 90 : 62) + this.wave * (dragon ? 6 : 4);
+      this.hit(e, (dragon ? 90 : 62) + (1 + 14 * this.progress) * (dragon ? 6 : 4));
       e.stun = dragon ? 0.9 : 2;
     }
     this.commandCd = dragon ? 28 : 24;
@@ -181,30 +149,38 @@ export class TowerBattle {
     this.finishStep();
     return true;
   }
-  private spawn() {
-    const w = this.wave, boss = this.remainingSpawns === 1 && (w === 8 || w === WAVES);
-    const elite = !boss && w >= 3 && this.remainingSpawns === 2;
-    const mix = this.random();
-    const armored = !boss && w >= 2 && mix < 0.23, mounted = !boss && w >= 3 && mix > 0.67;
-    const armorId = w >= 6 && mix < 0.08 ? 'wei_heavy' : this.map.shield;
-    const id = boss ? this.map.bosses[w === 8 ? 0 : 1] : armored ? armorId : mounted ? this.map.cavalry : this.map.troop;
-    const route = Math.floor(this.random() * this.map.routes.length);
+  private spawn(rank: 'troop' | 'elite' | 'mid' | 'final') {
+    const p = this.progress, boss = rank === 'mid' || rank === 'final', elite = rank === 'elite';
+    const mix = this.random(), armorShare = .25 * Math.min(1, this.elapsed / 75);
+    const cavalryShare = .30 * Math.min(1, Math.max(0, this.elapsed - 15) / 105);
+    const armored = !boss && mix < armorShare, mounted = !boss && mix > 1 - cavalryShare;
+    const armorId = mix < armorShare * p / 3 ? 'wei_heavy' : this.map.shield;
+    const id = boss ? this.map.bosses[rank === 'mid' ? 0 : 1] : armored ? armorId : mounted ? this.map.cavalry : this.map.troop;
+    // 双路关卡先从首塔一侧进入，另一入口在头半分钟逐渐加入。
+    const rightShare = this.map.routes.length > 1 ? .5 * Math.min(1, this.elapsed / 30) : 0;
+    const route = this.random() < rightShare ? 1 : 0;
     const [x, y] = this.map.routes[route][0];
-    const pressure = 1 + (this.map.latePressure - 1) * (w - 1) / (WAVES - 1);
-    const hp = Math.round((20 + w * 8 + w * w * 0.8) * pressure * this.map.strength * this.waveScale * (0.9 + 0.2 * this.random())
-      * (boss ? (w === 8 ? 8 : 13) : elite ? 3 : armored ? 1.32 : mounted ? 0.84 : 1));
+    const pressure = 1 + (this.map.latePressure - 1) * p * (2 - p);
+    const hp = Math.round((27 + 138 * p) * this.map.strength * pressure * (.96 + .08 * this.random())
+      * (rank === 'final' ? 12 : rank === 'mid' ? 7 : elite ? 2.5 : armored ? 1.32 : mounted ? .84 : 1));
     this.enemies.push({
       x, y, route, next: 1, remaining: this.lengths[route], hp, maxHp: hp,
-      speed: (boss ? 17 : mounted ? 43 : armored ? 21 : 26) * (0.9 + this.random() * 0.2),
+      speed: (boss ? 17 : mounted ? 36 : armored ? 21 : 26) * (1 + .08 * p) * (.96 + .08 * this.random()),
       armor: armored, gateDamage: boss ? 5 : elite ? 2 : 1, bounty: boss ? 34 : elite ? 12 : 4,
-      sprite: (boss ? BOSSES[id] : ENEMIES[id]).sprite, left: false, stun: 0
+      sprite: (boss ? BOSSES[id] : ENEMIES[id]).sprite, left: false, stun: 0, flash: 0
     });
-    this.remainingSpawns--;
   }
+  private hit(e: Marcher, damage: number) {
+    if (e.hp <= 0) return;
+    e.hp -= damage;
+    e.flash = .08;
+  }
+
   private collectKills() {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (e.hp > 0) continue;
+      this.fallen.push(e);
       this.xp += e.bounty;
       this.kills++;
       this.enemies.splice(i, 1);
@@ -215,7 +191,7 @@ export class TowerBattle {
     const heavy = t.branch === 0, wide = t.branch === 1;
     const tx = target.x, ty = target.y;
     let endX = tx, endY = ty, radius = 0;
-    if (kind === 'arrow') target.hp -= damage * (heavy ? 1.5 : 1) * (target.armor ? 0.6 : 1);
+    if (kind === 'arrow') this.hit(target, damage * (heavy ? 1.5 : 1) * (target.armor ? 0.6 : 1));
     if (kind === 'bolt') {
       const len = distance(x, y, tx, ty) || 1, dx = (tx - x) / len, dy = (ty - y) / len;
       const reach = towerRange(kind, t.branch) + 22;
@@ -224,7 +200,7 @@ export class TowerBattle {
       for (const e of this.enemies) {
         const ex = e.x - x, ey = e.y - y, along = dx * ex + dy * ey;
         if (along >= 0 && along <= reach && Math.abs(ex * dy - ey * dx) <= (wide ? 12 : 6))
-          e.hp -= damage * (heavy ? 1.6 : 1) * (e.armor ? 0.6 : 1);
+          this.hit(e, damage * (heavy ? 1.6 : 1) * (e.armor ? 0.6 : 1));
       }
     }
     if (kind === 'stone' || kind === 'oil') {
@@ -258,12 +234,12 @@ export class TowerBattle {
       a.cooldown = spec.interval;
       const damage = spec.damage * (1 + (a.level - 1) * 0.65);
       if (a.id === 'huangzhong') {
-        target.hp -= damage * (target.gateDamage > 1 ? 1.8 : 1);
+        this.hit(target, damage * (target.gateDamage > 1 ? 1.8 : 1));
         this.strikes.push({ kind: 'arrow', x: a.x, y: a.y, tx: target.x, ty: target.y, age: 0, life: .22, radius: 0 });
       } else {
         const roar = a.id === 'zhangfei', radius = roar ? 46 : 33;
         for (const e of line) if (distance(target.x, target.y, e.x, e.y) <= radius) {
-          e.hp -= damage;
+          this.hit(e, damage);
           if (roar) e.stun = Math.max(e.stun, e.gateDamage === 5 ? .3 : .85);
         }
         this.strikes.push({ kind: roar ? 'roar' : 'slash', x: a.x, y: a.y, tx: target.x, ty: target.y, age: 0, life: .4, radius });
@@ -280,13 +256,13 @@ export class TowerBattle {
         this.oil.push({ x: first.x, y: first.y, radius: 33, damage: 13 * power, life: 2.5, tick: 0 });
       } else if (t.id === 'lightning') {
         for (const e of living.slice(0, 3)) {
-          e.hp -= 46 * power;
+          this.hit(e, 46 * power);
           this.strikes.push({ kind: 'lightning', x: e.x - 8, y: e.y - 45, tx: e.x, ty: e.y, age: 0, life: .3, radius: 0 });
         }
       } else {
         const radius = 45;
         for (const e of living) if (distance(e.x, e.y, first.x, first.y) <= radius) {
-          e.hp -= 18 * power;
+          this.hit(e, 18 * power);
           const duration = Math.min(3.5, 1.4 + .28 * (t.level - 1));
           e.stun = Math.max(e.stun, duration * (e.gateDamage === 5 ? .5 : 1));
         }
@@ -297,7 +273,14 @@ export class TowerBattle {
 
   update(dt: number) {
     if (this.over || this.offer || dt <= 0) return;
+    const before = this.elapsed;
     this.elapsed += dt;
+    // 存活经验按整秒结算，即使暂时没能击杀，也能逐渐补强。
+    this.xp += Math.floor(Math.min(this.elapsed, MARCH_SECONDS)) - Math.floor(Math.min(before, MARCH_SECONDS));
+    for (const e of this.enemies) e.flash = Math.max(0, e.flash - dt);
+    for (let i = this.fallen.length - 1; i >= 0; i--) {
+      if ((this.fallen[i].flash -= dt) <= 0) this.fallen.splice(i, 1);
+    }
     this.commandCd = Math.max(0, this.commandCd - dt);
     for (let i = this.strikes.length - 1; i >= 0; i--) {
       const s = this.strikes[i];
@@ -306,19 +289,23 @@ export class TowerBattle {
       if (s.kind === 'oil' && s.impactDamage) {
         this.oil.push({ x: s.tx, y: s.ty, radius: s.radius, damage: s.impactDamage, life: s.burnTime!, tick: 0 });
       } else if (s.kind === 'stone' && s.impactDamage) {
-        for (const e of this.enemies) if (distance(s.tx, s.ty, e.x, e.y) <= s.radius) e.hp -= s.impactDamage * (e.armor ? 1.4 : 1);
+        for (const e of this.enemies) if (distance(s.tx, s.ty, e.x, e.y) <= s.radius) this.hit(e, s.impactDamage * (e.armor ? 1.4 : 1));
       }
       this.strikes.splice(i, 1);
     }
-    if (this.phase === 'ready') {
-      this.countdown -= dt;
-      if (this.countdown <= 0) this.startWave(false);
-      return;
+    while (this.nextSpawn <= this.elapsed && this.nextSpawn < MARCH_SECONDS) {
+      const elite = this.nextSpawn >= this.nextElite;
+      this.spawn(elite ? 'elite' : 'troop');
+      if (elite) this.nextElite += 20;
+      this.nextSpawn += (1.55 - .55 * this.progress) * (.92 + .16 * this.random());
     }
-    this.spawnTimer -= dt;
-    while (this.spawnTimer <= 0 && this.remainingSpawns > 0) {
-      this.spawn();
-      this.spawnTimer += 0.52 + this.random() * 0.45;
+    if (this.generalsSent === 0 && this.elapsed >= MARCH_SECONDS / 2) {
+      this.spawn('mid');
+      this.generalsSent++;
+    }
+    if (this.generalsSent === 1 && this.elapsed >= MARCH_SECONDS) {
+      this.spawn('final');
+      this.generalsSent++;
     }
     // 同种鼓效果取最高，攻击塔可以利用布在拐角处的同一座战鼓。
     const drums: { p: Point; range: number; haste: number; slow: number }[] = [];
@@ -351,7 +338,7 @@ export class TowerBattle {
       f.life -= dt;
       if (f.tick <= 0) {
         f.tick += 0.5;
-        for (const e of this.enemies) if (distance(f.x, f.y, e.x, e.y) <= f.radius) e.hp -= f.damage;
+        for (const e of this.enemies) if (distance(f.x, f.y, e.x, e.y) <= f.radius) this.hit(e, f.damage);
       }
       if (f.life <= 0) this.oil.splice(i, 1);
     }
@@ -395,14 +382,7 @@ export class TowerBattle {
   }
 
   private finishStep() {
-    if (this.phase === 'wave' && !this.remainingSpawns && !this.enemies.length) {
-      this.cleared = this.wave;
-      this.xp += 12 + this.wave;
-      this.oil.length = 0;
-      for (const strike of this.strikes) strike.impactDamage = undefined;
-      this.phase = this.wave === WAVES ? 'win' : 'ready';
-      this.countdown = 6;
-    }
+    if (this.generalsSent === 2 && !this.enemies.length) this.phase = 'win';
     this.checkLevel();
   }
 }

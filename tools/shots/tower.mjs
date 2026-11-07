@@ -53,12 +53,10 @@ export default async function({ page }) {
   await capture('04-aid');
   await button('td_reward_0');
   assert.equal(await page.evaluate(() => window.__game.scene.battle.aidUsed), 1);
-  await button('td_send');
   async function nextUpgrade() {
     await page.evaluate(() => {
       const b = window.__game.scene.battle;
       for (let i = 0; i < 50000 && !b.offer && !b.over; i++) {
-        if (b.phase === 'ready') b.startWave();
         b.update(1 / 30);
       }
     });
@@ -70,11 +68,11 @@ export default async function({ page }) {
     return Math.max(0, cards.findIndex(c => c.type === 'ally'));
   });
   await button('td_reward_' + pick);
-  // 在波次内用实际将令选点。为避免截图等待时间波动，在真实逻辑中快进至有敌人的一帧。
+  // 在连续进攻中用实际将令选点。为避免截图等待时间波动，在真实逻辑中快进至有敌人的一帧。
   await page.evaluate(() => {
     const b = window.__game.scene.battle;
-    for (let i = 0; i < 25000 && !(b.phase === 'wave' && b.enemies.length && !b.offer); i++) {
-      if (b.offer) b.choose(b.offer.cards[0]); else if (b.phase === 'ready') b.startWave();
+    for (let i = 0; i < 25000 && !(b.phase === 'fight' && b.enemies.length && !b.offer); i++) {
+      if (b.offer) b.choose(b.offer.cards[0]);
       b.update(1 / 30);
     }
   });
@@ -95,8 +93,8 @@ export default async function({ page }) {
           || b.offer.cards[0];
         b.choose(best);
       }
-      else if (b.phase === 'ready') b.startWave();
-      if (b.phase === 'wave' && !b.offer && b.commandCd <= 0 && b.enemies.length >= 4) {
+
+      if (!b.over && !b.offer && b.commandCd <= 0 && b.enemies.length >= 4) {
         const first = b.enemies.reduce((a, c) => a.remaining < c.remaining ? a : c);
         b.cast(first.x, first.y);
       }
