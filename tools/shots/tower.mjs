@@ -7,15 +7,26 @@ export default async function({ page }) {
   const out = path.resolve(process.env.SHOT_DIR || 'docs/review');
   fs.mkdirSync(out, { recursive: true });
   const capture = name => page.screenshot({ path: path.join(out, 'tower-' + name + '.png') });
-  async function button(id) {
+  async function buttonPoint(id) {
     await page.waitForFunction(id => {
       const ui = window.__game.ui, r = ui.prevRegions.find(v => v.id === id);
       return r && ui.hit(r.x + r.w / 2, r.y + r.h / 2)?.id === id;
     }, id);
-    const pt = await page.evaluate(id => {
+    return page.evaluate(id => {
       const ui = window.__game.ui, r = ui.prevRegions.find(v => v.id === id), c = document.querySelector('canvas').getBoundingClientRect();
       return [c.x + (r.x + r.w / 2) * c.width / ui.W, c.y + (r.y + r.h / 2) * c.height / ui.H];
     }, id);
+  }
+  async function button(id) {
+    await page.mouse.click(...await buttonPoint(id));
+    await page.waitForTimeout(100);
+  }
+  async function tapSite(i) {
+    const pt = await page.evaluate(i => {
+      const g = window.__game, ui = g.ui, r = ui.prevRegions.find(v => v.id === 'td_ground');
+      const [x, y] = g.scene.battle.map.sites[i], c = document.querySelector('canvas').getBoundingClientRect();
+      return [c.x + (r.x+r.w*x/320)*c.width/ui.W, c.y + (r.y+r.h*y/400)*c.height/ui.H];
+    }, i);
     await page.mouse.click(...pt);
     await page.waitForTimeout(100);
   }
@@ -38,11 +49,17 @@ export default async function({ page }) {
   await page.waitForTimeout(500);
   assert.equal(await page.evaluate(() => window.__game.scene.battle.grain), 200);
   await capture('02-opening');
-  await button('td_site_2'); await button('td_pick_stone');
+  await tapSite(2);
+  const stoneButton = await buttonPoint('td_pick_stone');
+  await page.mouse.move(...stoneButton);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
   await capture('03-build');
-  await button('td_build');
+  await page.mouse.up();
+  await page.waitForFunction(()=>window.__game.scene.battle.towers[2]?.kind==='stone');
   assert.equal(await page.evaluate(() => window.__game.scene.battle.towers[2].kind), 'stone');
-  await button('td_site_3'); await button('td_pick_arrow'); await button('td_build');
+  await button('td_pick_arrow'); await tapSite(3);
+  assert.equal(await page.evaluate(()=>window.__game.scene.battle.towers[3]?.kind),'arrow');
   await button('td_speed');
   await button('td_pause');
   const time = await page.evaluate(() => window.__game.scene.battle.elapsed);
@@ -71,7 +88,7 @@ export default async function({ page }) {
       b.update(1 / 30);
     }
   });
-  await button('td_site_3'); await button('td_upgrade');
+  await tapSite(3); await button('td_upgrade');
   await page.evaluate(() => {
     const b = window.__game.scene.battle;
     for (let i = 0; i < 15000 && b.grain < 91 && !b.over; i++) {
