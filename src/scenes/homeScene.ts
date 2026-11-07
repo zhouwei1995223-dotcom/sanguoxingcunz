@@ -30,7 +30,7 @@ import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
 import { heroSpriteName, heroIdleFrame, newbieActive, newbieRedDot, achRedDot, codexUnclaimed, weeklyRedDot, skinState, skinAdProgress, setBonuses, setOf } from '../meta/goals';
 import { SKINS, EQUIP_SETS } from '../data/goals';
 import { funnel, reportDailyLogin } from '../meta/telemetry';
-import { GAME_INFO, IS_WEB, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
+import { GAME_INFO, WEB_RULES, IS_H5, NO_ADS, NO_ADS_PRICE, NEW_UI } from '../data/platformConfig';
 import { DEFENSE_LEVEL_COUNT, defenseChapter } from '../data/defense';
 import { TOWER_MAPS, commandBonus } from '../data/tower';
 import { TowerScene, TowerStageDialog, CommanderDialog, towerCommander } from './towerScene';
@@ -363,7 +363,7 @@ export class HomeScene implements Scene {
   }
 
   private shopRedDot() {
-    return !save.daily.freeGift || CHESTS.some((c) => (save.daily.chestAd[c.id] || 0) < c.adDaily || (IS_WEB && !save.daily.chestTenAd?.[c.id]));
+    return !save.daily.freeGift || CHESTS.some((c) => (save.daily.chestAd[c.id] || 0) < c.adDaily || (WEB_RULES && !save.daily.chestTenAd?.[c.id]));
   }
   private talentRedDot() {
     return TALENTS.some((t) => (save.talents[t.id] || 0) < t.max && save.maxCleared >= t.unlockChapter && save.gold >= talentCost(t, save.talents[t.id] || 0));
@@ -384,7 +384,7 @@ export class HomeScene implements Scene {
   }
 
   private drawBattleTab(ui: UI) {
-    if (IS_WEB && save.homeMode !== 'tower') {
+    if (WEB_RULES && save.homeMode !== 'tower') {
       const { defense, chapter } = selectedPreparationStage();
       const key = `${save.hero}:${defense}:${chapter}`;
       if (this.lastPreparationStage && key !== this.lastPreparationStage) {
@@ -482,7 +482,7 @@ export class HomeScene implements Scene {
       { id: 'weekly', icon: 'atk', label: '挑战', dot: endlessOpen() && weeklyRedDot(), on: () => { if (endlessOpen()) game.openDialog(new WeeklyDialog()); else ui.toast(`通关第${ENDLESS_UNLOCK}章解锁每周挑战`); } },
     ];
     const sideR: typeof side = [
-      ...(IS_WEB && save.homeMode !== 'tower' ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
+      ...(WEB_RULES && save.homeMode !== 'tower' ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();
@@ -671,7 +671,7 @@ export class HomeScene implements Scene {
     else if (short !== null && long !== null && short !== long) {
       powerLabel = `推荐 ${powerGuideText(Math.min(short, long))}～${powerGuideText(need)}`;
     } else if (short !== long) powerLabel = `推荐 ${powerGuideText(short ?? long)}起 · 含极限`;
-    else if (!IS_WEB && need !== null) powerLabel = '推荐战力 ' + fmtNum(need);
+    else if (!WEB_RULES && need !== null) powerLabel = '推荐战力 ' + fmtNum(need);
     // 进度与推荐战力放在同一行
     if (NEW_UI) {
       const barW = cw - 96 * u, barH = 34 * u, barX = cx + 48 * u, barY = oy + 124 * u;
@@ -703,9 +703,9 @@ export class HomeScene implements Scene {
     const canSweep = unlocked && power >= (need ?? legacyChapterPower(ch, diff)) * SWEEP_K;
     if (canSweep) {
       if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
-      const sweepLabel = IS_WEB ? (chapterStars(d, ch.id) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
+      const sweepLabel = WEB_RULES ? (chapterStars(d, ch.id) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
       if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) {
-        this.sweep(() => settleRun(ch, diff, true, IS_WEB ? null : ch.duration, 150, 1500, 2, 2, THREE_STARS), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
+        this.sweep(() => settleRun(ch, diff, true, WEB_RULES ? null : ch.duration, 150, 1500, 2, 2, THREE_STARS), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
       }
     } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
@@ -772,7 +772,7 @@ export class HomeScene implements Scene {
       ui.text(`◆ 守城 · 第 ${lv} 关 ◆`, ui.W / 2, cy + 39 * u, 23, '#205930', 'center', null);
     }
     const oy = cy + 66 * u;
-    ui.text(IS_WEB ? '守护城池 · 击败攻城主将' : '坚守五分钟 · 四面御敌', ui.W / 2, oy + 20 * u, 21, NEW_UI ? '#5c4d3e' : C.textDim);
+    ui.text(WEB_RULES ? '守护城池 · 击败攻城主将' : '坚守五分钟 · 四面御敌', ui.W / 2, oy + 20 * u, 21, NEW_UI ? '#5c4d3e' : C.textDim);
     if (!NEW_UI) {
       ui.text(ch.name, ui.W / 2, oy + 62 * u, 46, open ? '#fff4d6' : '#8b8b8b');
       ui.text(ch.subtitle, ui.W / 2, oy + 104 * u, 22, C.gold);
@@ -804,7 +804,7 @@ export class HomeScene implements Scene {
       ctx.lineWidth = Math.max(1, u);
       ctx.strokeRect(barX + 1, barY + 1, barW - 2, barH - 2);
     }
-    ui.text(cleared ? (IS_WEB ? '已守住 ' + starRating(defenseStars(lv)) : '已守住 ✓') : '尚未守住', ui.W / 2 - 14 * u, oy + 141 * u, 20, cleared ? '#9be37a' : '#e6d3b3', 'right', NEW_UI ? null : undefined);
+    ui.text(cleared ? (WEB_RULES ? '已守住 ' + starRating(defenseStars(lv)) : '已守住 ✓') : '尚未守住', ui.W / 2 - 14 * u, oy + 141 * u, 20, cleared ? '#9be37a' : '#e6d3b3', 'right', NEW_UI ? null : undefined);
     ui.text(`推荐战力 ${fmtNum(ch.power)}`, ui.W / 2 + 14 * u, oy + 141 * u, 20, power >= ch.power ? '#9be37a' : '#ff8a80', 'left', NEW_UI ? null : undefined);
     ui.pixRect(ui.W / 2 - 1 * u, oy + 131 * u, 2 * u, 20 * u, '#8c663b');
     if (!open) {
@@ -822,8 +822,8 @@ export class HomeScene implements Scene {
     const bw = 400 * u, bh = L.bh, by = L.by;
     if (open && power >= ch.power * SWEEP_K) {
       if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
-      const sweepLabel = IS_WEB ? (defenseStars(lv) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
-      if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) this.sweep(() => settleDefense(lv, true, IS_WEB ? null : ch.duration, 120, 1200, 2, 1, 12, IS_WEB ? THREE_STARS : undefined), `守城 · ${ch.name}`, 'defense', lv, 0);
+      const sweepLabel = WEB_RULES ? (defenseStars(lv) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
+      if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) this.sweep(() => settleDefense(lv, true, WEB_RULES ? null : ch.duration, 120, 1200, 2, 1, 12, WEB_RULES ? THREE_STARS : undefined), `守城 · ${ch.name}`, 'defense', lv, 0);
     } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     const ew = 150 * u;
@@ -839,7 +839,7 @@ export class HomeScene implements Scene {
   private sweep(settle: () => RunResult, title: string, mode: string, chapter: number, diff: number) {
     if (!spendStamina()) { game.openDialog(new StaminaDialog()); return; }
     const res = settle();
-    if (IS_WEB && save.guide === 6) save.guide = 99;
+    if (WEB_RULES && save.guide === 6) save.guide = 99;
     save.stats.runs++;
     save.stats.wins++;
     getPlatform().report('battle_end', { mode: 'sweep_' + mode, chapter, diff, hero: save.hero, win: 1, sec: 0, kills: 0, level: 0, boss_sec: 0, revives: 0 });
@@ -849,7 +849,7 @@ export class HomeScene implements Scene {
   }
 
   private chooseCampaign(id: number, diff: number) {
-    if (IS_WEB) {
+    if (WEB_RULES) {
       game.openDialog(new CampaignDurationDialog(id, diff, picked => this.startBattle(id, diff, picked)));
     } else this.startBattle(id, diff);
   }
@@ -927,7 +927,7 @@ export class HomeScene implements Scene {
     ui.panel(16 * u, gy, ui.W - 32 * u, gh, 'dark');
     const items = save.items.slice().sort((a, b) =>
       b.q - a.q || EQUIP_BY_ID[a.tid].slot.localeCompare(EQUIP_BY_ID[b.tid].slot) ||
-      (IS_WEB ? b.lv - a.lv : 0) || a.uid - b.uid);
+      (WEB_RULES ? b.lv - a.lv : 0) || a.uid - b.uid);
     const cols = 5, cell = (ui.W - 32 * u - 40 * u) / cols;
     const rows = Math.ceil(items.length / cols);
     const contentH = rows * cell + 30 * u;
@@ -1217,7 +1217,7 @@ export class HomeScene implements Scene {
       const bonus = freeClaims > 0 && used >= freeClaims && used < c.adDaily
         ? CHEST_AD_BONUS[Math.min(used - freeClaims, CHEST_AD_BONUS.length - 1)] : 0;
       const bw = 200 * u;
-      const buttonH = (IS_WEB ? 74 : 110) * u;
+      const buttonH = (WEB_RULES ? 74 : 110) * u;
       if (used < freeClaims) {
         // 每天第一次不用看广告
         if (ui.button('chest_free_' + c.id, 270 * u, y + 140 * u, bw, buttonH, '免费', C.btnGreen, { sub: `${c.adDaily - used}/${c.adDaily}`, size: 28 })) {
@@ -1236,7 +1236,7 @@ export class HomeScene implements Scene {
         });
       }
       if (ui.button('chest_buy_' + c.id, 490 * u, y + 140 * u, bw, buttonH, String(c.cost), save.yuanbao >= c.cost ? C.btnGold : C.btnGray, { icon: 'yuanbao', size: 28 })) this.buyChests(c, 1);
-      if (IS_WEB) {
+      if (WEB_RULES) {
         // 每个宝箱每天一次：看视频免费十连抽；旁边保留元宝十连。
         const tenAd = (save.daily.chestTenAd ??= {});
         const usedTen = !!tenAd[c.id];
@@ -1257,7 +1257,7 @@ export class HomeScene implements Scene {
     ui.ribbon(ui.W / 2, y + 30 * u, 360 * u, '每日补给');
     y += 80 * u;
     // 1.0.4：看广告领的补给一次比一次多，卡片上显示「本次 / 下次」
-    const supplyMultiplier = IS_WEB ? 2 : 1;
+    const supplyMultiplier = WEB_RULES ? 2 : 1;
     const ybAmt = (k: number) => supplyMultiplier * Math.round(SHOP_DAILY.adYuanbao.amount * adStep(SHOP_DAILY.adYuanbao.limit, k));
     const goldAmt = (k: number) => Math.floor(SHOP_DAILY.adGold.minutes * adStep(SHOP_DAILY.adGold.limit, k) * (3 + save.maxCleared * 3));
     const shardAmt = (k: number) => supplyMultiplier * Math.round(SHOP_DAILY.adShards.amount * adStep(SHOP_DAILY.adShards.limit, k));

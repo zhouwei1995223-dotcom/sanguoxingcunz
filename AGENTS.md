@@ -4,6 +4,7 @@
 代码都在分支 `claude/sweet-mendel-f5w2nu`（仓库目前只有这一个分支）。详细功能说明见 `README.md`，平台后台操作见 `docs/上架操作清单.md`。
 
 ## 和用户协作的约定
+- 目前只维护网页版、小红书版、微信版（2026-11-07 用户说明）；抖音版、TapTap 版暂不做，用户需要时会再说。
 - 用中文回复。用户不写代码，负责真机测试和平台后台操作；你负责开发、打包、指导后台步骤。
 - 每次改动都提交并推送；没要求就不要开 PR。
 - 用户发截图提问时，先看截图里平台的实际要求再回答，不要凭记忆。
@@ -36,6 +37,8 @@
 - 守城召唤武将技能动画（2026-11-07，用户：放技能只有文字没动画）：`defense.ts` 的 `heroSkillFx` 按 `HERO_BY_ID[id].ult` 推缩小版专属特效（复用 shock / rays / dragon / slash / drum / bagua / volley / pillar / beam / meteor / explo / particle，半径与 90 的伤害范围一致，fx 超 380 个不再加）。`render.ts` 的 `drawFx` 统一跳过 `t < 0` 的延迟特效。截图脚本 `tools/shots/def-heroskill.mjs`（`?skip=1&heroes=1`，断言每位武将放技能新增 ≥6 个特效）。
 - 守城补员与敌将打士兵（2026-11-07，用户：骑兵死了粮草不再出骑兵；敌将打不死小兵）：`nextAutoUnit` 先找「在场人数 / `unitQuota`」最低的已解锁兵种（编制 = 每队人数 ×（枪兵 2、其余 1 + 兵种营等级）），粮草不够就等它，全部满编再按 `nextUnit` 轮流；`aliveUnits` / `refilling` 给面板用。敌将（网页版）：`enemyTarget` 在武将不在 100 内时锁定 110 内最近的士兵，`updateEnemies` 把锁定士兵写进 `e.focus`，`boss.ts` 的 `startSkill` 用 `b.bossAim(e)` 瞄准（落锤、箭雨落点）；`bossHitAllies` 给重击、旋风、冲锋（`chargeHits` 每次冲锋每人一次）补上对士兵的伤害，武将原有判定不变；`enemyContact` 里敌将砍士兵时再横扫 e.r+22 内一圈（0.6 倍）。测试 `tools/shots/def-army.mjs`。
 - 截图脚本公共函数 `tools/shots/_lib.mjs`（`clickId`、`startCampaign`：按 id 点出征、网页版自动选 5 分钟）。原来 21 个用固定坐标 `tap(195, 722)` 点出征的脚本都已改用它并跑通（含 `heroes`，原来记的 `this.scene.update is not a function` 已不再出现）。
+- 微信版整体换成网页版（2026-11-07，1.0.7）：`platformConfig.ts` 新增 `WEB_RULES = IS_WEB || IS_WX`，`NEW_UI = WEB_RULES`；原来所有玩法 / 数值 / 界面上的 `IS_WEB` 判断都换成了 `WEB_RULES`。仍只认 `IS_WEB` 的只有：`debug.ts`（网址调试参数、网页测试档 `webPlaytest`）、`platform/`（模拟广告等）、`towerScene.ts` 的 `VIDEO`（已含微信）。小红书 / TapTap 仍走旧规则。新广告点位共用 `AD_CONFIG.wx.rewarded`。提审包 `长坂单骑传-微信-提审版v1.0.7.zip`（系统没有 zip 命令，用 Python `zipfile` 打包，文件在第一层），提审文案在 `docs/promo/1.0.7/更新说明.md`。
+- 小游戏模拟器 `node tools/mock-minigame.mjs wechat`：在 Node 里跑微信包，`main.ts` 只在 `__MOCK_MINIGAME` 标志下挂 `__game` / `__saveMod`（正式包没有这个标志）。流程：等云存档真实计时 → 点 `pv_ok` 同意隐私 → 征战阵亡复活 → 守城武将阵亡看视频复活 → 布阵看视频二倍速、城门失守看视频复活 → 商店宝箱看视频十连；广告回调走真实计时器，脚本在点广告后 `await tick()`。`DEBUG_MOCK=1` 打印卡住时的场景与按钮 id。
 - 网页验收 `?skip=1&tower=1`（关卡号 1～6）。PowerShell 设置 `$env:Q='?skip=1' ` 后执行 `node tools/shot.mjs tower`；六张截图位于 `docs/review/`。单独运行 `node tools/shot.mjs tower-rewards` 可以验证连续出兵、同兵种血量曲线、受击/击杀闪白、混抽、暂停、重复点击和援建上限。
 - `src/platform/`：平台抽象（web / 微信 / 抖音）。`src/data/platformConfig.ts`：AppID 之外的上架配置、`IS_XHS` / `NO_ADS` 开关、兑换码、广告位 ID（目前为空，没开流量主时激励视频直接发奖励）。
 - `src/battle/battle.ts`：战斗核心（伤害只对屏幕内敌人生效、动态难度 director、锦囊、金疮药）。`weapons.ts` 武器行为，`spawner.ts` 刷怪。

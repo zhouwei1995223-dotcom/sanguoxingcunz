@@ -1,6 +1,6 @@
 import { skillsUnlockedAt } from '../data/skills';
 import { ChapterDef, DifficultyDef, CHAPTERS, WEB_CAMPAIGN_POWER } from '../data/chapters';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 import { weighted } from '../core/math';
 import { save, markDirty } from './save';
 import { newItem, randomItemTemplate, progressTask, grantHero, grantShards, randomShardHero } from './ops';
@@ -134,7 +134,7 @@ export function settleRun(ch: ChapterDef, diff: DifficultyDef, win: boolean, t: 
   const iron = Math.round((ch.id * 2 + progress * 6 * ch.id + (win ? 4 * ch.id : 0)) * diff.reward * materialMultiplier);
   let yuanbao = paysYuanbao ? Math.round(20 * ch.id * diff.reward) : 0;
   let convoyLoot: RunResult['convoyLoot'];
-  if (IS_WEB && ch.campaignMinutes && t !== null && captured > 0) {
+  if (WEB_RULES && ch.campaignMinutes && t !== null && captured > 0) {
     const count = Math.min(3, Math.floor(captured));
     const unit = convoyReward(ch, diff);
     convoyLoot = { count, gold: win ? unit.gold * count : 0, yuanbao: win ? unit.yuanbao * count : 0 };
@@ -325,7 +325,7 @@ export function legacyChapterPower(ch: ChapterDef, diff: DifficultyDef): number 
 
 /** 网页征战区分时长，其余平台沿用原有推荐值。 */
 export function recommendedPower(ch: ChapterDef, diff: DifficultyDef, minutes = ch.campaignMinutes ?? 5): number | null {
-  if (IS_WEB && !ch.defense && !ch.endless && !ch.tutorial) return WEB_CAMPAIGN_POWER[minutes][diff.id][ch.id - 1];
+  if (WEB_RULES && !ch.defense && !ch.endless && !ch.tutorial) return WEB_CAMPAIGN_POWER[minutes][diff.id][ch.id - 1];
   return legacyChapterPower(ch, diff);
 }
 

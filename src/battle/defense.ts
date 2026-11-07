@@ -1,7 +1,7 @@
 import { rand, TAU, weighted } from '../core/math';
 import { HERO_BY_ID } from '../data/heroes';
 import { SpatialGrid } from '../core/grid';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 import {
   UNITS, UnitKind, ORDERS, OrderId, LINKS, LinkId, ORDER_IDS, LINK_IDS, MAX_ALLIES, CITY_R, DEFENSE_LEASH, DEFENSE_SPAWN_R,
   DEFENSE_POOLS, DEFENSE_MID_AT, DEFENSE_BOSS_AT, DEFENSE_DURATION, HERO_SUMMON_TIME, HERO_SUMMON_CD, HERO_SUMMON_MAX,
@@ -168,7 +168,7 @@ export function spawnSquad(b: Battle, kind: UnitKind): number {
   const d = b.def!;
   const u = UNITS[kind];
   const st = unitStats(b, kind);
-  const n = IS_WEB ? st.count : Math.min(MAX_ALLIES - soldiers(d), st.count);
+  const n = WEB_RULES ? st.count : Math.min(MAX_ALLIES - soldiers(d), st.count);
   if (n <= 0) return 0;
   const a0 = nearestGate(b.player.x, b.player.y) * (TAU / 4);
   for (let i = 0; i < n; i++) {
@@ -408,7 +408,7 @@ export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: 
     const heroUp = d.downT <= 0;
     if (e.boss) {
       // 网页版：武将不在近处时，敌将先砍身边的士兵（原来只追武将，被士兵围住也不还手）
-      if (IS_WEB && (!heroUp || (p.x - e.x) ** 2 + (p.y - e.y) ** 2 > 100 * 100)) {
+      if (WEB_RULES && (!heroUp || (p.x - e.x) ** 2 + (p.y - e.y) ** 2 > 100 * 100)) {
         let best: Ally | null = null, bd = 110 * 110;
         for (const a of d.allyGrid.query(e.x, e.y, 110, nearbyAllies)) {
           if (a.dead) continue;
@@ -422,12 +422,12 @@ export function enemyTarget(b: Battle, e: Enemy): { x: number; y: number; ally: 
     const heroDistance = (p.x - e.x) ** 2 + (p.y - e.y) ** 2;
     const heroNear = heroUp && heroDistance < 90 * 90;
     const specialist = e.def?.skill === 'fireVolley' || e.def?.skill === 'breaker';
-    if (!IS_WEB && heroNear) return { x: p.x, y: p.y, ally: null, city: false };
+    if (!WEB_RULES && heroNear) return { x: p.x, y: p.y, ally: null, city: false };
     const reach = e.def?.skill === 'fireVolley' ? 155 : 70;
-    let best: Ally | null = null, bd = IS_WEB && heroNear && !specialist ? Math.min(reach * reach, heroDistance) : reach * reach;
+    let best: Ally | null = null, bd = WEB_RULES && heroNear && !specialist ? Math.min(reach * reach, heroDistance) : reach * reach;
     // 铁壁阵有嘲讽权重，查询范围也要覆盖它实际能吸引的距离。
     const shieldTaunt = d.links.has('l_iron') ? 2.2 : 1;
-    const near = IS_WEB ? d.allyGrid.query(e.x, e.y, reach * shieldTaunt, nearbyAllies) : d.allies;
+    const near = WEB_RULES ? d.allyGrid.query(e.x, e.y, reach * shieldTaunt, nearbyAllies) : d.allies;
     for (const a of near) {
       if (a.dead) continue;
       const taunt = a.kind === 'shield' ? shieldTaunt : 1;
@@ -534,7 +534,7 @@ export function reviveCity(b: Battle) {
 
 function nearestEnemy(b: Battle, x: number, y: number, maxD: number, fromCity = ARENA_R + 16): Enemy | null {
   let best: Enemy | null = null, bd = maxD * maxD;
-  const candidates = IS_WEB ? b.grid.query(x, y, maxD + 12, nearbyEnemies) : b.enemies;
+  const candidates = WEB_RULES ? b.grid.query(x, y, maxD + 12, nearbyEnemies) : b.enemies;
   for (const e of candidates) {
     if (e.dead) continue;
     // 太远的（还在城外老远）不追，免得士兵跑散
@@ -589,7 +589,7 @@ function updateAllies(b: Battle, dt: number) {
     // 只迎击主城附近的敌人（远程兵多算一点射程）
     // 不必每帧让每名士兵重选目标。错开寻敌时间，目标阵亡则立刻重选。
     a.seekT = (a.seekT || 0) - dt;
-    if (!IS_WEB || a.seekT <= 0 || a.target?.dead) {
+    if (!WEB_RULES || a.seekT <= 0 || a.target?.dead) {
       a.target = nearestEnemy(b, a.x, a.y, a.range > 60 ? 220 : 180, ALLY_LEASH + (a.range > 60 ? a.range * 0.6 : 25));
       a.seekT = 0.18 + (a.anim % 1) * 0.08;
     }
@@ -637,18 +637,18 @@ function updateAllies(b: Battle, dt: number) {
   }
   // 只比较相邻的士兵。新兵力规则下逐对比较会随人数平方增长。
   const grid = d.allyGrid;
-  if (IS_WEB) grid.clear();
+  if (WEB_RULES) grid.clear();
   for (let i = 0; i < d.allies.length; i++) {
     const a = d.allies[i];
     if (a.dead) continue;
-    const candidates = IS_WEB ? grid.query(a.x, a.y, a.r + 12, nearbyAllies) : d.allies;
-    for (let j = IS_WEB ? 0 : i + 1; j < candidates.length; j++) {
+    const candidates = WEB_RULES ? grid.query(a.x, a.y, a.r + 12, nearbyAllies) : d.allies;
+    for (let j = WEB_RULES ? 0 : i + 1; j < candidates.length; j++) {
       const o = candidates[j];
       if (o.dead) continue;
       const dx = a.x - o.x, dy = a.y - o.y, rr = a.r + o.r, dd = dx * dx + dy * dy;
       if (dd < rr * rr && dd > 0.01) { const dl = Math.sqrt(dd), push = (rr - dl) / dl * 0.25; a.x += dx * push; a.y += dy * push; o.x -= dx * push; o.y -= dy * push; }
     }
-    if (IS_WEB) grid.insert(a);
+    if (WEB_RULES) grid.insert(a);
   }
   if (b.t % 1 < dt && d.allies.some(a => a.dead)) d.allies = d.allies.filter(a => !a.dead);
 }
@@ -896,7 +896,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
   const d = b.def!;
   const t = b.t;
   // 网页守城须斩将才结束，加时期间双方都有补给，避免拖着主将无压力囤兵。
-  if (t >= DEFENSE_DURATION && (!IS_WEB || !b.finalBoss)) return;
+  if (t >= DEFENSE_DURATION && (!WEB_RULES || !b.finalBoss)) return;
   const bossAlive = !!(b.finalBoss || b.midBoss);
   // 零散敌人
   d.trickleT -= dt;
@@ -926,7 +926,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     if (w >= 3) for (let i = 0; i < 1 + Math.floor((w - 3) / 2); i++) spawnAround(b, 'siege_ram', ss[i % ss.length], 0.3);
     if (w >= 2) for (let i = 0; i < 2 + Math.floor(w / 2); i++) spawnAround(b, 'siege_ladder', ss[i % ss.length], 0.4);
     if (w >= 5) for (let i = 0; i < 1 + Math.floor((w - 5) / 3); i++) spawnAround(b, 'siege_cata', ss[i % ss.length], 0.3);
-    if (IS_WEB && w >= 2) {
+    if (WEB_RULES && w >= 2) {
       // 先让玩家看懂一支火矢，再逐步组成破阵小队。
       spawnAround(b, 'siege_firebow', ss[0]);
       if (w >= 4) spawnAround(b, 'siege_breaker', ss[ss.length - 1]);
@@ -988,7 +988,7 @@ export function updateDefense(b: Battle, dt: number) {
   for (const e of b.enemies) if (!e.dead && !e.fixedDir) terrainPush(e, e.r);
   updateBuilds(b, dt);
   // 撑到时间：胜利
-  if (!IS_WEB && b.t >= DEFENSE_DURATION && !b.won && !d.lost) {
+  if (!WEB_RULES && b.t >= DEFENSE_DURATION && !b.won && !d.lost) {
     for (const e of b.enemies) if (!e.dead) { e.dead = true; b.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
     b.won = true;
   }

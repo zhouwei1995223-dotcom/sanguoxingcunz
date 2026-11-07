@@ -1,5 +1,5 @@
 // 敌人数据。外观在 gfx/art/roster.ts，按 sprite 字段关联。
-import { IS_WEB } from './platformConfig';
+import { WEB_RULES } from './platformConfig';
 
 export type EnemyAI = 'chase' | 'ranged' | 'charger' | 'boss' | 'siege';
 
@@ -51,7 +51,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   elite_guard: { id: 'elite_guard', name: '魏军精锐', sprite: 'elite_guard', hp: 120, speed: 24, dmg: 14, radius: 8, exp: 8, ai: 'chase', mass: 6 },
 };
 
-if (IS_WEB) {
+if (WEB_RULES) {
   ENEMIES.siege_firebow = { id: 'siege_firebow', name: '火矢手', sprite: 'siege_firebow', ai: 'ranged', hp: 38, speed: 27, dmg: 10, radius: 7, exp: 4, range: 125, shootCd: 4.2, proj: 'arrow', skill: 'fireVolley' };
   ENEMIES.siege_breaker = { id: 'siege_breaker', name: '破阵力士', sprite: 'siege_breaker', ai: 'chase', hp: 100, speed: 30, dmg: 14, radius: 9, exp: 6, mass: 6, skill: 'breaker' };
   for (const id of ['wei_spear', 'gy_spear', 'qiang_spear', 'yuan_spear', 'wu_spear']) ENEMIES[id].skill = 'thrust';
@@ -111,4 +111,4 @@ export const BOSSES: Record<string, BossDef> = {
   caozhen: { id: 'caozhen', name: '曹真', title: '魏国大都督', sprite: 'caozhen', hp: 140000, speed: 36, dmg: 52, radius: 15, skills: ['ring', 'summon', 'cross', 'charge', 'slam', 'rain'], shield: true, summon: 'elite_guard', proj: 'arrow', quote: '撤军……速速撤军！' },
 };
 
-if (IS_WEB) for (const id of ['zhanghe', 'luxun', 'simayi']) BOSSES[id].skills.splice(1, 0, 'encircle');
+if (WEB_RULES) for (const id of ['zhanghe', 'luxun', 'simayi']) BOSSES[id].skills.splice(1, 0, 'encircle');

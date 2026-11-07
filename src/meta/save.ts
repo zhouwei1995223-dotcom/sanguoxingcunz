@@ -4,7 +4,7 @@ import { DEBUG } from '../debug';
 import { NEW_PLAYER, STAMINA, SLOTS, Slot } from '../data/meta';
 import { SkillId, WeaponId, skillPoolFor, fitPreparation } from '../data/skills';
 import { HERO_BY_ID } from '../data/heroes';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 
 // 存档：本地 JSON，带版本号便于后续迁移。
 
@@ -278,7 +278,7 @@ export function loadSave() {
     }
   }
   if (DEBUG.reset) save = freshSave();
-  if (IS_WEB && save.preparedSkills) {
+  if (WEB_RULES && save.preparedSkills) {
     const presets = (save.preparationPresets ??= {});
     for (const hero of Object.keys(save.preparedSkills)) {
       if (HERO_BY_ID[hero]) presets[hero] = preparationPresetsFor(hero);

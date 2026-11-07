@@ -1,3 +1,4 @@
+import * as saveMod from './meta/save';
 import { getPlatform } from './platform';
 import { game } from './game';
 import { LoadingScene } from './scenes/loadingScene';
@@ -29,5 +30,10 @@ if (p.name === 'web') {
   import('./meta/save').then((m) => { (window as any).__saveMod = m; });
   import('./gfx/atlas').then((m) => { (window as any).__atlas = m; });
   import('./meta/ops').then((m) => { (window as any).__opsMod = m; });
+}
+// 小游戏模拟环境（tools/mock-minigame.mjs 预先设置 __MOCK_MINIGAME）下也暴露，正式包里不会有这个标志。
+if ((globalThis as any).__MOCK_MINIGAME) {
+  (globalThis as any).__game = game;
+  (globalThis as any).__saveMod = saveMod;
 }
 if (p.name === 'web') import('./meta/cloud').then((m) => { (window as any).__cloudMod = m; });

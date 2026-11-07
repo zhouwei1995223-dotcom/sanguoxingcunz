@@ -20,14 +20,14 @@ import { fmtTime, easeOutBack, fmtNum } from '../core/math';
 import { HomeScene, openRecommend } from './homeScene';
 import { HERO_BY_ID } from '../data/heroes';
 import { guidePointer, guideHint } from '../ui/guide';
-import { NO_ADS, NO_ADS_PRICE, IS_H5, IS_WEB, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
+import { NO_ADS, NO_ADS_PRICE, IS_H5, WEB_RULES, SHARE_CONFIG, NEW_UI } from '../data/platformConfig';
 import { STRAT_BY_ID, TIER_NAMES, TIER_COLORS, StratId, StratTier, fmtStratTimes } from '../data/strategies';
 import { QIYU_BY_ID, QiyuId } from '../data/qiyu';
 import { ORDERS, ORDER_IDS, LINKS, BUILD_KINDS, BUILDS } from '../data/defense';
 import { buildLevel } from '../battle/defense';
 
 /** 每局可看广告刷新技能的次数 */
-const LEVELUP_AD_LIMIT = IS_WEB ? Infinity : 5;
+const LEVELUP_AD_LIMIT = WEB_RULES ? Infinity : 5;
 /** 每局最多看广告复活几次 */
 
 interface CardExtra {
@@ -54,7 +54,7 @@ export function cardExtra(b: Battle, c: Choice): CardExtra {
     // 守城没有兵法：满级直接进化
     const has = !!b.def || b.passiveLv(d.evoPassive) > 0;
     ex.recipe = b.def ? `进化：满级 → ${link ? '★' + link.name : d.evoName}` : `进化：满级 + ${PASSIVES[d.evoPassive].name} → ${link ? '★' + link.name : d.evoName}`;
-    if (IS_WEB && !has && !b.skillPool.passives.includes(d.evoPassive)) ex.recipe = `本章缺少进化兵法：${PASSIVES[d.evoPassive].name}`;
+    if (WEB_RULES && !has && !b.skillPool.passives.includes(d.evoPassive)) ex.recipe = `本章缺少进化兵法：${PASSIVES[d.evoPassive].name}`;
     ex.recipeOk = has;
   } else if (c.kind === 'order' && b.def) {
     const d = b.def;
@@ -343,35 +343,35 @@ export class LevelUpDialog implements Dialog {
       return;
     }
     const gap = 12 * u, panelW = ui.W - 46 * u;
-    const cw = IS_WEB ? (panelW - 2 * gap) / 3 : ui.W - 70 * u;
+    const cw = WEB_RULES ? (panelW - 2 * gap) / 3 : ui.W - 70 * u;
     const cards = this.choices.map(c => ({ info: choiceInfo(c), ex: cardExtra(b, c) }));
     let ch = 220 * u;
-    if (IS_WEB) {
+    if (WEB_RULES) {
       ch = Math.max(...cards.map(({ info, ex }) => 269 * u
         + ui.wrapLines(info.desc, cw - 32 * u, 24).length * 31.2 * u
         + (ex.recipe ? ui.wrapLines(ex.recipe, cw - 32 * u, 21).length * 26.25 * u : 0)));
     }
-    const titleY = IS_WEB ? Math.max(ui.safeTop + 45 * u, Math.min(ui.H * 0.18, (ui.H - ch - 590 * u) / 2)) : ui.H * 0.2;
+    const titleY = WEB_RULES ? Math.max(ui.safeTop + 45 * u, Math.min(ui.H * 0.18, (ui.H - ch - 590 * u) / 2)) : ui.H * 0.2;
     ui.ribbon(ui.W / 2, titleY, 420 * u, `升级！Lv.${Math.max(2, b.level - b.pendingLevelUps)}`, '#3e8948');
     const instruction = this.offerPreparedRefresh ? '本次没有备战技能，要刷新选项吗？'
-      : this.banishMode && IS_WEB ? '选择要封禁的新技能' : '选择一项强化';
+      : this.banishMode && WEB_RULES ? '选择要封禁的新技能' : '选择一项强化';
     ui.text(instruction, ui.W / 2, titleY + 64 * u, 26, C.textDim);
     const cardTop = titleY + 110 * u;
-    const firstX = IS_WEB ? (ui.W - cards.length * cw - (cards.length - 1) * gap) / 2 : (ui.W - cw) / 2;
+    const firstX = WEB_RULES ? (ui.W - cards.length * cw - (cards.length - 1) * gap) / 2 : (ui.W - cw) / 2;
     let y = cardTop;
     const tutorial = save.guide === 0 && b.level === 2;
     const rec = tutorial ? -1 : b.recommend(this.choices);
-    if (this.banishMode && !IS_WEB) ui.text('选择要封禁的新技能（本局不再出现）', ui.W / 2, y - 14 * u, 24, '#ff8a80');
+    if (this.banishMode && !WEB_RULES) ui.text('选择要封禁的新技能（本局不再出现）', ui.W / 2, y - 14 * u, 24, '#ff8a80');
     for (let i = 0; i < this.choices.length; i++) {
       const c = this.choices[i];
       const k = Math.max(0, Math.min(1, (t - i * 0.07) * 5));
-      const x = IS_WEB ? firstX + i * (cw + gap) : firstX + (1 - easeOutBack(k)) * ui.W;
-      y = IS_WEB ? cardTop : cardTop + i * (ch + 20 * u);
+      const x = WEB_RULES ? firstX + i * (cw + gap) : firstX + (1 - easeOutBack(k)) * ui.W;
+      y = WEB_RULES ? cardTop : cardTop + i * (ch + 20 * u);
       const { info, ex } = cards[i];
       ex.rec = i === rec;
       if (this.banishMode) ex.banish = (c.kind === 'weapon' || c.kind === 'passive') && c.isNew ? 'yes' : 'no';
       const id = 'lv_choice_' + i;
-      const picked = IS_WEB ? drawSkillColumn(ui, id, info, ex, x, y, cw, ch)
+      const picked = WEB_RULES ? drawSkillColumn(ui, id, info, ex, x, y, cw, ch)
         : choiceCard(ui, id, c, x, y, cw, ch, tutorial && i === 0, ex);
       if (picked && t > 0.25) {
         if (this.banishMode) {
@@ -388,7 +388,7 @@ export class LevelUpDialog implements Dialog {
       }
     }
     y += ch + 20 * u;
-    if (IS_WEB) y += drawOwnedSkills(ui, b, (ui.W - panelW) / 2, y, panelW) + 10 * u;
+    if (WEB_RULES) y += drawOwnedSkills(ui, b, (ui.W - panelW) / 2, y, panelW) + 10 * u;
     // 刷新 / 封禁
     const bh = 92 * u;
     y += 10 * u;
@@ -407,7 +407,7 @@ export class LevelUpDialog implements Dialog {
       }
     } else {
       const left = LEVELUP_AD_LIMIT - b.adRerolls;
-      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: IS_WEB ? '不限次数' : `本局剩余${Math.max(0, left)}次` })) {
+      if (adButton(ui, 'lv_reroll_ad', rx, y, bw, bh, '刷新', { disabled: left <= 0, sub: WEB_RULES ? '不限次数' : `本局剩余${Math.max(0, left)}次` })) {
         void this.watchRefreshAd();
         return;
       }
@@ -454,20 +454,20 @@ export class QiyuDialog implements Dialog {
     ui.ribbon(ui.W / 2, top, 440 * u, '开局奇遇', '#1d6b4a');
     ui.text('三选一 · 本局一直生效', ui.W / 2, top + 62 * u, 26, '#9be37a');
     const gap = 12 * u;
-    const cw = IS_WEB ? (ui.W - 46 * u - 2 * gap) / 3 : ui.W - 70 * u;
-    const ch = IS_WEB ? 400 * u : 200 * u;
+    const cw = WEB_RULES ? (ui.W - 46 * u - 2 * gap) / 3 : ui.W - 70 * u;
+    const ch = WEB_RULES ? 400 * u : 200 * u;
     let y = top + 104 * u;
     for (let i = 0; i < this.choices.length; i++) {
       const k = Math.max(0, Math.min(1, (t - i * 0.08) * 4));
-      const x = IS_WEB ? 23 * u + i * (cw + gap) : ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
+      const x = WEB_RULES ? 23 * u + i * (cw + gap) : ui.W / 2 - cw / 2 + (1 - easeOutBack(k)) * ui.W;
       if (this.card(ui, 'qiyu_' + i, this.choices[i], x, y, cw, ch) && t > 0.3) {
         this.scene.chooseQiyu(this.choices[i]);
         playSfx('evolve');
         return false;
       }
-      if (!IS_WEB) y += ch + 18 * u;
+      if (!WEB_RULES) y += ch + 18 * u;
     }
-    if (IS_WEB) y += ch + 18 * u;
+    if (WEB_RULES) y += ch + 18 * u;
     const bh = 92 * u, bw = 320 * u;
     y += 10 * u;
     if (this.freeRerolls > 0 && ui.button('qiyu_reroll', ui.W / 2 - bw / 2, y, bw, bh, `免费刷新(${this.freeRerolls})`, C.btnBlue)) {
@@ -487,7 +487,7 @@ export class QiyuDialog implements Dialog {
     const d = QIYU_BY_ID[qid];
     const off = ui.isPressed(id) ? 4 * u : 0;
     battleCardFrame(ui, x, y + off, w, h, '#4fb06a', '#1c3326');
-    if (IS_WEB) {
+    if (WEB_RULES) {
       const cy = y + off, cx = x + w / 2;
       ui.qualityFrame(cx - 50 * u, cy + 28 * u, 100 * u, '#4fb06a');
       ui.icon(d.icon, cx, cy + 78 * u, 82 * u);
@@ -850,7 +850,7 @@ export class ResultDialog implements Dialog {
   t?: number;
   constructor(private scene: BattleScene, private win: boolean) {
     const b = scene.battle;
-    if (IS_WEB) this.report = new DamageReportDialog(b);
+    if (WEB_RULES) this.report = new DamageReportDialog(b);
     if (scene.weekly) {
       this.res = settleWeeklyRun(b.t, b.coins, b.kills, b.bossKills, b.equipDrops);
       const w = settleWeekly(b.kills);
@@ -865,7 +865,7 @@ export class ResultDialog implements Dialog {
       this.tierCount = w.rewards.length;
     } else {
       this.res = b.def
-        ? settleDefense(b.chapter.id, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx, IS_WEB ? runStars(win, b.reviveCount, b.finalBossSec) : undefined)
+        ? settleDefense(b.chapter.id, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx, WEB_RULES ? runStars(win, b.reviveCount, b.finalBossSec) : undefined)
         : b.chapter.tutorial
         ? settleTutorial(win, b.coins, b.kills)
         : b.chapter.endless

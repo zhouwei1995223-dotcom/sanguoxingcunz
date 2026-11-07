@@ -26,7 +26,7 @@ import { guideHint } from '../ui/guide';
 import { progressTask } from '../meta/ops';
 import { DEBUG } from '../debug';
 import { funnel } from '../meta/telemetry';
-import { IS_WEB, NO_ADS } from '../data/platformConfig';
+import { WEB_RULES, NO_ADS } from '../data/platformConfig';
 import { HEROES } from '../data/heroes';
 import { createDefense, HeroInfo, grainRate, nextAutoUnit, aliveUnits, unitQuota, soldiers, buildStepText } from '../battle/defense';
 import { UNITS, MAX_ALLIES, BUILDS, BUILD_CARD_MAX, REPAIR_PCT, HERO_SUMMON_TIME } from '../data/defense';
@@ -58,9 +58,9 @@ export class BattleScene implements Scene {
   skipPreparedPrompts = false;
   paused = false;
 
-  get autoPick() { return IS_WEB ? this.runAutoPick : save.settings.autoPick; }
+  get autoPick() { return WEB_RULES ? this.runAutoPick : save.settings.autoPick; }
   set autoPick(on: boolean) {
-    if (IS_WEB) this.runAutoPick = on;
+    if (WEB_RULES) this.runAutoPick = on;
     else { save.settings.autoPick = on; markDirty(); }
   }
 
@@ -75,7 +75,7 @@ export class BattleScene implements Scene {
   }
 
   autoChooseUpgrade(choices: Choice[]): boolean {
-    if (!this.autoPick || (!IS_WEB && save.guide === 0)) return false;
+    if (!this.autoPick || (!WEB_RULES && save.guide === 0)) return false;
     const b = this.battle;
     const pick = this.hasPreparation ? this.preparedMatch(choices) : choices[b.recommend(choices)];
     if (!pick) return false;
@@ -114,7 +114,7 @@ export class BattleScene implements Scene {
       this.weekly = currentWeekly();
       this.chapter = { ...ENDLESS, id: -1, name: '每周挑战', duration: WEEKLY_DURATION, theme: themes[(Math.random() * themes.length) | 0] };
       this.speedMul = this.weekly.gameSpeed || 1;
-    } else this.chapter = IS_WEB ? campaignChapter(chapterId, minutes) : CHAPTERS[chapterId - 1];
+    } else this.chapter = WEB_RULES ? campaignChapter(chapterId, minutes) : CHAPTERS[chapterId - 1];
     this.diff = DIFFICULTIES[diff] || DIFFICULTIES[0];
   }
 
@@ -128,7 +128,7 @@ export class BattleScene implements Scene {
     infoHero = this.battle.hero.id;
     infoBattle = this.battle;
     // 敌将血量跟玩家战力挂钩：战力 ÷ 推荐战力
-    if (!IS_WEB && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense) this.battle.powerRatio = combatPower(stats) / Math.max(1, legacyChapterPower(this.chapter, this.diff));
+    if (!WEB_RULES && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense) this.battle.powerRatio = combatPower(stats) / Math.max(1, legacyChapterPower(this.chapter, this.diff));
     if (this.weekly) {
       this.battle.mods = this.weekly;
       if (this.weekly.enemyHp) this.battle.enemyHpMul *= this.weekly.enemyHp;
@@ -163,7 +163,7 @@ export class BattleScene implements Scene {
       this.renderer.clearCenter = true;
     }
     this.battle.showDamage = save.settings.dmgNum;
-    if (IS_WEB && !this.chapter.tutorial) {
+    if (WEB_RULES && !this.chapter.tutorial) {
       const b = this.battle, plan = activePreparationFor(b.hero.id);
       this.unavailablePreparedNames = this.fitRunPreparation(plan.skills);
       if (plan.core) {
@@ -354,12 +354,12 @@ export class BattleScene implements Scene {
     const b = this.battle;
     // 新手局开头的操作提示还在显示时先不弹
     if (save.guide === 0 && this.tutorialT < 9) return;
-    if (b.warnings.length) this.tip('boss_warn', IS_WEB ? '敌人即将出招，快躲开地上的红色区域！' : '地上的红圈是敌将的技能范围，快躲开！', true);
+    if (b.warnings.length) this.tip('boss_warn', WEB_RULES ? '敌人即将出招，快躲开地上的红色区域！' : '地上的红圈是敌将的技能范围，快躲开！', true);
     this.tipCheckT -= dt;
     if (this.tipCheckT > 0) return;
     this.tipCheckT = 0.5;
     const near = (x: number, y: number) => b.inView(x, y, -30);
-    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', IS_WEB ? '打破路边的灯笼和小推车，可获得补给' : '打破灯笼和粮车，会掉出包子、磁石、震天雷');
+    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', WEB_RULES ? '打破路边的灯笼和小推车，可获得补给' : '打破灯笼和粮车，会掉出包子、磁石、震天雷');
     for (const k of b.pickups) {
       if (!near(k.x, k.y)) continue;
       if (k.kind === 'bun') this.tip('pk_bun', '肉包子：拾取后回复30%生命');
@@ -529,7 +529,7 @@ export class BattleScene implements Scene {
     const top = ui.safeTop + 8 * u;
     const g = ui.ctx;
     const canSpeed = !this.chapter.tutorial && !this.weekly;
-    const showDouble = IS_WEB && canSpeed;
+    const showDouble = WEB_RULES && canSpeed;
     const clockX = ui.W / 2 - (showDouble ? 32 * u : 0);
     // 经验条
     const bw = ui.W - 32 * u;
@@ -546,7 +546,7 @@ export class BattleScene implements Scene {
     } else if (b.def) {
       // 守城：剩余时间 + 城池血条
       const d = b.def;
-      ui.text(IS_WEB && b.finalBoss ? '击败攻城主将' : fmtTime(Math.max(0, this.chapter.duration - b.t)), clockX, top + 64 * u, 38, '#fff');
+      ui.text(WEB_RULES && b.finalBoss ? '击败攻城主将' : fmtTime(Math.max(0, this.chapter.duration - b.t)), clockX, top + 64 * u, 38, '#fff');
       const cw = ui.W * (showDouble ? 0.35 : 0.44), cx0 = clockX - cw / 2, cy0 = top + 90 * u;
       ui.bar(cx0, cy0, cw, 28 * u, d.cityHp / d.cityMax, d.cityHp < d.cityMax * 0.3 ? '#e43b44' : '#63c74d', '#2a1414');
       if (d.cityFlash > 0) { ui.ctx.globalAlpha = 0.5; ui.pixRect(cx0, cy0, cw, 28 * u, '#ffffff'); ui.ctx.globalAlpha = 1; }
@@ -744,7 +744,7 @@ export class BattleScene implements Scene {
       ui.pixRect(x + 56 * u, y + 90 * u, bw - 68 * u, 10 * u, '#231917');
       ui.pixRect(x + 56 * u, y + 90 * u, (bw - 68 * u) * k, 10 * u, full ? '#6b5a4a' : '#9be37a');
     }
-    ui.text(IS_WEB ? `兵力 ${count} 人` : `兵力 ${count}/${MAX_ALLIES}`, x + bw / 2, y + 128 * u, 16, '#d9c6a0');
+    ui.text(WEB_RULES ? `兵力 ${count} 人` : `兵力 ${count}/${MAX_ALLIES}`, x + bw / 2, y + 128 * u, 16, '#d9c6a0');
     // 城池不在屏幕里：屏幕边缘画一个指向城池的箭头（城墙挨打时变红闪烁）
     const [sx, sy] = this.renderer.worldToScreen(0, -8);
     const scx = sx, scy = sy;

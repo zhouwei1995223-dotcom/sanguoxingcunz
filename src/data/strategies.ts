@@ -1,6 +1,6 @@
 // 锦囊妙计：每局在固定时间点三选一，获得改变打法的计策
 // 良策 = 稳定的数值提升；妙计 = 改变规则；神机 = 很少出现，能决定整局打法
-import { IS_WEB } from './platformConfig';
+import { WEB_RULES } from './platformConfig';
 
 export type StratTier = 0 | 1 | 2;
 
@@ -52,7 +52,7 @@ export const STRATS: StratDef[] = [
   { id: 'yiqi', tier: 2, name: '一骑当千', desc: '选择后每击败100名敌人，伤害永久+4%' },
 ];
 
-if (IS_WEB) STRATS.push(
+if (WEB_RULES) STRATS.push(
   { id: 'qingnang', tier: 0, name: '青囊急救', desc: '立即回复30%生命，并重置金疮药冷却' },
   { id: 'yunchou', tier: 0, name: '运筹帷幄', desc: '升级免费刷新次数+2，封禁次数+1' },
   { id: 'chuanyang', tier: 0, name: '百步穿杨', desc: '暴击率+8%，暴击伤害+20%' },

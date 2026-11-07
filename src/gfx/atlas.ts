@@ -1,5 +1,5 @@
 import { DEBUG } from '../debug';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 import { zhaoyunFramesV2 } from './art/zhaoyun';
 import { getPlatform } from '../platform';
 import { PixelImage } from './pixel';
@@ -188,7 +188,7 @@ export function buildAtlas() {
   addSprite('chest_gold', I.chest(false, true));
   I.lanternFrames().forEach((c, i) => addSprite('lantern' + i, c, 'bottom'));
   addSprite('cart', I.cart(), 'bottom');
-  if (IS_WEB) for (const frame of [0, 1]) {
+  if (WEB_RULES) for (const frame of [0, 1]) {
     const wagon = I.supplyWagon(frame === 1);
     addSprite('supply_wagon' + frame, wagon, 'bottom');
     addSprite('supply_wagon' + frame + '_L', wagon.flipX(), 'bottom');

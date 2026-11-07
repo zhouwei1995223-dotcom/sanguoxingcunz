@@ -1,5 +1,5 @@
 import type { GeneralStyle, SoldierStyle } from './units';
-import { IS_WEB } from '../../data/platformConfig';
+import { WEB_RULES } from '../../data/platformConfig';
 
 // 兵种 / 武将外观表。战斗数据在 data/enemies.ts，通过 id 关联。
 
@@ -36,7 +36,7 @@ export const SOLDIER_STYLES: Record<string, SoldierStyle> = {
   elite_guard: { helm: 'K', helmDark: 'k', armor: 'K', armorDark: 'k', pants: 'k', weapon: 'halberd', plume: 'y', big: true },
 };
 
-if (IS_WEB) {
+if (WEB_RULES) {
   SOLDIER_STYLES.siege_firebow = { helm: 'l', helmDark: 'z', armor: 'o', armorDark: 'r', pants: 'U', weapon: 'bow', plume: 'Y' };
   SOLDIER_STYLES.siege_breaker = { helm: 'S', helmDark: 'N', armor: 'm', armorDark: 'K', pants: 'z', weapon: 'club', plume: 'y', big: true };
 }

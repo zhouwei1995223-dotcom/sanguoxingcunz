@@ -49,7 +49,7 @@ export default async function({ page }) {
     d.allies = [];
     for (let i = 0; i < 6; i++) d.allies.push({ ...proto, kind: 'spear', dead: false, x: 120 + (i % 3) * 10 - 10, y: 140 + Math.floor(i / 3) * 10, hp: 60, maxHp: 60, life: -1, ox: 120, oy: 140, atk: 0 });
     let dead = 0, targeted = false;
-    for (let i = 0; i < 60 * 12 && !e.dead; i++) {
+    for (let i = 0; i < 60 * 20 && !e.dead; i++) {
       b.update(1 / 60);
       if (e.focus && d.allies.includes(e.focus)) targeted = true;
       dead = d.allies.filter(a => a.dead).length;

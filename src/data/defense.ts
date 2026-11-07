@@ -1,5 +1,5 @@
 import { CHAPTERS, ChapterDef } from './chapters';
-import { IS_WEB } from './platformConfig';
+import { WEB_RULES } from './platformConfig';
 
 // 守城模式：城池在地图正中，敌军从四面来攻。一局 5 分钟，4:00 敌军主将压阵，撑到 5:00 或击败主将即胜利。
 // 1.0.6 第三轮（用户：又要选技能又要造兵还要去门口造建筑，手忙脚乱）：去掉右侧召唤 / 建造按钮。
@@ -52,7 +52,7 @@ for (let s = 0; s < 4; s++) for (const off of [-0.32, 0.32]) { const a = Math.PI
 // 11-02 第六轮：用户要求敌人血量、攻击再 +10%（0.72 → 0.79、0.85 → 0.935；城池血量按攻击倍率算，也跟着 +10%）
 export const DEFENSE_HP_K = 0.79, DEFENSE_DMG_K = 0.935, DEFENSE_POWER_K = 1.1;
 /** 只增强攻方。城池耐久继续取自己的基准。 */
-export const defenseAttackFactor = (level: number) => IS_WEB ? (level <= 2 ? 1.06 : 1.12) : 1;
+export const defenseAttackFactor = (level: number) => WEB_RULES ? (level <= 2 ? 1.06 : 1.12) : 1;
 /**
  * 各关额外的 [血量, 攻击] 倍率（没写的关是 1）：第 1、2 关新手熟悉玩法，光秃秃的存档也能轻松守住；
  * 第 3~6 关血量 +8%（按「装备 + 军略 + 武将培养卡在推荐战力」的存档测，第 4 关原来 3/3 太稳）。
@@ -133,7 +133,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
 };
 export const UNIT_ORDER: UnitKind[] = ['spear', 'shield', 'archer', 'cav', 'xbow'];
 /** 同时在场的士兵上限（武将另算） */
-export const MAX_ALLIES = IS_WEB ? Infinity : 35;
+export const MAX_ALLIES = WEB_RULES ? Infinity : 35;
 
 /** 召唤武将（升级卡）：在场 35 秒，同一位武将 40 秒内不会再出现，最多同时 2 位 */
 export const HERO_SUMMON_TIME = 35, HERO_SUMMON_CD = 40, HERO_SUMMON_MAX = 2;

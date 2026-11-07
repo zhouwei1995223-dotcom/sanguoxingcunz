@@ -1,6 +1,6 @@
 // 开局奇遇：每局开始从 3 个里选 1 个，整局生效（效果在 battle.recalc / applyQiyu 里）。
 // 名字避开了锦囊妙计里已有的计策名。
-import { IS_WEB } from './platformConfig';
+import { WEB_RULES } from './platformConfig';
 
 export type QiyuId =
   | 'qinggang' | 'qixingdao' | 'dilu' | 'chitu' | 'huatuo' | 'tengjia' | 'shuijing'
@@ -33,7 +33,7 @@ export const QIYUS: QiyuDef[] = [
   { id: 'zhanjiang', name: '斩将夺旗', story: '万军之中取上将首级', desc: '对敌将和精英伤害+30%', icon: 'p_whetstone' },
 ];
 
-if (IS_WEB) QIYUS.push(
+if (WEB_RULES) QIYUS.push(
   { id: 'jiangzuo', name: '匠作营', story: '随军良匠，先利其器', desc: '自带武器开局升至2级', icon: 'p_whetstone' },
   { id: 'dianbing', name: '校场点兵', story: '沙场推演，再择兵略', desc: '额外获得2次免费升级刷新', icon: 'p_flag' },
   { id: 'xianfeng', name: '先锋令', story: '一鼓先登，士气正盛', desc: '开局获得60点怒气', icon: 'p_horn' },

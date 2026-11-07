@@ -1,5 +1,5 @@
 // 局外养成：武将、装备、军略、商店、任务、签到等配置
-import { IS_WEB, NO_ADS } from './platformConfig';
+import { WEB_RULES, NO_ADS } from './platformConfig';
 
 export const HERO = {
   id: 'zhaoyun',
@@ -31,7 +31,7 @@ export const QUALITY_NAMES = ['普通', '优良', '精良', '史诗', '传说', 
 export const QUALITY_COLORS = ['#c0cbdc', '#63c74d', '#0099db', '#b55088', '#f77622', '#e43b44'];
 export const QUALITY_MAX_LV = [10, 20, 30, 40, 50, 60];
 export const QUALITY_STAT_MUL = [1, 1.6, 2.4, 3.6, 5.2, 7.5];
-if (IS_WEB) {
+if (WEB_RULES) {
   QUALITY_NAMES.push('无双');
   QUALITY_COLORS.push('#20a59c');
   QUALITY_MAX_LV.push(70);
@@ -197,7 +197,7 @@ export const EQUIPS: EquipTemplate[] = [
 ];
 
 // 无双是合成品质。同部位的两种装备保留各自原有特效，再解锁一条部位特效。
-if (IS_WEB) {
+if (WEB_RULES) {
   const bonus: Record<Slot, Omit<EquipTemplate['unlocks'][number], 'q'>> = {
     weapon: { stats: { dmg: 8 }, desc: '伤害+8%' },
     helm: { stats: { hp: 300 }, desc: '生命+300' },
@@ -280,8 +280,8 @@ export interface ChestDef {
   pity?: number; // 保底：每 N 次必出武将（名将宝匣）
 }
 export const CHESTS: ChestDef[] = [
-  { id: 'wood', name: '军资箱', icon: 'chest', cost: 60, adDaily: IS_WEB ? 5 : 3, freeDaily: 1, weights: [60, 32, 8, 0, 0, 0] },
-  { id: 'gold', name: '名将宝匣', icon: 'chest_gold', cost: 300, adDaily: IS_WEB ? 5 : 1, weights: [0, 50, 38, 11, 1, 0], pity: 15 },
+  { id: 'wood', name: '军资箱', icon: 'chest', cost: 60, adDaily: WEB_RULES ? 5 : 3, freeDaily: 1, weights: [60, 32, 8, 0, 0, 0] },
+  { id: 'gold', name: '名将宝匣', icon: 'chest_gold', cost: 300, adDaily: WEB_RULES ? 5 : 1, weights: [0, 50, 38, 11, 1, 0], pity: 15 },
 ];
 
 // —— 七日签到 ——

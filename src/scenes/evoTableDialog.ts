@@ -1,6 +1,6 @@
 import { game, Dialog } from '../game';
 import type { Battle } from '../battle/battle';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 import { SkillId, WeaponId, WEAPONS, PASSIVES, MAX_WEAPON_LV, weaponLink, weaponsForHero } from '../data/skills';
 import { C, UI } from '../ui/ui';
 import { dialogFrame } from '../ui/widgets';
@@ -19,7 +19,7 @@ export class EvoTableDialog implements Dialog {
 
   constructor(private source: Battle | PreparationView) {
     const { hero, skillPool } = source;
-    this.ids = IS_WEB || 'selected' in source ? skillPool.weapons.slice() : weaponsForHero(hero.id, source.cleared);
+    this.ids = WEB_RULES || 'selected' in source ? skillPool.weapons.slice() : weaponsForHero(hero.id, source.cleared);
     const rank = (id: WeaponId) => id === source.coreWeapon ? -1 : WEAPONS[id].hero ? 0 : weaponLink(id, hero.id) ? 1 : 2;
     this.ids.sort((a, b) => rank(a) - rank(b));
     game.ui.resetScroll('evo_table');
@@ -29,7 +29,7 @@ export class EvoTableDialog implements Dialog {
     const u = ui.u;
     const source = this.source;
     const planning = 'selected' in source;
-    const defense = planning ? source.defense : IS_WEB && !!source.def;
+    const defense = planning ? source.defense : WEB_RULES && !!source.def;
     const w = ui.W - 50 * u, h = Math.min(ui.H - 200 * u - ui.safeTop, 1300 * u);
     const title = planning ? `进化表 · ${source.hero.name} · 预设${source.preset}` : '进化表';
     const f = dialogFrame(ui, w, h, title, this.t, 'evo_close');
@@ -73,7 +73,7 @@ export class EvoTableDialog implements Dialog {
       cell(link?.icon || d.evoIcon, '', '#fff', planning ? hasWeapon && (defense || hasPassive) : !!own?.evo);
       const tx = x + 20 * u;
       ui.text(link ? link.name : d.evoName, tx, iy + 20 * u, 28, link ? '#fee761' : '#fff4d6', 'left');
-      const missing = IS_WEB && !defense && !source.skillPool.passives.includes(d.evoPassive);
+      const missing = WEB_RULES && !defense && !source.skillPool.passives.includes(d.evoPassive);
       const trait = id === source.coreWeapon ? '★核心武器' : link ? '★' + source.hero.name + '专属联动' : d.hero ? '★专属武器' : '';
       const detail = !planning && missing ? '本章缺少' + PASSIVES[d.evoPassive].name
         : trait || (own?.evo ? '已进化' : own ? `已拥有 Lv.${own.lv}` : '');

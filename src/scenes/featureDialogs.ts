@@ -10,7 +10,7 @@ import {
 } from '../meta/goals';
 import { ACHIEVEMENTS, NEWBIE_DAYS, NEWBIE_PRIZES, NEWBIE_WINDOW_DAYS, WEEKLY_TIERS, WEEKLY_DURATION, GoalDef } from '../data/goals';
 import { STAMINA } from '../data/meta';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 import { fmtNum, fmtTime } from '../core/math';
 import { playSfx } from '../audio/sound';
 import { RewardDialog, StaminaDialog } from './homeDialogs';
@@ -140,7 +140,7 @@ export class CodexDialog implements Dialog {
     // 可领取的排前面，已领取的排最后
     const list = ACHIEVEMENTS.slice().sort((a, b) => rank(a) - rank(b));
     function rank(a: GoalDef) { return save.achClaimed[a.id] ? 2 : goalDone(a) ? 0 : 1; }
-    if (IS_WEB) {
+    if (WEB_RULES) {
       const ready = list.filter(a => rank(a) === 0);
       ui.text(`已领取 ${Object.keys(save.achClaimed).length}/${list.length}`, fx + 40 * u, top + 32 * u, 22, C.gold, 'left');
       const label = ready.length ? `一键领取(${ready.length})` : '一键领取';

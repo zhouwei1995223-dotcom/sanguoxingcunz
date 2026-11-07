@@ -1,6 +1,6 @@
 import { PixelImage, art } from '../pixel';
 import { chest, coinFrames, yuanbao, bun, magnet, bomb } from './items';
-import { IS_WEB } from '../../data/platformConfig';
+import { WEB_RULES } from '../../data/platformConfig';
 
 // UI 图标（约 14x14，界面中整数倍放大显示）
 
@@ -811,7 +811,7 @@ const ICONS: Record<string, () => PixelImage> = {
   ]),
 };
 
-if (IS_WEB) {
+if (WEB_RULES) {
   const hookIcon = (edge: string, rope: string) => {
     const p = new PixelImage(15, 15);
     p.ring(4, 10, 3, rope); p.line(4, 13, 11, 6, rope);

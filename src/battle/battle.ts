@@ -1,7 +1,7 @@
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
-import { IS_WEB } from '../data/platformConfig';
+import { WEB_RULES } from '../data/platformConfig';
 import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
@@ -187,7 +187,7 @@ export class Battle {
   readonly damageBySource = new Map<DamageSource, { total: number; boss: number }>();
 
   private recordDamage(source: DamageSource, enemy: Enemy, amount: number) {
-    if (!IS_WEB || amount <= 0 || this.won || this.dead) return;
+    if (!WEB_RULES || amount <= 0 || this.won || this.dead) return;
     let row = this.damageBySource.get(source);
     if (!row) {
       row = { total: 0, boss: 0 };
@@ -231,7 +231,7 @@ export class Battle {
   finalBossSec = -1;
   bossTimedOut = false;
   get finalBossTimeLeft(): number | null {
-    if (!IS_WEB || !this.chapter.campaignMinutes || !this.finalBoss) return null;
+    if (!WEB_RULES || !this.chapter.campaignMinutes || !this.finalBoss) return null;
     return Math.max(0, this.finalBoss.born + FINAL_BOSS_LIMIT_SEC - this.t);
   }
   /** 1.0.4：看广告复活第 2 / 3 次给的本局加成 */
@@ -332,7 +332,7 @@ export class Battle {
 
   constructor(chapter: ChapterDef, base: HeroStats, viewW: number, viewH: number) {
     this.chapter = chapter;
-    this.convoyTimes = IS_WEB && chapter.campaignMinutes && !chapter.defense && !chapter.endless && !chapter.tutorial
+    this.convoyTimes = WEB_RULES && chapter.campaignMinutes && !chapter.defense && !chapter.endless && !chapter.tutorial
       ? convoySchedule(chapter.duration) : [];
     this.stratTimes = chapter.defense ? STRAT_TIMES_DEFENSE : chapter.endless ? STRAT_TIMES_ENDLESS
       : chapter.campaignMinutes ? STRAT_TIMES.map(t => Math.round(t * chapter.duration / 360)) : STRAT_TIMES;
@@ -365,15 +365,15 @@ export class Battle {
   /** 网页测试版所有武器沿用微信 1.0.6 的兵书系数、叠加顺序及冷却下限。 */
   private cooldownMultiplier(): number {
     const gear = 1 - this.base.cd / 100;
-    const book = 1 - this.passiveLv('book') * (IS_WEB ? 0.06 : 0.045);
-    let factor = Math.max(IS_WEB ? 0.35 : 0.58, gear * book);
+    const book = 1 - this.passiveLv('book') * (WEB_RULES ? 0.06 : 0.045);
+    let factor = Math.max(WEB_RULES ? 0.35 : 0.58, gear * book);
     if (this.hero.id === 'zhuge') factor *= 0.9;
     if (this.hero.id === 'sunshangxiang') factor *= 0.92;
     if (this.frenzy) factor *= 0.5;
     if (this.hasStrat('shensu')) factor *= 0.92;
     if (this.hasStrat('wolong')) factor *= 0.85;
-    factor = Math.max(IS_WEB ? 0.30 : 0.58, factor);
-    if (this.qiyu === 'dunjia') factor = Math.max(IS_WEB ? 0.30 : 0.55, factor * 0.9);
+    factor = Math.max(WEB_RULES ? 0.30 : 0.58, factor);
+    if (this.qiyu === 'dunjia') factor = Math.max(WEB_RULES ? 0.30 : 0.55, factor * 0.9);
     return factor;
   }
 
@@ -695,7 +695,7 @@ export class Battle {
     this.t += dt;
     if (this.convoy || this.convoyTimes.length) updateConvoy(this, dt);
     // 每周挑战 / 新手试炼：坚持到时间即胜利
-    if ((this.chapter.endless || (!IS_WEB && this.chapter.tutorial)) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
+    if ((this.chapter.endless || (!WEB_RULES && this.chapter.tutorial)) && this.chapter.duration < 1e8 && this.t >= this.chapter.duration) {
       for (const e of this.enemies) if (!e.dead) { e.dead = true; this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.3 }); }
       this.won = true;
       return;
@@ -742,7 +742,7 @@ export class Battle {
     updateSpawner(this, dt);
     this.updateDirector(dt);
     this.updateEnemies(dt);
-    if (IS_WEB && this.def?.lost) return;
+    if (WEB_RULES && this.def?.lost) return;
     if (!down) updateWeapons(this, dt);
     if (this.def) updateDefense(this, dt);
     this.updateProjectiles(dt);
@@ -859,12 +859,12 @@ export class Battle {
   /** 身边敌人 / 目标数量（平滑） */
   screenFill = 0.1;
 
-  private get fixedCampaign() { return IS_WEB && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense; }
-  get isWebCampaignOrDefense() { return IS_WEB && !this.chapter.endless && !this.chapter.tutorial; }
+  private get fixedCampaign() { return WEB_RULES && !this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense; }
+  get isWebCampaignOrDefense() { return WEB_RULES && !this.chapter.endless && !this.chapter.tutorial; }
 
   private get bossPowerHpFactor() {
     const ch = this.chapter;
-    if (IS_WEB || ch.tutorial || ch.endless || ch.defense) return 1;
+    if (WEB_RULES || ch.tutorial || ch.endless || ch.defense) return 1;
     return Math.pow(Math.max(1, this.powerRatio), ch.id === 1 ? 0.4 : BOSS_POWER_EXP);
   }
 
@@ -902,7 +902,7 @@ export class Battle {
     this.expRaw = 0;
     this.dominantT = this.screenFill < 0.08 && this.recentDmg < this.player.maxHp * 0.04 ? this.dominantT + 1 : 0;
     // 守城的敌军分散在四个门，武将身边的人数不能用来判断整支守军的强弱。
-    if (this.fixedCampaign || (IS_WEB && this.def)) return;
+    if (this.fixedCampaign || (WEB_RULES && this.def)) return;
     if (this.screenFill < 0.03 && this.t > 120) this.director = Math.min(1.35, this.director + 0.02);
     else if (this.screenFill > 0.06) this.director = Math.max(1, this.director - 0.02);
   }
@@ -1061,10 +1061,10 @@ export class Battle {
       const d = Math.hypot(dx, dy) || 1;
       dx /= d; dy /= d;
 
-      if (IS_WEB && !e.convoyGuard && !e.boss && !e.fixedDir && (e.state === 'troopWindup' ||
+      if (WEB_RULES && !e.convoyGuard && !e.boss && !e.fixedDir && (e.state === 'troopWindup' ||
           (!tgt?.city && !tgt?.path && this.startTroopSkill(e, dx, dy, d, !!tgt?.ally)))) continue;
       if (e.boss) {
-        if (IS_WEB && this.def) e.focus = tgt?.ally ?? null;
+        if (WEB_RULES && this.def) e.focus = tgt?.ally ?? null;
         updateBoss(this, e, dt, dx, dy, d);
       } else if (e.fixedDir) {
         e.x += e.vx * dt;
@@ -1079,7 +1079,7 @@ export class Battle {
         e.y += dy * spd * mv * dt;
         e.shootT -= dt;
         if (e.shootT <= 0 && d < range + 40 && e.slow < 1) {
-          if (IS_WEB && tgt?.city && e.def!.id === 'siege_cata') {
+          if (WEB_RULES && tgt?.city && e.def!.id === 'siege_cata') {
             if (this.t >= this.nextCatapultAt) {
               this.nextCatapultAt = this.t + 2.5;
               e.shootT = e.def!.shootCd || 4;
@@ -1160,7 +1160,7 @@ export class Battle {
 
   hurtPlayer(dmg: number, contact = false) {
     const p = this.player;
-    if (p.iframe > 0 || this.dead || (IS_WEB && this.won) || this.ult || (this.def && this.def.downT > 0)) return;
+    if (p.iframe > 0 || this.dead || (WEB_RULES && this.won) || this.ult || (this.def && this.def.downT > 0)) return;
     if (contact && this.contactIframe > 0) return;
     if (this.mirrorCd > 0 && this.mirrorT <= 0) {
       // 护心镜：抵挡这次伤害
@@ -1302,7 +1302,7 @@ export class Battle {
   }
 
   killEnemy(e: Enemy) {
-    if (e.dead || (IS_WEB && (this.dead || this.won))) return;
+    if (e.dead || (WEB_RULES && (this.dead || this.won))) return;
     e.dead = true;
     this.kills++;
     if (this.qiyu === 'kaixuan' && (e.elite || e.boss)) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * 0.08);
@@ -1355,7 +1355,7 @@ export class Battle {
         this.midBoss = null;
         this.midBossDown = true;
         // 守城的攻城梯队来自不同城门，击败先锋只结算该敌将。
-        if (IS_WEB && this.def) return;
+        if (WEB_RULES && this.def) return;
         // 击败先锋敌将时震溃场上残余精英与小兵，避免敌将已死而精英仍在场上缠斗
         for (const o of this.enemies) {
           if (!o.dead && o !== e && !o.boss && !o.convoyGuard) {
@@ -1605,7 +1605,7 @@ export class Battle {
       s.life -= dt;
       if (s.spin) s.rot += dt * 10;
       if (s.life <= 0) { this.shots.splice(i, 1); continue; }
-      if (IS_WEB && this.def && shotHitsAlly(this, s.x, s.y, s.r, s.dmg)) { this.shots.splice(i, 1); continue; }
+      if (WEB_RULES && this.def && shotHitsAlly(this, s.x, s.y, s.r, s.dmg)) { this.shots.splice(i, 1); continue; }
       if (this.def && shotHitsCity(s.x, s.y)) { hurtCity(this, s.dmg * (s.sprite === 'stone' ? 1 : 0.25), 'shot_' + s.sprite); this.shots.splice(i, 1); continue; }
       if ((s.x - p.x) ** 2 + (s.y - (p.y - 8)) ** 2 < (s.r + p.r * 0.8) ** 2) {
         this.hurtPlayer(s.dmg * this.shotTakenMul);
@@ -2254,7 +2254,7 @@ export class Battle {
 
   /** 守城：敌将的近身范围攻击也打到范围内的士兵（武将的受伤判定保持原样） */
   bossHitAllies(x: number, y: number, r: number, dmg: number, once?: Set<object>) {
-    if (!IS_WEB || !this.def) return;
+    if (!WEB_RULES || !this.def) return;
     for (const a of this.def.allies) {
       if (a.dead || once?.has(a) || (a.x - x) ** 2 + (a.y - y) ** 2 > (r + a.r) ** 2) continue;
       hurtAlly(this, a, dmg);
@@ -2280,7 +2280,7 @@ export class Battle {
     }
     if (w.kind === 'circle' && w.r >= 80) { this.hooks.shake(3); this.hooks.sfx('explode'); }
     if (inWarning(w, p.x, p.y, p.r * 0.6)) this.hurtPlayer(w.dmg!);
-    if (IS_WEB && this.def) {
+    if (WEB_RULES && this.def) {
       if (w.cityDmg) hurtCity(this, w.cityDmg, 'siege_cata');
       for (const ally of this.def.allies) {
         if (!ally.dead && inWarning(w, ally.x, ally.y, ally.r * 0.6)) hurtAlly(this, ally, w.allyDmg ?? w.dmg!);
@@ -2515,7 +2515,7 @@ export class Battle {
       const w = this.weapons.find(x => {
         const needed = WEAPONS[x.id].evoPassive;
         return !x.evo && x.lv >= MAX_WEAPON_LV && !this.passiveLv(needed)
-          && (!IS_WEB || (this.skillPool.passives.includes(needed) && !this.banned.has('passive:' + needed)));
+          && (!WEB_RULES || (this.skillPool.passives.includes(needed) && !this.banned.has('passive:' + needed)));
       });
       if (w) { out.push({ kind: 'passive', id: WEAPONS[w.id].evoPassive, lv: 1, isNew: true }); firstEvo = w.id; count--; }
     }

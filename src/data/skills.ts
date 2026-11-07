@@ -1,5 +1,5 @@
 // 局内技能：武器（主动）与兵法（被动）。所有数值都在这里调整。
-import { IS_WEB } from './platformConfig';
+import { WEB_RULES } from './platformConfig';
 import type { HeroDef } from './heroes';
 
 export type WeaponId =
@@ -373,7 +373,7 @@ WEAPONS.thunder.links = [
   { hero: 'jiangwei', name: '天水麒麟', desc: '姜维专属：六道天雷，连锁十八人并长时间麻痹', evo: { count: 6, pierce: 18, stun: 0.6, dmg: 12 } },
 ];
 
-if (IS_WEB) Object.assign(WEAPONS, {
+if (WEB_RULES) Object.assign(WEAPONS, {
   hook: {
     id: 'hook', name: '飞钩索', icon: 'w_hook', evoName: '锁江铁索', evoIcon: 'w_hook_evo', evoPassive: 'binding', unlockCh: 3,
     intro: '钩住射程内较远的敌人，使其减速，并将小兵和精英拉近',
@@ -414,14 +414,14 @@ const WEB_WEAPON_DAMAGE = 0.9;
 for (const [wid, d] of Object.entries(WEAPONS)) {
   for (const lv of d.levels) {
     lv.area = Math.min(56, Math.max(12, Math.round(lv.area * AREA_SCALE)));
-    if (IS_WEB) lv.dmg *= WEB_WEAPON_DAMAGE;
+    if (WEB_RULES) lv.dmg *= WEB_WEAPON_DAMAGE;
     else {
       if (lv.cd > 0) lv.cd = +(lv.cd * CD_SCALE).toFixed(2);
       if (lv.tick) lv.tick = +(lv.tick * (wid === 'aura' ? 1.35 : 1.15)).toFixed(2);
     }
   }
   d.evo.area = Math.min(72, Math.max(16, Math.round(d.evo.area * AREA_SCALE)));
-  if (IS_WEB) d.evo.dmg *= WEB_WEAPON_DAMAGE;
+  if (WEB_RULES) d.evo.dmg *= WEB_WEAPON_DAMAGE;
   else {
     if (d.evo.cd > 0) d.evo.cd = +(d.evo.cd * CD_SCALE).toFixed(2);
     else if (wid === 'sword') { d.evo.cd = 2.2; d.evo.duration = 3.2; }
@@ -430,7 +430,7 @@ for (const [wid, d] of Object.entries(WEAPONS)) {
   }
   for (const l of d.links || []) {
     if (l.evo.area) l.evo.area = Math.min(74, Math.max(16, Math.round(l.evo.area * AREA_SCALE)));
-    if (IS_WEB) {
+    if (WEB_RULES) {
       if (l.evo.dmg !== undefined) l.evo.dmg *= WEB_WEAPON_DAMAGE;
     } else if (l.evo.cd && l.evo.cd > 0) l.evo.cd = +(l.evo.cd * CD_SCALE).toFixed(2);
   }
@@ -475,7 +475,7 @@ export function coreWeaponFits(id: WeaponId, pool: SkillPool, defense: boolean):
 
 /** 第 N 章只能抽到进章前已解锁的技能。无尽和每周没有章节，按账号进度。 */
 export function skillPoolFor(hero: HeroDef, progress: number, chapter: number | null, defense: boolean): SkillPool {
-  const cleared = IS_WEB && chapter !== null ? Math.max(0, chapter - 1) : progress;
+  const cleared = WEB_RULES && chapter !== null ? Math.max(0, chapter - 1) : progress;
   return {
     weapons: defense ? defenseWeaponsForHero(hero, cleared) : weaponsForHero(hero.id, cleared),
     passives: defense ? [] : passivesFor(cleared),
@@ -539,7 +539,7 @@ export const PASSIVES = {
   ration: { id: 'ration', name: '军粮', icon: 'p_ration', desc: '每击败50名敌人回复1%生命', unlockCh: 3 },
 } as Record<PassiveId, PassiveDef>;
 
-if (IS_WEB) Object.assign(PASSIVES, {
+if (WEB_RULES) Object.assign(PASSIVES, {
   binding: { id: 'binding', name: '缚敌诀', icon: 'p_binding', desc: '对已减速或眩晕的敌人伤害+6%', unlockCh: 3 },
   guardmanual: { id: 'guardmanual', name: '守势篇', icon: 'p_guardmanual', desc: '受到敌方飞弹的伤害-6%', unlockCh: 4 },
 } satisfies Partial<Record<PassiveId, PassiveDef>>);
@@ -552,5 +552,5 @@ export function expToNext(level: number): number {
   // 1.0.6：每级所需经验再乘 1 + 4%×(级-1)（16 级起封顶 ×1.6）：开局几级照样快，中后期升级间隔拉长
   const originalNeed = Math.round(base * Math.min(1.6, 1 + 0.04 * (level - 1)));
   // 网页版每份经验推进原版的 80%，对应升级门槛为原来的 1.25 倍。
-  return IS_WEB ? originalNeed * 1.25 : originalNeed;
+  return WEB_RULES ? originalNeed * 1.25 : originalNeed;
 }

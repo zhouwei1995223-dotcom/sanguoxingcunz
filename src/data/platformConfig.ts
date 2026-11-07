@@ -9,8 +9,13 @@ export const IS_XHS = process.env.TARGET === 'xhs';
 export const IS_TAP = process.env.TARGET === 'tap';
 /** 微信小游戏版本 */
 export const IS_WX = process.env.TARGET === 'wx';
-/** 新版国风重彩暗金 UI 开关（先在网页版启用，确认后再同步到微信版） */
-export const NEW_UI = IS_WEB;
+/**
+ * 新版玩法与数值（原「网页版专属」）：网页版先做、确认后同步到微信版（2026-11-07 起微信版整体换成网页版）。
+ * 调试参数、网页测试档、模拟广告仍只认 IS_WEB。小红书 / TapTap 暂时保持旧版。
+ */
+export const WEB_RULES = IS_WEB || IS_WX;
+/** 水墨宣纸 UI 与精细像素美术开关（网页版、微信版） */
+export const NEW_UI = WEB_RULES;
 /** 离线 H5 版本（小红书 / TapTap）：不接平台 SDK，没有分享和好友排行，音效运行时合成 */
 export const IS_H5 = IS_XHS || IS_TAP;
 /** 无广告版本：原来看视频的地方改为免费领取、元宝兑换或直接去掉 */
@@ -41,7 +46,7 @@ export const SHARE_CONFIG = {
 export const GAME_INFO = {
   name: '长坂单骑传',
   shortName: '长坂单骑传',
-  version: '1.0.6',
+  version: '1.0.7',
   ageRating: 8, // 适龄提示：8+
   // 著作权人 / 出版单位等信息在拿到软著和备案后填写，显示在设置-关于
   copyright: '著作权人：张周炜',
