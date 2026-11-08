@@ -282,7 +282,8 @@ export const ENDLESS: ChapterDef = {
 /** 天机签：只有一关，生存十分钟。刷怪沿用无尽的节奏（有限时长时成长较缓），敌人强度固定、不随账号进度变化。 */
 export const TIANJI: ChapterDef = {
   ...ENDLESS, id: -4, name: '天机签', subtitle: '一签一天命', story: '无名剑客独闯乱世，十分钟内生死全凭签运。',
-  duration: 600, tianji: true, hpMul: 1.2, dmgMul: 2.3, growth: 0.55,
+  // 2026-11-08 真机反馈仍太简单：小怪血量、伤害在原来基础上各翻倍（1.2 / 2.3 → 2.4 / 4.6）
+  duration: 600, tianji: true, hpMul: 2.4, dmgMul: 4.6, growth: 0.55,
 };
 
 /** 无尽模式的敌人池：随时间解锁更强兵种 */

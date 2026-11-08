@@ -56,7 +56,13 @@ for (let r = 0; r < runs; r++) {
   const tierN = [0, 0, 0, 0, 0];
   let mbStart = -1; const bossSecs: number[] = [];
   let coinsEarned = 0;
-  if (TJ) { b.tj = createTianji(); b.weapon('sword')!.lv = 2; b.recalc(); b.revives = Number(process.env.REV ?? 1); }
+  if (TJ) {
+    b.tj = createTianji(); b.weapon('sword')!.lv = 2; b.recalc(); b.revives = Number(process.env.REV ?? 1);
+    b.fxCap = 200; b.numCap = 14; b.gemCap = 60; b.weaponSlots = b.passiveSlots = 999;
+    // GEAR=2：模拟有装备军略的号（攻击、生命 ×2），并按游戏里的规则让敌人跟着变强（战力比 ^0.75 / ^0.45）
+    const gear = Number(process.env.GEAR || 1);
+    if (gear > 1) { b.base.atk *= gear; b.base.hp *= gear; b.player.maxHp = b.player.hp = b.base.hp; b.recalc(); b.enemyHpMul *= Math.pow(gear, 0.75); b.enemyDmgMul *= Math.pow(gear, 0.45); }
+  }
   if (process.env.QIYU !== 'none' && !TJ) b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
   const dt = 1 / 30;
   let ang = 0;

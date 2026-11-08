@@ -34,6 +34,8 @@ export function setFirstBoss(sec: number) {
 }
 
 function updateEndless(b: Battle, dt: number) {
+  // 天机签：天命之主登场后停刷小怪和事件，只剩它召来的精锐
+  if (b.tj?.final) return;
   const t = b.t, m = t / 60;
   let pool = ENDLESS_POOLS[0].pool;
   for (const p of ENDLESS_POOLS) if (t >= p.from) pool = p.pool;
@@ -62,7 +64,8 @@ function updateEndless(b: Battle, dt: number) {
   const strong = t > 420;
   // 15 分钟后：精英多两个，敌将两个一起来
   const late = t > 900 && b.chapter.duration >= 1e8;
-  fire('elite', 60, { t, type: 'elite', enemy: strong ? 'elite_guard' : 'wei_heavy', count: 1 + Math.floor(m / 4) + (late ? 2 : 0) });
+  // 天机签精英更勤（40 秒一波、每波多一名）
+  fire('elite', b.tj ? 40 : 60, { t, type: 'elite', enemy: strong ? 'elite_guard' : 'wei_heavy', count: 1 + Math.floor(m / 4) + (late ? 2 : 0) + (b.tj ? 1 : 0) });
   fire('ring', 100, { t, type: 'ring', enemy: strong ? 'wu_shield' : 'wei_spear', count: Math.min(80, 30 + Math.floor(m * 3)), text: '四面伏兵！' });
   fire('stampede', 130, { t, type: 'stampede', enemy: strong ? 'tiger_cavalry' : 'wei_cavalry', count: Math.min(30, 12 + Math.floor(m)), text: '骑兵冲阵！' });
   fire('swarm', 75, { t, type: 'swarm', enemy: 'bandit', count: Math.min(60, 20 + Math.floor(m * 2)), text: '流寇来袭！' });

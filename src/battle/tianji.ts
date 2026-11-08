@@ -89,6 +89,10 @@ export interface TianjiState {
   flaw: number;
   nextFlaw: number;
   gifted: boolean;
+  /** 天命之主召唤精锐的计时 */
+  summonT: number;
+  /** 5 分钟后敌人提速，只触发一次 */
+  lateFast: boolean;
   /** 时来运转：接下来几签必是上签以上 */
   luck: number;
   poisonT: number;
@@ -120,7 +124,7 @@ export function createTianji(): TianjiState {
     tickets: START_TICKETS, freeT: FREE_EVERY, paidDraws: 0, adDraws: 0, bonusDraws: 0, history: [], sinceTop: 0, badStreak: 0,
     timed: [], perm: { atk: 0, hp: 0, speed: 0, crit: 0, area: 0, cd: 0, dmg: 0 },
     thief: null, rust: [], meteors: [], meteorT: 0, treeT: 0, falls: [], coinsSpent: 0, lastTier: -1,
-    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, luck: 0, poisonT: 0, baseHp: 0, baseDmg: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
+    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, summonT: 6, lateFast: false, luck: 0, poisonT: 0, baseHp: 0, baseDmg: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
   };
 }
 
@@ -188,7 +192,7 @@ export function tianjiRecalc(b: Battle) {
   if (on('drum')) b.dmgMul *= 1.25;
   if (on('disarm')) b.cdMul *= 2;
   b.playerScale = on('giant') ? 1.6 : on('tiny') ? 0.6 : 1;
-  b.enemySpeedMul = on('freeze') ? 0 : (on('slowtime') ? 0.5 : 1) * (on('enrage') ? 1.35 : 1);
+  b.enemySpeedMul = on('freeze') ? 0 : (on('slowtime') ? 0.5 : 1) * (on('enrage') ? 1.35 : 1) * (st.lateFast ? 1.15 : 1);
   b.surgeMul = (on('horde') || on('night') ? 2.5 : 1) * (st.final ? 0.5 : 1);
 }
 
@@ -204,6 +208,10 @@ function spawnFinal(b: Battle) {
   toughenBoss(e);
   e.scale = 2.5;
   st.final = e;
+  // 天命降临：场上普通小兵一扫而空（不掉落），之后只剩天命之主和它召来的精锐
+  for (const o of b.enemies) if (!o.dead && !o.boss && !o.elite) { o.dead = true; b.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.3 }); }
+  b.fx.push({ kind: 'shock', x: e.x, y: e.y, t: 0, dur: 0.8, r: 320, w: 16, color: '#ff4f6a' });
+  b.hooks.shake(6);
   b.recalc();
   b.hooks.banner('天命之主降临 · 90 秒尽情输出！', '#ff4f6a');
 }
@@ -232,6 +240,19 @@ function updateFinal(b: Battle, dt: number) {
     addTimed(b, { id: 'meteor', name: '天劫陨石', left: 30, total: 30, good: false });
     b.hooks.banner('三劫 · 天罚：天降陨石，伤害计分 ×1.5', '#ff4f6a');
     b.hooks.shake(6); b.hooks.sfx('boss');
+  }
+  // 天命之主登场后普通小怪不再刷新（spawner），改由它每 8 秒召 2~3 名三倍血的精锐：数量少、但个个难缠
+  st.summonT -= dt;
+  if (st.summonT <= 0) {
+    st.summonT = 8;
+    const n = st.phase >= 2 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const a = rand(TAU);
+      const id = i % 2 ? 'tiger_cavalry' : 'xl_heavy';
+      b.spawnEnemy(id, e.x + Math.cos(a) * 40, e.y + Math.sin(a) * 30, { elite: true, hpMul: 3 });
+      b.fx.push({ kind: 'shock', x: e.x + Math.cos(a) * 40, y: e.y + Math.sin(a) * 30, t: 0, dur: 0.4, r: 30, w: 4, color: '#ff4f6a' });
+    }
+    if (t < 9) b.hooks.banner('天命之主召来精锐！', '#ff4f6a');
   }
   if (!st.gifted && t >= 45) {
     st.gifted = true;
@@ -272,11 +293,11 @@ function rampEnemies(b: Battle) {
   b.enemyDmgMul = st.baseDmg * (1 + 0.02 * m + 0.012 * m * m);
 }
 
-/** 天机签的敌将更灵活、更狠：一登场就是二阶段（出招更快、范围技后可能连招），移速 +20%、伤害 +15% */
+/** 天机签的敌将更灵活、更狠：一登场就是二阶段（出招更快、范围技后可能连招），移速 +20%、伤害 ×3.45 */
 export function toughenBoss(e: Enemy) {
   e.phase2 = true;
   e.speed *= 1.2;
-  e.dmg *= 1.15;
+  e.dmg *= 3.45; // 2026-11-08 用户：敌将攻击翻三倍（原来 ×1.15）
 }
 
 export function updateTianji(b: Battle, dt: number) {
@@ -284,6 +305,7 @@ export function updateTianji(b: Battle, dt: number) {
   const p = b.player;
   rampEnemies(b);
   if (!st.final && b.t >= FINAL_AT) spawnFinal(b);
+  if (!st.lateFast && b.t >= 300) { st.lateFast = true; b.recalc(); b.hooks.banner('敌军杀红了眼 · 移速提升', '#e43b44'); }
   if (st.final) updateFinal(b, dt);
   if (st.ultQueue.length && !b.ult) {
     const h = HEROES.find((x) => x.id === st.ultQueue[0]);
