@@ -1,6 +1,7 @@
 import { skillsUnlockedAt } from '../data/skills';
 import { ChapterDef, DifficultyDef, CHAPTERS, WEB_CAMPAIGN_POWER } from '../data/chapters';
-import { WEB_RULES } from '../data/platformConfig';
+import { WEB_RULES, IS_XHS } from '../data/platformConfig';
+import { submitTianjiScore } from '../platform/xhsRank';
 import { weighted } from '../core/math';
 import { save, markDirty } from './save';
 import { newItem, randomItemTemplate, progressTask, grantHero, grantShards, randomShardHero } from './ops';
@@ -324,6 +325,8 @@ export function settleTianji(win: boolean, t: number, kills: number, bossKills: 
     st.top.length = Math.min(st.top.length, 5);
   }
   if (st.bestDmg > 0) getPlatform().submitScore('tianji', st.bestDmg);
+  // 小红书全员榜：提交本局伤害（平台按总 / 月 / 周 / 日各留最好成绩）
+  if (IS_XHS && dmg > 0) void submitTianjiScore(dmg);
   progressTask('battle', 1);
   progressTask('kill', kills);
   if (bossKills) progressTask('boss', bossKills);

@@ -29,6 +29,7 @@ import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
 import { applyRecommendedPreparation } from '../meta/prepRecommend';
+import { tianjiRankView, RankPeriod } from '../platform/xhsRank';
 import { skillPoolFor, fitPreparation, coreWeaponFits, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, SKILLS_BY_ID, WEAPONS, PASSIVES } from '../data/skills';
 import { setOf, redeem } from '../meta/goals';
 import { getEquipped } from '../meta/ops';
@@ -533,8 +534,38 @@ export class TextDialog implements Dialog {
 export class RankDialog implements Dialog {
   t?: number;
   private key: 'score' | 'endless' | 'tianji' = 'score';
+  private period: RankPeriod = 'all';
+  /** 小红书全员榜（天机签天命伤害，单位万）。不支持 / 未授权时返回 false，退回本地战绩 */
+  private xhsOnline(ui: UI, f: { x: number; y: number }, w: number, h: number): boolean {
+    const u = ui.u;
+    const view = tianjiRankView(this.period);
+    if (view.state === 'unsupported' || view.state === 'unauthorized') return false;
+    const periods: [RankPeriod, string][] = [['all', '总榜'], ['month', '月榜'], ['week', '周榜'], ['day', '日榜']];
+    const tw = (w - 100 * u) / 4;
+    periods.forEach(([p, label], i) => {
+      if (ui.button('rk_xhs_' + p, f.x + 50 * u + i * tw, f.y + 110 * u, tw - 10 * u, 60 * u, label, this.period === p ? C.btnGold : C.btnGray, { size: 22 })) this.period = p;
+    });
+    const my = view.my;
+    const myText = !my ? '' : my.status === 'EXACT' ? `我的名次：第 ${my.rank} 名 · ${my.score} 万` : my.status === 'OVER_LIMIT' ? '我的名次：500+' : '本期还没有成绩';
+    ui.text(myText || '天命伤害（单位：万）', ui.W / 2, f.y + 200 * u, 22, C.gold);
+    const listY = f.y + 230 * u, listH = h - 290 * u, rowH = 64 * u;
+    if (view.state === 'loading') { ui.text('榜单加载中……', ui.W / 2, listY + 80 * u, 24, C.textDim); return true; }
+    if (view.state === 'error') { ui.text('榜单暂时拿不到，稍后再试', ui.W / 2, listY + 80 * u, 24, C.textDim); return true; }
+    if (!view.list.length) { ui.text('还没有人上榜，快去天机签打出第一名！', ui.W / 2, listY + 80 * u, 22, C.textDim); return true; }
+    const dy = ui.beginScroll('rk_xhs_list', f.x + 40 * u, listY, w - 80 * u, listH, view.list.length * rowH);
+    view.list.forEach((r, i) => {
+      const y = listY + i * rowH + dy;
+      if (y + rowH < listY || y > listY + listH) return;
+      ui.pixRect(f.x + 40 * u, y, w - 80 * u, rowH - 6 * u, i < 3 ? '#5a3a6a' : '#4a3630');
+      ui.text(String(r.rank), f.x + 80 * u, y + rowH / 2 - 3 * u, 26, i < 3 ? ['#feae34', '#c0cbdc', '#d77643'][i] : '#fff', 'center');
+      ui.text(r.nickname || '小红书用户', f.x + 120 * u, y + rowH / 2 - 3 * u, 22, '#fff4d6', 'left');
+      ui.text(`${r.score} 万`, f.x + w - 60 * u, y + rowH / 2 - 3 * u, 22, C.gold, 'right');
+    });
+    ui.endScroll();
+    return true;
+  }
   private requested = false;
-  constructor(key: 'score' | 'endless' | 'tianji' = 'score') { this.key = key; }
+  constructor(key: 'score' | 'endless' | 'tianji' = IS_XHS ? 'tianji' : 'score') { this.key = key; }
   /** 好友排行要用微信朋友关系：先过平台的隐私授权，同意后才请求开放数据域 */
   private privacy: 'idle' | 'wait' | 'ok' | 'no' = 'idle';
   private askPrivacy() {
@@ -572,6 +603,8 @@ export class RankDialog implements Dialog {
     } else if (p.name === 'tt') {
       ui.text('排行榜由抖音提供', ui.W / 2, f.y + 200 * u, 24, '#fff4d6');
       if (ui.button('rk_open', ui.W / 2 - 180 * u, f.y + 260 * u, 360 * u, 96 * u, '查看好友排行', C.btnGold)) p.showNativeRank();
+    } else if (IS_XHS && this.key === 'tianji' && this.xhsOnline(ui, f, w, h)) {
+      // 小红书全员榜（上面画完了）
     } else {
       // 浏览器 / 小红书：展示本地战绩（天机签：最佳天命伤害 + 前五局）
       let y = f.y + 130 * u;
