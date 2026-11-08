@@ -138,7 +138,7 @@ if (G()) {
     runFrames(2); tapId('rv_ad'); await tick(); runFrames(20);
     return { scene: scene(), allies: b.def.allies.length, dlg, adRevived: b.adRevives, dead: b.dead };
   });
-  // 回主界面 → 布阵：二倍速看视频 → 打一段 → 城门失守看视频复活
+  // 回主界面 → 布阵：1.5 倍速看视频 → 打一段 → 城门失守看视频复活
   await step('tower', async () => {
     if (goHome() !== 'HomeScene') return { scene: scene(), note: '未能回到主界面' };
     tapId('mode_tower'); runFrames(5); tapId('td_start'); runFrames(10);

@@ -21,8 +21,10 @@ import { HomeScene } from './homeScene';
 
 const INK = '#30291f', MUTED = '#6a5842', RED = '#a02f24', GREEN = '#365c43';
 const VIDEO = IS_WEB || IS_WX;
-/** 二倍速：网页版、微信版每局看一次视频解锁；小红书、TapTap 没有广告，免费。 */
+/** 加速：网页版、微信版每局看一次视频解锁；小红书、TapTap 没有广告，免费。 */
 const SPEED_AD = VIDEO;
+/** 加速倍率（2026-11-08 用户：二倍速太快，改 1.5 倍；网页 / 微信每局看一次视频开启，小红书免费） */
+const TOWER_FAST = 1.5;
 
 /** 援将强度 = 局外武将实际攻击（含等级、星级、巅峰、觉醒、装备、军略、暴击期望）÷ 一级新武将攻击。 */
 export function allyPowerOf(id: AllyId) {
@@ -231,8 +233,8 @@ export class TowerScene implements Scene {
       if (game.scene !== this || !ok) return;
       if (kind === 'speed') {
         this.speedOpen = true;
-        this.speed = 2;
-        game.ui.toast('本局已开启二倍速');
+        this.speed = TOWER_FAST;
+        game.ui.toast('本局已开启 1.5 倍速');
       } else if (kind === 'revive') {
         if (!b.revive()) return;
         this.reviveLeft = 0;
@@ -260,7 +262,8 @@ export class TowerScene implements Scene {
   update(dt: number) {
     const ui = game.ui, u = ui.u, b = this.battle, g = ui.ctx;
     let simDt = 0;
-    if (!this.paused && !this.busy && !b.over && !b.offer) {
+    // 选将令落点时战斗暂停，选好（或取消）后继续
+    if (!this.paused && !this.busy && !b.over && !b.offer && !this.aiming) {
       this.accumulator += dt * this.speed;
       while (this.accumulator >= 1 / 30 && !b.over && !b.offer) {
         b.update(1 / 30);
@@ -289,8 +292,8 @@ export class TowerScene implements Scene {
     const y = ui.safeTop + 4 * u;
     ui.text(`布阵  ·  ${b.map.name}`, 22 * u, y + 32 * u, 31, INK, 'left', null);
     const interact = !this.paused && !this.result && !this.busy && !b.offer;
-    if (ui.button('td_speed', ui.W - 189 * u, y, 78 * u, 66 * u, this.speedOpen ? '×' + this.speed : '×2', this.speedOpen ? C.btnGray : C.btnGold, { size: 26, icon: this.speedOpen ? undefined : 'video' }) && interact) {
-      if (this.speedOpen) this.speed = this.speed === 1 ? 2 : 1;
+    if (ui.button('td_speed', ui.W - 213 * u, y, 102 * u, 66 * u, this.speedOpen ? '×' + this.speed : '×' + TOWER_FAST, this.speedOpen ? C.btnGray : C.btnGold, { size: 26, icon: this.speedOpen ? undefined : 'video' }) && interact) {
+      if (this.speedOpen) this.speed = this.speed === 1 ? TOWER_FAST : 1;
       else void this.reward('speed');
     }
     if (ui.button('td_pause', ui.W - 103 * u, y, 82 * u, 66 * u, '暂停', C.btnGray, { size: 22 }) && interact) this.paused = true;
@@ -513,7 +516,8 @@ export class TowerScene implements Scene {
       g.globalAlpha = 1;
     }
     if (this.aiming) {
-      g.strokeStyle = `rgba(255,214,90,${.5 + .4 * Math.sin(t * 8)})`;
+      // 选点时战斗暂停、特效时钟不走，金框用真实时间闪烁
+      g.strokeStyle = `rgba(255,214,90,${.5 + .4 * Math.sin(Date.now() / 125)})`;
       g.lineWidth = 3;
       g.strokeRect(2, 2, FIELD_W - 4, FIELD_H - 4);
     }
@@ -822,7 +826,7 @@ export class TowerScene implements Scene {
     // 状态行：当前波次 / 休整倒计时；休整时右侧换成「提前出击」。
     const wave = b.plan[Math.max(0, b.waveIdx)], nextWave = b.plan[b.waveIdx + 1];
     let status: string;
-    if (this.aiming) status = '点地图指定将令落点';
+    if (this.aiming) status = '战斗已暂停 · 点地图指定将令落点';
     else if (b.allSpawned) status = b.generalsSent >= 2 ? '主将已出阵 · 守住城门' : '最后一波 · 守住城门';
     else if (b.resting) status = `第 ${b.waveIdx + 2} 波 ${nextWave?.name || ''} · ${Math.ceil(b.restT)} 秒后`;
     else status = `第 ${b.waveIdx + 1}/${b.waveTotal} 波 · ${wave.name}${wave.boss ? ' · ' + BOSSES[b.map.bosses[wave.boss === 'mid' ? 0 : 1]].name : ''}`;

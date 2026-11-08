@@ -1402,6 +1402,8 @@ export class Battle {
     // 守城：掉在山林外（敌人在出怪口外被打死）的东西挪到场地里面，保证捡得到
     if (this.def) { const dd = Math.hypot(x, y), R = ARENA_R - 16; if (dd > R) { x *= R / dd; y *= R / dd; } }
     const pk: Pickup = { kind, x, y, value, vx: 0, vy: 0, pulled: false, t: 0, boss };
+    // 守城经验宝石自动吸到武将身上，磁石没用：不掉（精英掉落、小兵掉落、磁石保底都走这里）
+    if (this.def && kind === 'magnet') return pk;
     if (kind === 'gem') this.gemCount++;
     this.pickups.push(pk);
     return pk;
@@ -1736,7 +1738,8 @@ export class Battle {
       this.breakables.splice(i, 1);
       this.fx.push({ kind: 'puff', x: b.x, y: b.y - 6, t: 0, dur: 0.3 });
       const roll = Math.random();
-      const kind = roll < 0.35 ? 'bun' : roll < 0.55 ? 'magnet' : roll < 0.7 ? 'bomb' : 'coin';
+      // 守城没有磁石，原来磁石的那一份换成金币
+      const kind = roll < 0.35 ? 'bun' : roll < 0.55 ? (this.def ? 'coin' : 'magnet') : roll < 0.7 ? 'bomb' : 'coin';
       if (kind === 'coin') for (let j = 0; j < 4; j++) this.dropPickup('coin', b.x + rand(-8, 8), b.y + rand(-6, 6), 2);
       else this.dropPickup(kind, b.x, b.y, 1);
     }

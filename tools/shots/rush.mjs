@@ -17,12 +17,12 @@ export default async function ({ page, wait, shot, tap }) {
   await wait(600);
   await shot('rush_confirm');
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
-  // 2 倍速
+  // 1.5 倍速（征战免费）
   const sp = await page.evaluate(() => { const u = window.__game.ui; return { x: (u.W - 76 * u.u - 16 * u.u - 76 * u.u - 12 * u.u + 38 * u.u) / 2, y: (u.safeTop + 8 * u.u + 46 * u.u + 38 * u.u) / 2 }; });
   await tap(sp.x, sp.y);
   const t0 = await page.evaluate(() => window.__game.scene.battle.t); await wait(1000);
   const t1 = await page.evaluate(() => window.__game.scene.battle.t);
-  console.log('speed x2: 1s real ->', (t1 - t0).toFixed(2), 's game');
+  console.log('speed x1.5: 1s real ->', (t1 - t0).toFixed(2), 's game');
   await page.evaluate(() => { const b = window.__game.scene.battle; if (b.canRush()) b.rush(); });
   await wait(300);
   console.log('after rush t=', await page.evaluate(() => window.__game.scene.battle.t.toFixed(1)));

@@ -32,6 +32,9 @@ import { createDefense, HeroInfo, grainRate, nextAutoUnit, aliveUnits, unitQuota
 import { UNITS, MAX_ALLIES, BUILDS, BUILD_CARD_MAX, REPAIR_PCT, HERO_SUMMON_TIME } from '../data/defense';
 import { ORDERS, LINKS, defenseChapter } from '../data/defense';
 
+/** 战斗加速倍率 */
+const FAST_SPEED = 1.5;
+
 export class BattleScene implements Scene {
   readonly preserveTextColors = true;
   battle!: Battle;
@@ -91,12 +94,12 @@ export class BattleScene implements Scene {
   /** 每周挑战规则（每周挑战模式下有值） */
   weekly: WeeklyDef | null = null;
   private speedMul = 1;
-  private normalSpeed: 1 | 1.5 = 1;
-  /** 二倍速每局看一次视频解锁；小红书没有广告，开局即解锁 */
-  private doubleSpeedUnlocked = NO_ADS;
-  private doubleSpeedActive = false;
+  /** 1.5 倍速（2026-11-08 用户：二倍速太快，统一改 1.5 倍）。征战免费；守城、无尽、每周挑战每局看一次视频开启，
+   *  之后本局随时切换；小红书没有广告，直接免费。 */
+  private fast = false;
+  private fastUnlocked = NO_ADS;
   private speedAdPending = false;
-  private get userSpeed() { return this.doubleSpeedActive ? 2 : this.normalSpeed; }
+  private get userSpeed() { return this.fast ? FAST_SPEED : 1; }
   private speedAcc = 0;
   videoPath: Promise<string | null> | null = null;
 
@@ -360,7 +363,7 @@ export class BattleScene implements Scene {
     if (this.tipCheckT > 0) return;
     this.tipCheckT = 0.5;
     const near = (x: number, y: number) => b.inView(x, y, -30);
-    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', WEB_RULES ? '打破路边的灯笼和小推车，可获得补给' : '打破灯笼和粮车，会掉出包子、磁石、震天雷');
+    if (b.breakables.some((k) => near(k.x, k.y))) this.tip('breakable', WEB_RULES ? '打破路边的灯笼和小推车，可获得补给' : (b.def ? '打破灯笼和粮车，会掉出包子、震天雷' : '打破灯笼和粮车，会掉出包子、磁石、震天雷'));
     for (const k of b.pickups) {
       if (!near(k.x, k.y)) continue;
       if (k.kind === 'bun') this.tip('pk_bun', '肉包子：拾取后回复30%生命');
@@ -382,16 +385,19 @@ export class BattleScene implements Scene {
     ui.ctx.globalAlpha = 1;
   }
 
-  private async toggleDoubleSpeed() {
+  /** 征战（普通章节）免费加速；其他模式要先看一次视频 */
+  private get speedFree() { return this.fastUnlocked || (!this.chapter.endless && !this.chapter.tutorial && !this.chapter.defense && !this.weekly); }
+
+  private async toggleSpeed() {
     if (this.speedAdPending || this.paused || game.dialogs.length || this.battle.dead || this.battle.won) return;
-    if (!this.doubleSpeedUnlocked) {
+    if (!this.speedFree) {
       this.speedAdPending = true;
       this.joyId = null;
       try {
-        const ok = await getPlatform().showRewardedAd('battle_speed_2x');
+        const ok = await getPlatform().showRewardedAd('battle_speed');
         if (game.scene !== this) return;
-        if (!ok) { game.ui.toast('看完视频即可解锁本局 2 倍速'); return; }
-        this.doubleSpeedUnlocked = true;
+        if (!ok) { game.ui.toast('看完视频即可开启本局 1.5 倍速'); return; }
+        this.fastUnlocked = true;
         progressTask('ad', 1);
       } catch {
         if (game.scene === this) game.ui.toast('视频暂时无法播放，请再试一次');
@@ -400,8 +406,8 @@ export class BattleScene implements Scene {
         this.speedAdPending = false;
       }
     }
-    this.doubleSpeedActive = !this.doubleSpeedActive;
-    game.ui.toast(this.doubleSpeedActive ? '已开启 2 倍速' : `已切回 ${this.normalSpeed} 倍速`);
+    this.fast = !this.fast;
+    game.ui.toast(this.fast ? '已开启 1.5 倍速' : '恢复正常速度');
   }
 
   get label(): string {
@@ -529,9 +535,9 @@ export class BattleScene implements Scene {
     const b = this.battle;
     const top = ui.safeTop + 8 * u;
     const g = ui.ctx;
-    const canSpeed = !this.chapter.tutorial && !this.weekly;
-    const showDouble = WEB_RULES && canSpeed;
-    const clockX = ui.W / 2 - (showDouble ? 32 * u : 0);
+    // 新手试炼不加速；无尽、每周挑战也有 1.5 倍速（2026-11-08）
+    const canSpeed = !this.chapter.tutorial;
+    const clockX = ui.W / 2;
     // 经验条
     const bw = ui.W - 32 * u;
     ui.bar(16 * u, top, bw, 30 * u, b.exp / b.expNeed, '#2ce8f5', '#1a2236');
@@ -548,7 +554,7 @@ export class BattleScene implements Scene {
       // 守城：剩余时间 + 城池血条
       const d = b.def;
       ui.text(WEB_RULES && b.finalBoss ? '击败攻城主将' : fmtTime(Math.max(0, this.chapter.duration - b.t)), clockX, top + 64 * u, 38, '#fff');
-      const cw = ui.W * (showDouble ? 0.35 : 0.44), cx0 = clockX - cw / 2, cy0 = top + 90 * u;
+      const cw = ui.W * 0.44, cx0 = clockX - cw / 2, cy0 = top + 90 * u;
       ui.bar(cx0, cy0, cw, 28 * u, d.cityHp / d.cityMax, d.cityHp < d.cityMax * 0.3 ? '#e43b44' : '#63c74d', '#2a1414');
       if (d.cityFlash > 0) { ui.ctx.globalAlpha = 0.5; ui.pixRect(cx0, cy0, cw, 28 * u, '#ffffff'); ui.ctx.globalAlpha = 1; }
       ui.text(`城池 ${fmtNum(Math.ceil(d.cityHp))}/${fmtNum(d.cityMax)}`, clockX, cy0 + 14 * u, 18, '#fff');
@@ -572,24 +578,15 @@ export class BattleScene implements Scene {
     ui.panel(px, py, ps, ps, 'dark');
     ui.icon('pause', px + ps / 2, py + ps / 2, 30 * u);
     if (canSpeed) {
-      const step = ps + 12 * u, sx = px - (showDouble ? 2 : 1) * step;
-      if (ui.clicked('speed', sx, py, ps, ps) && !this.speedAdPending) {
-        if (this.doubleSpeedActive) this.doubleSpeedActive = false;
-        else this.normalSpeed = this.normalSpeed === 1 ? 1.5 : 1;
-        ui.toast(this.normalSpeed === 1.5 ? '已开启 1.5 倍速' : '恢复正常速度');
-      }
+      const sx = px - ps - 12 * u;
+      if (ui.clicked('speed', sx, py, ps, ps)) void this.toggleSpeed();
       ui.panel(sx, py, ps, ps, 'dark');
-      ui.text('×' + this.normalSpeed, sx + ps / 2, py + ps / 2, this.normalSpeed === 1.5 ? 24 : 30, this.userSpeed === 1.5 ? C.gold : '#fff');
-      if (showDouble) {
-        const x = px - step;
-        if (ui.clicked('speed2', x, py, ps, ps)) void this.toggleDoubleSpeed();
-        ui.panel(x, py, ps, ps, 'dark');
-        const cx = x + ps / 2, subY = py + ps * 0.72;
-        const hasSubtitle = !this.doubleSpeedUnlocked || this.doubleSpeedActive;
-        ui.text('×2', cx, py + ps * (hasSubtitle ? 0.32 : 0.5), 30, this.doubleSpeedActive ? C.gold : '#fff');
-        if (!this.doubleSpeedUnlocked) ui.icon('video', cx, subY, 32 * u);
-        else if (this.doubleSpeedActive) ui.text('使用中', cx, subY, 17, C.gold);
-      }
+      const cx = sx + ps / 2;
+      if (!this.speedFree) {
+        // 还没看视频：显示「×1.5」+ 视频图标
+        ui.text('×' + FAST_SPEED, cx, py + ps * 0.32, 24, '#fff');
+        ui.icon('video', cx, py + ps * 0.72, 32 * u);
+      } else ui.text(this.fast ? '×' + FAST_SPEED : '×1', cx, py + ps / 2, this.fast ? 24 : 30, this.fast ? C.gold : '#fff');
     }
     // 直取敌将：没有敌将在场时常驻，确认（看一次广告）后跳过小兵直接挑战敌将
     if (b.canRush() && !b.dead && !b.won) {

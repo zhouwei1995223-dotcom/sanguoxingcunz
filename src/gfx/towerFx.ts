@@ -3,7 +3,7 @@ import { ALLY_CARDS, TowerKind } from '../data/tower';
 
 /**
  * 布阵的纯画面层：粒子、伤害数字、倒地动画、地面痕迹、震屏和横幅。
- * 全部按战斗时钟推进（暂停、选牌时一起静止，二倍速时一起加速），不影响战斗结果。
+ * 全部按战斗时钟推进（暂停、选牌时一起静止，加速时一起加速），不影响战斗结果。
  */
 interface Particle {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;

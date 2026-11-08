@@ -947,7 +947,7 @@ export function updateDefenseSpawner(b: Battle, dt: number) {
     const s = (Math.random() * 4) | 0, a = s * (TAU / 4);
     b.spawnBoss(b.chapter.boss, Math.cos(a) * DEFENSE_SPAWN_R, Math.sin(a) * DEFENSE_SPAWN_R, true, 1.5);
   }
-  // 补几个灯笼 / 粮车（打破掉包子、磁石）
+  // 补几个灯笼 / 粮车（打破掉包子、震天雷、金币；守城没有磁石）
   d.breakT -= dt;
   if (d.breakT <= 0) {
     d.breakT = 20;
