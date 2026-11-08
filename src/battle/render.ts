@@ -562,10 +562,10 @@ export class WorldRenderer {
     const ps = sprite(`${b.heroSprite}_${frame}${p.left ? '_L' : ''}${flash ? (p.left ? 'W' : '_W') : ''}`);
     if (b.playerScale !== 1) {
       // 天机签「巨人化」：以脚底为原点放大
+      // 先取放大到「屏幕倍数 × 体型」的像素图再贴，微信画布缩放时不认关闭平滑，直接拉伸会糊
       const k = b.playerScale, x0 = Math.round(p.x - this.camX), y0 = Math.round(p.y - this.camY);
-      g.save(); g.translate(x0, y0); g.scale(k, k);
-      g.drawImage(ps.canvas, ps.x, ps.y, ps.w, ps.h, -ps.ax, -ps.ay, ps.w, ps.h);
-      g.restore();
+      const ss = scaled(ps, this.scale * k);
+      g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(x0 - ps.ax * k), Math.round(y0 - ps.ay * k), ps.w * k, ps.h * k);
     } else this.blit(ps, p.x, p.y);
     g.globalAlpha = 1;
     // 血条
@@ -592,8 +592,9 @@ export class WorldRenderer {
     g.translate(x0, y0);
     // 摇晃：以树根为轴微微倾斜
     g.rotate(off * 0.03);
-    g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.ax, -s.ay, s.w, s.h);
-    if (br.flash > 0) { g.globalAlpha = 0.45; g.globalCompositeOperation = 'lighter'; g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.ax, -s.ay, s.w, s.h); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; }
+    const ts = scaled(s, this.scale);
+    g.drawImage(ts.canvas, ts.x, ts.y, ts.w, ts.h, -s.ax, -s.ay, s.w, s.h);
+    if (br.flash > 0) { g.globalAlpha = 0.45; g.globalCompositeOperation = 'lighter'; g.drawImage(ts.canvas, ts.x, ts.y, ts.w, ts.h, -s.ax, -s.ay, s.w, s.h); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; }
     g.restore();
     if (br.maxHp && br.hp < br.maxHp) {
       const w = 16, x = x0 - w / 2, y = y0 + 4;
@@ -606,9 +607,9 @@ export class WorldRenderer {
   private drawFallen(f: { x: number; y: number; v: number; t: number; dir: number }) {
     const g = this.ctx;
     const x0 = Math.round(f.x - this.camX), y0 = Math.round(f.y - this.camY);
-    const stump = sprite('tj_stump');
+    const stump = sprite('tj_stump'), st2 = scaled(stump, this.scale);
     g.globalAlpha = f.t > 6 ? Math.max(0, 7 - f.t) : 1;
-    g.drawImage(stump.canvas, stump.x, stump.y, stump.w, stump.h, x0 - stump.ax, y0 - stump.ay, stump.w, stump.h);
+    g.drawImage(st2.canvas, st2.x, st2.y, st2.w, st2.h, x0 - stump.ax, y0 - stump.ay, stump.w, stump.h);
     if (f.t < 1.1) {
       const k = Math.min(1, f.t / 0.7);
       const s = sprite('tj_tree' + f.v);
@@ -616,7 +617,8 @@ export class WorldRenderer {
       g.translate(x0, y0 - 2);
       g.rotate(f.dir * k * k * Math.PI * 0.48);
       g.globalAlpha = f.t > 0.7 ? Math.max(0, 1 - (f.t - 0.7) / 0.4) : 1;
-      g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.ax, -s.ay, s.w, s.h);
+      const fs = scaled(s, this.scale);
+      g.drawImage(fs.canvas, fs.x, fs.y, fs.w, fs.h, -s.ax, -s.ay, s.w, s.h);
       g.restore();
     }
     g.globalAlpha = 1;

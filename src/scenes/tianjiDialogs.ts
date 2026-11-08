@@ -1,7 +1,7 @@
 import { game, Dialog } from '../game';
 import { C, UI } from '../ui/ui';
 import { dialogFrame } from '../ui/widgets';
-import { sprite } from '../gfx/atlas';
+import { sprite, scaled } from '../gfx/atlas';
 import { playSfx, vibrate } from '../audio/sound';
 import { getPlatform } from '../platform';
 import { NO_ADS } from '../data/platformConfig';
@@ -132,10 +132,10 @@ export class TianjiDrawDialog implements Dialog {
       g.save();
       g.translate(cx, cy + 120 * u + hop);
       g.rotate(ang);
-      const s = sprite('tj_tong');
-      const k = Math.max(1, Math.round((260 * u) / s.h));
-      g.imageSmoothingEnabled = false;
-      g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w * k / 2, -s.h * k, s.w * k, s.h * k);
+      // 用整数倍预放大的像素图 1:1 贴（微信画布拉伸会糊）
+      const s0 = sprite('tj_tong');
+      const k = Math.max(1, Math.round((260 * u) / s0.h)), s = scaled(s0, k);
+      g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w / 2, -s.h, s.w, s.h);
       g.restore();
       ui.text(time < SHAKE ? '摇签中……' : '签出！', cx, H * 0.22, 40, '#fff4d6', 'center', '#3a0d12');
       ui.text('点击屏幕跳过', cx, H * 0.82, 20, 'rgba(255,244,214,0.55)', 'center', null);
@@ -205,24 +205,27 @@ export class TianjiDrawDialog implements Dialog {
     // 文字不跟随缩放（缩放时文字缓存会退回直接绘制），等弹出动画结束再画，避免错位
     if (pop >= 0.98) {
       ui.text(`◆ ${T.name} ◆`, cx + jit, y + 2 * b + 56 * u, 58, T.color, 'center', '#120a06');
-      // 图标圆章
-      const my = y + 250 * u;
+      // 版式随卡片高度走：选项多（卡片变矮）时图标缩小、标题和说明上移；说明最多三行，签诗只在说明短时出现，不和说明叠在一起
+      const my = y + (many ? 205 : 250) * u, rIcon = (many ? 70 : 92) * u;
       g.fillStyle = T.color + '55';
-      g.beginPath(); g.arc(cx + jit, my, 92 * u + Math.sin(r * 4) * 4 * u, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(cx + jit, my, rIcon + Math.sin(r * 4) * 4 * u, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#fbf3e1';
-      g.beginPath(); g.arc(cx + jit, my, 78 * u, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(cx + jit, my, rIcon - 14 * u, 0, Math.PI * 2); g.fill();
       g.strokeStyle = T.deep; g.lineWidth = 4 * u; g.stroke();
-      ui.icon(this.res.icon, cx + jit, my, 120 * u);
-      ui.text(this.res.title, cx + jit, y + 380 * u, 46, '#2a1d14', 'center', null);
+      ui.icon(this.res.icon, cx + jit, my, (many ? 92 : 120) * u);
+      const titleY = y + (many ? 318 : 380) * u;
+      ui.text(this.res.title, cx + jit, titleY, many ? 40 : 46, '#2a1d14', 'center', null);
       const body = this.chosen ?? this.res.outcome ?? this.res.desc;
-      const lines = wrapLines(ui, body, cw - 90 * u, 27);
-      lines.slice(0, 4).forEach((l, i) => ui.text(l, cx + jit, y + 450 * u + i * 42 * u, 27, this.chosen ? T.deep : '#4a3a2c', 'center', null, false));
-      // 签诗：每档一句，落在卡片下部
-      ui.text(VERSES[tier], cx + jit - 40 * u, y + ch - 62 * u, 22, T.deep, 'center', null, false);
-      // 朱红印章
+      const lines = wrapLines(ui, body, cw - 110 * u, 25).slice(0, 3);
+      const lineH = 38 * u, descY = titleY + 62 * u;
+      lines.forEach((l, i) => ui.text(l, cx + jit, descY + i * lineH, 25, this.chosen ? T.deep : '#4a3a2c', 'center', null, false));
+      // 签诗：说明下面还有空才写
+      const verseY = y + ch - 52 * u;
+      if (!many && descY + lines.length * lineH < verseY - 20 * u) ui.text(VERSES[tier], cx + jit - 30 * u, verseY, 21, T.deep, 'center', null, false);
+      // 朱红小印章，贴右下角
       g.fillStyle = 'rgba(168,34,25,0.85)';
-      g.fillRect(x + cw - 92 * u, y + ch - 92 * u, 60 * u, 60 * u);
-      ui.text('天机', x + cw - 62 * u, y + ch - 62 * u, 22, '#fbf4e4', 'center', null);
+      g.fillRect(x + cw - 74 * u, y + ch - 74 * u, 46 * u, 46 * u);
+      ui.text('天机', x + cw - 51 * u, y + ch - 51 * u, 17, '#fbf4e4', 'center', null);
     }
 
     // 按钮
@@ -363,10 +366,9 @@ export function drawTianjiHud(scene: BattleScene, ui: UI, blocked: boolean): { x
   // 签筒：能抽时轻轻摇
   const wob = afford ? Math.sin(time * 9) * 0.08 * (Math.sin(time * 1.7) > 0.3 ? 1 : 0) : 0;
   g.save(); g.translate(bx, byy + 6 * u); g.rotate(wob);
-  const s = sprite('tj_tong'), k = Math.max(1, Math.round((r * 1.25) / s.h));
-  g.imageSmoothingEnabled = false;
+  const s0 = sprite('tj_tong'), k = Math.max(1, Math.round((r * 1.25) / s0.h)), s = scaled(s0, k);
   g.globalAlpha = afford ? 1 : 0.55;
-  g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w * k / 2, -s.h * k / 2, s.w * k, s.h * k);
+  g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.w / 2, -s.h / 2, s.w, s.h);
   g.restore();
   g.globalAlpha = 1;
   // 角标：签数

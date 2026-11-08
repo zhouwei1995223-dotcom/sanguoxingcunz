@@ -9,6 +9,11 @@ export default async function ({ page, wait, shot }) {
   const click = async (id) => { await page.waitForFunction((id) => window.__game.ui.prevRegions.some((r) => r.id === id), id, { timeout: 8000 }); const p = await pt(id); await page.mouse.click(p[0], p[1]); await wait(150); };
   const S = () => page.evaluate(() => { const s = window.__game.scene, b = s.battle; return { scene: s.constructor.name, dlg: window.__game.dialogs.map((d) => d.constructor.name), t: b?.t, tickets: b?.tj?.tickets, coins: b?.coins, hist: b?.tj?.history.length, weapons: b?.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)) }; });
 
+  // SMOOTH=1：强制 imageSmoothingEnabled 永远为 true，模拟微信画布，检查图标 / 树 / 签筒会不会糊
+  if (process.env.SMOOTH) {
+    await page.addInitScript(() => { const P = CanvasRenderingContext2D.prototype, d = Object.getOwnPropertyDescriptor(P, 'imageSmoothingEnabled'); Object.defineProperty(P, 'imageSmoothingEnabled', { get() { return true; }, set() { d.set.call(this, true); } }); });
+    await page.reload();
+  }
   await page.waitForFunction(() => window.__game?.scene?.constructor.name === 'HomeScene');
   await wait(400);
   await page.evaluate(() => { window.__game.closeAll ? window.__game.closeAll() : (window.__game.dialogs.length = 0); });

@@ -253,9 +253,8 @@ export class BattleScene implements Scene {
       const t = touches.find((x) => x.id === this.joyId);
       if (t) this.joyCur = { x: t.x, y: t.y };
     } else {
-      if (touches.some((x) => x.id === this.joyId) || game.dialogs.length) {
-        this.joyId = null;
-      }
+      // 只有按摇杆的那根手指松开才停（点弹窗按钮的手指松开不影响移动）
+      if (touches.some((x) => x.id === this.joyId)) this.joyId = null;
     }
   }
 
@@ -289,7 +288,7 @@ export class BattleScene implements Scene {
     const b = this.battle;
     const ui = game.ui;
     const blocked = game.dialogs.length > 0 || this.paused || this.speedAdPending;
-    if (blocked) this.joyId = null;
+    // 弹窗期间不清摇杆：按着移动的手指没松开，弹窗关掉后接着走（2026-11-08 微信反馈：自动抽签打断移动）
     if (!blocked) {
       const [mx, my] = this.joyVector();
       b.moveX = mx;
@@ -317,7 +316,7 @@ export class BattleScene implements Scene {
     // 天机签「自动开签」：有签或金币够、没有弹窗和大招时，每 0.8 秒自动摇一签
     if (b.tj && save.settings.tjAuto && !game.dialogs.length && !this.speedAdPending && !this.paused && !b.ult && !b.dead && !b.won && b.pendingLevelUps === 0) {
       this.tjAutoT -= dt;
-      if (this.tjAutoT <= 0 && canDraw(b)) { this.tjAutoT = 0.8; this.pressDraw(); }
+      if (this.tjAutoT <= 0 && canDraw(b)) { this.tjAutoT = 0.8; this.pressDraw(true); }
     } else this.tjAutoT = Math.max(this.tjAutoT, 0.4);
     // 天机签：升级不弹三选一，每升一级得一支签
     if (b.tj && b.pendingLevelUps > 0) {
@@ -897,11 +896,14 @@ export class BattleScene implements Scene {
   private tjAutoT = 0.8;
 
   /** 天机签：点签筒。有签 / 金币够就摇签，不够就问要不要看视频抽 */
-  pressDraw() {
+  /**
+   * auto：自动开签触发。自动开签一律不播动画（结果飘字），只有要玩家选的签才弹卡，免得一直打断走位。
+   * 不再重置摇杆：按住移动时抽签，弹窗关掉后手指还按着就接着走。
+   */
+  pressDraw(auto = false) {
     const b = this.battle;
     if (!b.tj || b.dead || b.won || game.dialogs.length || this.speedAdPending) return;
-    this.joyId = null;
-    if (!TianjiDrawDialog.open(this, false, !!save.settings.tjSkipAnim)) game.openDialog(new TianjiAdDialog(this));
+    if (!TianjiDrawDialog.open(this, false, auto || !!save.settings.tjSkipAnim) && !auto) game.openDialog(new TianjiAdDialog(this));
   }
 
   worldToScreen(x: number, y: number): [number, number] {
