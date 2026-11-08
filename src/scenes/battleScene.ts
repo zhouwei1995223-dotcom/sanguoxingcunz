@@ -152,6 +152,8 @@ export class BattleScene implements Scene {
     this.battle.heroSpriteName = this.chapter.tianji ? 'hero_wuming_awk' : heroSpriteName(save.hero);
     if (this.chapter.tianji) {
       const b = this.battle; b.tj = createTianji(); b.weaponSlots = b.passiveSlots = 999; b.weapon('sword')!.lv = 2; b.recalc();
+      // 兵器不限数量，后期特效会堆很多：特效 200、小伤害数字 14 封顶（流畅优先）
+      b.fxCap = 200; b.numCap = 14; b.gemCap = 60;
       // 局外养成越强，敌人也跟着强一些（装备军略仍有优势，但不会把这个模式打成碾压）
       const ratio = combatPower(stats) / combatPower(tianjiStats());
       if (ratio > 1) { b.enemyHpMul *= Math.pow(ratio, 0.75); b.enemyDmgMul *= Math.pow(ratio, 0.45); }
@@ -566,8 +568,8 @@ export class BattleScene implements Scene {
     const b = this.battle;
     const top = ui.safeTop + 8 * u;
     const g = ui.ctx;
-    // 新手试炼不加速；无尽、每周挑战也有 1.5 倍速（2026-11-08）
-    const canSpeed = !this.chapter.tutorial;
+    // 新手试炼不加速；无尽、每周挑战也有 1.5 倍速（2026-11-08）；天机签不提供加速（用户：移速已经很快）
+    const canSpeed = !this.chapter.tutorial && !this.chapter.tianji;
     const clockX = ui.W / 2;
     // 经验条
     const bw = ui.W - 32 * u;
@@ -650,30 +652,28 @@ export class BattleScene implements Scene {
     });
 
     // 已拥有技能
-    let ix = 18 * u;
     const iy = top + 136 * u;
     // 天机签不限兵器 / 兵法数量：每行 8 个、图标略小、自动换行
     const wrap = b.tj ? 8 : 99;
     const isz = (b.tj ? 38 : 44) * u;
-    let ry = iy;
-    b.weapons.forEach((w, i) => {
-      if (i && i % wrap === 0) { ix = 18 * u; ry += isz + 4 * u; }
-      ui.qualityFrame(ix, ry, isz, w.evo ? '#feae34' : '#5a6988');
-      ui.icon(w.evo ? WEAPONS[w.id].evoIcon : WEAPONS[w.id].icon, ix + isz / 2, ry + isz / 2, isz * 0.7);
-      if (!w.evo) ui.text(String(w.lv), ix + isz - 6 * u, ry + isz - 8 * u, 16, '#fff', 'center');
-      ix += isz + 4 * u;
-    });
-    ix = 18 * u;
-    let py2 = ry + isz + 4 * u;
-    b.passives.forEach((pz, i) => {
-      if (i && i % wrap === 0) { ix = 18 * u; py2 += isz * 0.8 + 4 * u; }
-      ui.qualityFrame(ix, py2, isz * 0.8, '#3a4466');
-      ui.icon(PASSIVES[pz.id].icon, ix + isz * 0.4, py2 + isz * 0.4, isz * 0.55);
-      ui.text(String(pz.lv), ix + isz * 0.8 - 5 * u, py2 + isz * 0.8 - 4 * u, 14, '#fff', 'center');
-      ix += isz * 0.8 + 4 * u;
-    });
-    // 天机签的计时效果标签从图标下面开始排
-    this.hudIconBottom = b.passives.length ? py2 + isz * 0.8 + 8 * u : ry + isz + 8 * u;
+    // 天机签图标多：整条图标缓存成一张图，兵器 / 兵法 / 等级变了才重画（每帧省一百多次绘制）
+    if (b.tj) {
+      const key = b.weapons.map((w) => w.id + (w.evo ? '*' : w.lv)).join(',') + '|' + b.passives.map((x) => x.id + x.lv).join(',') + '|' + ui.W;
+      if (this.hudStripKey !== key || !this.hudStrip) {
+        const rowsW = Math.ceil(b.weapons.length / wrap), rowsP = Math.ceil(b.passives.length / wrap);
+        const h = Math.ceil(rowsW * (isz + 4 * u) + rowsP * (isz * 0.8 + 4 * u) + 8 * u);
+        const off = getPlatform().createCanvas(Math.ceil(ui.W * 0.62), Math.max(1, h));
+        const main = ui.ctx;
+        ui.ctx = off.getContext('2d')!;
+        ui.ctx.translate(0, -(iy - 2 * u));
+        this.hudStripBottom = this.drawHudIcons(ui, b, iy, wrap, isz);
+        ui.ctx = main;
+        this.hudStrip = off;
+        this.hudStripKey = key;
+      }
+      ui.ctx.drawImage(this.hudStrip, 0, iy - 2 * u);
+      this.hudIconBottom = this.hudStripBottom;
+    } else this.hudIconBottom = this.drawHudIcons(ui, b, iy, wrap, isz);
 
     if (b.coreWeapon && this.chestAlertT <= 0) {
       const text = '★ ' + b.coreProgressText();
@@ -887,6 +887,33 @@ export class BattleScene implements Scene {
     ui.text(hero.name, tx, cy + 70 * u, 26, C.gold, 'center', '#120d0c');
     g.restore();
     g.globalAlpha = 1;
+  }
+
+  private hudStrip: HTMLCanvasElement | null = null;
+  private hudStripKey = '';
+  private hudStripBottom = 0;
+  /** 左上兵器 / 兵法图标，返回图标区底边 */
+  private drawHudIcons(ui: UI, b: Battle, iy: number, wrap: number, isz: number): number {
+    const u = ui.u;
+    let ix = 18 * u;
+    let ry = iy;
+    b.weapons.forEach((w, i) => {
+      if (i && i % wrap === 0) { ix = 18 * u; ry += isz + 4 * u; }
+      ui.qualityFrame(ix, ry, isz, w.evo ? '#feae34' : '#5a6988');
+      ui.icon(w.evo ? WEAPONS[w.id].evoIcon : WEAPONS[w.id].icon, ix + isz / 2, ry + isz / 2, isz * 0.7);
+      if (!w.evo) ui.text(String(w.lv), ix + isz - 6 * u, ry + isz - 8 * u, 16, '#fff', 'center');
+      ix += isz + 4 * u;
+    });
+    ix = 18 * u;
+    let py2 = ry + isz + 4 * u;
+    b.passives.forEach((pz, i) => {
+      if (i && i % wrap === 0) { ix = 18 * u; py2 += isz * 0.8 + 4 * u; }
+      ui.qualityFrame(ix, py2, isz * 0.8, '#3a4466');
+      ui.icon(PASSIVES[pz.id].icon, ix + isz * 0.4, py2 + isz * 0.4, isz * 0.55);
+      ui.text(String(pz.lv), ix + isz * 0.8 - 5 * u, py2 + isz * 0.8 - 4 * u, 14, '#fff', 'center');
+      ix += isz * 0.8 + 4 * u;
+    });
+    return b.passives.length ? py2 + isz * 0.8 + 8 * u : ry + isz + 8 * u;
   }
 
   private ultBtn: { x: number; y: number; r: number } | null = null;

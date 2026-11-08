@@ -387,6 +387,8 @@ export function updateTianji(b: Battle, dt: number) {
   }
   // 斩将令：召来的敌将被别的方式清掉就作废
   if (st.bounty && st.bounty.dead && !b.won) st.bounty = null;
+  // 地上躺了 5 秒以上的金币自动飞向剑客（后期掉得多，堆一地既卡又要满地跑）
+  for (const k of b.pickups) if (k.kind === 'coin' && !k.pulled && k.t > 5) k.pulled = true;
   // 树：保持视野附近有几棵
   st.treeT -= dt;
   if (st.treeT <= 0) {

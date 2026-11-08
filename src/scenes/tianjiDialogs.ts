@@ -233,13 +233,20 @@ export class TianjiDrawDialog implements Dialog {
     if (r < 0.35) return;
     const opts = this.res.options;
     if (opts && this.chosen === null) {
-      const pickOpt = (o: typeof opts[number]) => { const out = o.act(); this.chosen = out || o.label; playSfx('levelup'); };
+      // 选完直接关掉，结果飘字显示在剑客身边（2026-11-08 用户：选了就是得到了，不用再弹一次）
+      const pickOpt = (o: typeof opts[number]) => {
+        const out = o.act();
+        playSfx('levelup');
+        this.scene.floatLines([{ text: `【${T.name}】${this.res.title}`, color: T.color }, { text: (out || o.label).slice(0, 13), color: '#fff4d6' }]);
+        this.closed = true;
+      };
       if (opts.length <= 2) {
         const bw = 270 * u;
         opts.forEach((o, i) => {
           const bx = cx + (i === 0 ? -bw - 12 * u : 12 * u);
           if (ui.button('tj_opt_' + i, bx, by, bw, bh, o.label, i === 0 ? C.btnRed : C.btnGray, { size: 32, sub: o.sub })) pickOpt(o);
         });
+        if (this.closed) return false;
       } else {
         // 三个以上（兵器任选其一）：竖排，每项带兵器图标
         const bw = cw, oh = 84 * u;
@@ -247,6 +254,7 @@ export class TianjiDrawDialog implements Dialog {
           const oy2 = by - 16 * u + i * (oh + 10 * u);
           if (ui.button('tj_opt_' + i, cx - bw / 2, oy2, bw, oh, o.label, o.icon ? C.btnGold : C.btnGray, { size: 28, sub: o.sub, icon: o.icon })) pickOpt(o);
         });
+        if (this.closed) return false;
       }
       return;
     }

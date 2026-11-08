@@ -46,8 +46,10 @@ function updateEndless(b: Battle, dt: number) {
     let alive = 0;
     for (const e of b.enemies) if (!e.dead && !e.boss && !e.fixedDir) alive++;
     const need = density - alive;
-    if (need > 0 && b.enemies.length < MAX_ENEMIES) {
-      const n = Math.min(refill(need, density), MAX_ENEMIES - b.enemies.length);
+    // 天机签后期兵器多、特效多，同屏敌人封顶 300（其他模式 460），手机上不至于掉帧
+    const cap = b.tj ? 300 : MAX_ENEMIES;
+    if (need > 0 && b.enemies.length < cap) {
+      const n = Math.min(refill(need, density), cap - b.enemies.length);
       for (let i = 0; i < n; i++) { const [x, y] = b.spawnPoint(); b.spawnEnemy(weighted(pool, (x2) => x2[1])[0], x, y); }
     }
   }

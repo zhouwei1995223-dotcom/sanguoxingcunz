@@ -767,6 +767,12 @@ export class Battle {
     this.updateShots(dt);
     this.updatePickups(dt);
     this.updateBreakables(dt);
+    // 特效超预算：丢掉最早的（纯画面，不影响伤害结算）；伤害数字的在场计数一并扣掉
+    if (this.fx.length > this.fxCap) {
+      const drop = this.fx.length - this.fxCap;
+      for (let i = 0; i < drop; i++) if (this.fx[i].kind === 'num') this.numAlive = Math.max(0, this.numAlive - 1);
+      this.fx.splice(0, drop);
+    }
     this.updateJiedao();
     this.updateFx(dt, rawDt);
 
@@ -1406,7 +1412,7 @@ export class Battle {
   }
 
   dropGem(x: number, y: number, value: number) {
-    if (this.gemCount > 150) {
+    if (this.gemCount > this.gemCap) {
       // 宝石过多：合并到一颗大宝石里，避免卡顿
       if (!this.overflowGem || !this.pickups.includes(this.overflowGem)) {
         this.overflowGem = this.dropPickup('gem', x, y, 0);
@@ -2214,7 +2220,7 @@ export class Battle {
 
   /** 大招特效：一圈向外飞散的发光粒子（特效太多时不再加） */
   burst(x: number, y: number, n: number, colors: string[], speed = 80, life = 0.6, g = 0) {
-    if (this.fx.length > 420) return;
+    if (this.fx.length > this.fxCap) return;
     for (let i = 0; i < n; i++) {
       const a = rand(TAU), s = speed * rand(0.35, 1);
       this.fx.push({ kind: 'particle', x, y, t: 0, dur: life * rand(0.6, 1), vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.8, color: colors[i % colors.length], r: rand(1.5, 3.5), g, real: true });
@@ -2245,8 +2251,13 @@ export class Battle {
 
   // —— 特效 ——
   private numAlive = 0;
+  /** 特效 / 伤害数字预算（天机签兵器不限数量，后期特效太多会掉帧，入局时调低） */
+  fxCap = 420;
+  numCap = 30;
+  /** 地上经验宝石超过这个数就合并成一颗大的（天机签调低） */
+  gemCap = 150;
   addNum(x: number, y: number, v: number, color: 'w' | 'y' | 'r' | 'g', big = false) {
-    if (this.fx.length > 400 || (this.numAlive >= 30 && !big)) return;
+    if (this.fx.length > Math.min(400, this.fxCap) || (this.numAlive >= this.numCap && !big)) return;
     this.numAlive++;
     this.fx.push({ kind: 'num', x, y, t: 0, dur: 0.6, text: String(v), color, big });
   }

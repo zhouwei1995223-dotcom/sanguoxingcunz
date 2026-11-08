@@ -66,17 +66,16 @@ export default async function ({ page, wait, shot }) {
   // 神兵天降：三选一
   assert.ok(await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'tj_opt_2')), 'divine offers 3 choices');
   await click('tj_opt_0');
-  await click('tj_ok');
   await force('heroweapon', 'tj-sign-swap');
   const hasOpt = await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'tj_opt_0'));
   assert.ok(hasOpt, 'exclusive swap asks the player');
   await click('tj_opt_0'); await wait(500); await shot('tj-sign-swap-done');
-  await click('tj_ok');
+  assert.ok(await page.evaluate(() => !window.__game.dialogs.length), 'choice closes right away');
   const s2 = await S();
   const excl = s2.weapons.filter((w) => /^(spear|blade|snake|fan|halberd|bow|lance|chakram|ji|meteor)/.test(w));
   assert.equal(excl.length, 1, 'only one exclusive weapon: ' + s2.weapons.join(','));
   await force('gamble', 'tj-sign-gamble');
-  await click('tj_opt_0'); await wait(500); await shot('tj-sign-gamble-done'); await click('tj_ok');
+  await click('tj_opt_0'); await wait(500); await shot('tj-sign-gamble-done');
   await force('starlord', 'tj-sign-borrow'); await click('tj_ok');
   await wait(400); await shot('tj-borrow-cutin');
   await wait(3000);
@@ -135,7 +134,7 @@ export default async function ({ page, wait, shot }) {
   await click('tj_draw'); await wait(200);
   assert.ok(await page.evaluate(() => window.__game.dialogs.some((d) => d.constructor.name === 'TianjiDrawDialog')), 'choice sign still asks');
   await shot('tj-skip-choice');
-  await click('tj_opt_1'); await click('tj_ok');
+  await click('tj_opt_1');
   await click('tj_skipanim');
 
   // 天命之主：8:30 登场，血量无限，伤害累计

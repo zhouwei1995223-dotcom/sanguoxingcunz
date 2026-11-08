@@ -201,15 +201,14 @@ export class WorldRenderer {
         g.fillStyle = '#5a6988';
         this.ellipse(f.x, f.y, f.r, f.r * 0.7);
         g.globalAlpha = a;
-        const n = Math.max(5, Math.round(f.r / 2.5));
+        // 蒺藜钉：数量减半、每个两笔（原来三笔），进化后大片蒺藜每帧少画约四分之三的小方块
+        const n = Math.max(4, Math.round(f.r / 5));
+        g.fillStyle = '#181425';
         for (let i = 0; i < n; i++) {
           const ang = (i / n) * TAU + hash2(i, 3, f.x | 0);
           const rr = f.r * (0.15 + 0.8 * hash2(i, 5, f.y | 0));
           const sx = Math.round(f.x + Math.cos(ang) * rr - this.camX), sy = Math.round(f.y + Math.sin(ang) * rr * 0.7 - this.camY);
-          g.fillStyle = '#181425';
           g.fillRect(sx - 1, sy, 3, 1); g.fillRect(sx, sy - 1, 1, 3);
-          g.fillStyle = '#c0cbdc';
-          g.fillRect(sx, sy, 1, 1);
         }
         g.globalAlpha = 1;
         continue;
