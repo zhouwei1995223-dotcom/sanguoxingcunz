@@ -1,6 +1,8 @@
 import { game, Scene } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
+import { cachedLayer } from '../ui/layerCache';
+import { drawXuanTexture } from '../ui/xuanPaper';
 import { HomeBackground } from './homeBg';
 import { HomeCamp } from './homeCamp';
 import { canPublish, refreshPublishSupport } from '../platform/xhsPublish';
@@ -124,38 +126,41 @@ export class HomeScene implements Scene {
 
     // 新版水墨山河宣纸内页底纹：整张温润宣纸长卷 + 远山叠嶂淡墨剪影
     ui.markPaper(0, 0, ui.W, ui.H);
-    const bgGrad = g.createLinearGradient(0, 0, 0, ui.H);
-    bgGrad.addColorStop(0, '#f0e7d5');
-    bgGrad.addColorStop(0.5, '#e3d5bb');
-    bgGrad.addColorStop(1, '#d2c0a0');
-    g.fillStyle = bgGrad;
-    g.fillRect(0, 0, ui.W, ui.H);
-    ui.paperTexture(0, 0, ui.W, ui.H, { alpha: 0.96, patina: true, patinaStrength: 1.2, stains: true });
-    // 宣纸横丝纹理
-    g.fillStyle = 'rgba(92,72,50,0.032)';
-    for (let y = 0; y < ui.H; y += Math.max(4, Math.round(12 * ui.u))) {
-      g.fillRect(0, y, ui.W, Math.max(1, Math.round(ui.u)));
-    }
-    // 顶部水墨远山淡影
-    g.fillStyle = 'rgba(60,52,44,0.08)';
-    g.beginPath();
-    g.moveTo(0, 360 * ui.u);
-    g.lineTo(0, 220 * ui.u);
-    g.quadraticCurveTo(ui.W * 0.28, 150 * ui.u, ui.W * 0.55, 235 * ui.u);
-    g.quadraticCurveTo(ui.W * 0.82, 165 * ui.u, ui.W, 215 * ui.u);
-    g.lineTo(ui.W, 360 * ui.u);
-    g.closePath();
-    g.fill();
-    // 底部远山叠嶂水墨剪影
-    g.fillStyle = 'rgba(54,46,38,0.09)';
-    g.beginPath();
-    g.moveTo(0, ui.H);
-    g.lineTo(0, ui.H - 280 * ui.u);
-    g.quadraticCurveTo(ui.W * 0.25, ui.H - 350 * ui.u, ui.W * 0.52, ui.H - 260 * ui.u);
-    g.quadraticCurveTo(ui.W * 0.78, ui.H - 340 * ui.u, ui.W, ui.H - 250 * ui.u);
-    g.lineTo(ui.W, ui.H);
-    g.closePath();
-    g.fill();
+    const bg = cachedLayer('home_plain', `${ui.u}`, ui.W, ui.H, (g) => {
+      const bgGrad = g.createLinearGradient(0, 0, 0, ui.H);
+      bgGrad.addColorStop(0, '#f0e7d5');
+      bgGrad.addColorStop(0.5, '#e3d5bb');
+      bgGrad.addColorStop(1, '#d2c0a0');
+      g.fillStyle = bgGrad;
+      g.fillRect(0, 0, ui.W, ui.H);
+      drawXuanTexture(g, 0, 0, ui.W, ui.H, ui.u, { alpha: 0.96, patina: true, patinaStrength: 1.2, stains: true });
+      // 宣纸横丝纹理
+      g.fillStyle = 'rgba(92,72,50,0.032)';
+      for (let y = 0; y < ui.H; y += Math.max(4, Math.round(12 * ui.u))) {
+        g.fillRect(0, y, ui.W, Math.max(1, Math.round(ui.u)));
+      }
+      // 顶部水墨远山淡影
+      g.fillStyle = 'rgba(60,52,44,0.08)';
+      g.beginPath();
+      g.moveTo(0, 360 * ui.u);
+      g.lineTo(0, 220 * ui.u);
+      g.quadraticCurveTo(ui.W * 0.28, 150 * ui.u, ui.W * 0.55, 235 * ui.u);
+      g.quadraticCurveTo(ui.W * 0.82, 165 * ui.u, ui.W, 215 * ui.u);
+      g.lineTo(ui.W, 360 * ui.u);
+      g.closePath();
+      g.fill();
+      // 底部远山叠嶂水墨剪影
+      g.fillStyle = 'rgba(54,46,38,0.09)';
+      g.beginPath();
+      g.moveTo(0, ui.H);
+      g.lineTo(0, ui.H - 280 * ui.u);
+      g.quadraticCurveTo(ui.W * 0.25, ui.H - 350 * ui.u, ui.W * 0.52, ui.H - 260 * ui.u);
+      g.quadraticCurveTo(ui.W * 0.78, ui.H - 340 * ui.u, ui.W, ui.H - 250 * ui.u);
+      g.lineTo(ui.W, ui.H);
+      g.closePath();
+      g.fill();
+    });
+    g.drawImage(bg, 0, 0);
   }
 
   /** 进入主城时自动弹出：签到 */

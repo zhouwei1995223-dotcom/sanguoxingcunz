@@ -51,7 +51,7 @@ function writeShells() {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;font-family:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif}</style>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;font-family:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif}</style>
 </head><body><script src="game.js"></script></body></html>
 `);
   copyDir('assets', 'dist/web/assets');
@@ -109,7 +109,7 @@ function writeShells() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>长坂单骑传</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   </style>
 </head>
 <body>

@@ -20,8 +20,9 @@ const SH = Math.round(LOGIC_H * SHEET_K);
 
 let sheet: HTMLCanvasElement | null = null;
 let grainTile: HTMLCanvasElement | null = null;
-let grainPattern: CanvasPattern | null = null;
-let grainCtx: CanvasRenderingContext2D | null = null;
+const grainPatterns = new WeakMap<CanvasRenderingContext2D, CanvasPattern | null>();
+/** 包浆渐变条（上 / 下 / 左 / 右四个方向，色 → 透明，alpha 1，绘制时用 globalAlpha 调浓度） */
+let patinaStrips: HTMLCanvasElement[] | null = null;
 
 function mulberry32(seed: number) {
   let a = seed | 0;
@@ -139,14 +140,47 @@ function getGrain(ctx: CanvasRenderingContext2D): CanvasPattern | null {
     g.putImageData(img, 0, 0);
     grainTile = c;
   }
-  if (grainPattern && grainCtx === ctx) return grainPattern;
-  try {
-    grainPattern = ctx.createPattern(grainTile, 'repeat');
-    grainCtx = ctx;
-  } catch {
-    grainPattern = null;
-  }
-  return grainPattern;
+  if (grainPatterns.has(ctx)) return grainPatterns.get(ctx)!;
+  let p: CanvasPattern | null = null;
+  try { p = ctx.createPattern(grainTile, 'repeat'); } catch { p = null; }
+  grainPatterns.set(ctx, p);
+  return p;
+}
+
+function getPatinaStrips(): HTMLCanvasElement[] {
+  if (patinaStrips) return patinaStrips;
+  const N = 64;
+  const mk = (vertical: boolean, flip: boolean) => {
+    const c = getPlatform().createCanvas(vertical ? 1 : N, vertical ? N : 1);
+    const g = c.getContext('2d')!;
+    const gr = vertical ? g.createLinearGradient(0, flip ? N : 0, 0, flip ? 0 : N) : g.createLinearGradient(flip ? N : 0, 0, flip ? 0 : N, 0);
+    gr.addColorStop(0, 'rgba(120,88,50,1)');
+    gr.addColorStop(1, 'rgba(120,88,50,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, c.width, c.height);
+    return c;
+  };
+  patinaStrips = [mk(true, false), mk(true, true), mk(false, false), mk(false, true)];
+  return patinaStrips;
+}
+
+/** 宣纸大页（按 u 放大到屏幕像素）+ 微颗粒，合成一张；以前每块面板每帧都要缩放贴大页再铺一遍颗粒。
+ *  颗粒透明度不到 0.1，先合成再整体乘透明度与逐层绘制几乎没有差别。 */
+const combos = new Map<number, HTMLCanvasElement>();
+function ensureCombo(u: number): HTMLCanvasElement {
+  const hit = combos.get(u);
+  if (hit) return hit;
+  // 大页覆盖 800×1800 逻辑像素；再往下多留一截只有颗粒（超长屏），与原来逐层绘制时一致
+  const W = Math.ceil(LOGIC_W * u), H = Math.ceil(LOGIC_H * 1.15 * u);
+  const c = getPlatform().createCanvas(W, H);
+  const g = c.getContext('2d')!;
+  g.imageSmoothingEnabled = true;
+  g.drawImage(ensureSheet(), 0, 0, SW, SH, 0, 0, LOGIC_W * u, LOGIC_H * u);
+  const gp = getGrain(g);
+  if (gp) { g.fillStyle = gp; g.fillRect(0, 0, W, H); }
+  if (combos.size >= 2) combos.clear();
+  combos.set(u, c);
+  return c;
 }
 
 export interface XuanTextureOpts {
@@ -176,52 +210,28 @@ export function drawXuanTexture(
   const alpha = Math.min(1, opts.alpha ?? 1);
   const patina = opts.patina ?? true;
   const pScale = opts.patinaStrength ?? 1;
-  const tex = ensureSheet();
+  // 不需要裁剪：贴图、颗粒、包浆都严格落在 (x,y,w,h) 内。只保存 / 还原透明度和填充。
+  const prevAlpha = ctx.globalAlpha, prevFill = ctx.fillStyle;
+  ctx.globalAlpha = prevAlpha * alpha;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.globalAlpha = alpha;
-
-  // 1. 从整张宣纸大页上按屏幕位置裁取
-  let sx = (x / u) * SHEET_K, sy = (y / u) * SHEET_K;
-  let sw = (w / u) * SHEET_K, sh = (h / u) * SHEET_K;
-  let dx = x, dy = y, dw = w, dh = h;
-  const pxPerTex = u / SHEET_K;
-  if (sx < 0) { dx -= sx * pxPerTex; dw += sx * pxPerTex; sw += sx; sx = 0; }
-  if (sy < 0) { dy -= sy * pxPerTex; dh += sy * pxPerTex; sh += sy; sy = 0; }
-  if (sx + sw > SW) { const cut = sx + sw - SW; sw -= cut; dw -= cut * pxPerTex; }
-  if (sy + sh > SH) { const cut = sy + sh - SH; sh -= cut; dh -= cut * pxPerTex; }
-  if (sw > 1 && sh > 1 && dw > 1 && dh > 1) ctx.drawImage(tex, sx, sy, sw, sh, dx, dy, dw, dh);
-
-  // 2. 微颗粒
-  const gp = getGrain(ctx);
-  if (gp) {
-    ctx.fillStyle = gp;
-    ctx.fillRect(x, y, w, h);
-  }
+  // 1+2. 宣纸大页与微颗粒已预先合成到屏幕分辨率的画布上，按坐标 1:1 裁取（一次贴图，不缩放）
+  const tex = ensureCombo(u);
+  const sx = Math.max(0, x), sy = Math.max(0, y);
+  const sw = Math.min(x + w, tex.width) - sx, sh = Math.min(y + h, tex.height) - sy;
+  if (sw > 1 && sh > 1) ctx.drawImage(tex, sx, sy, sw, sh, sx, sy, sw, sh);
 
   // 3. 极淡的边缘包浆（仅轻微收边）
   if (patina && w >= 60 * u && h >= 40 * u) {
-    ctx.globalAlpha = 1;
     const edge = Math.min(24 * u, Math.min(w, h) * 0.18);
-    const a = (0.055 * pScale * alpha).toFixed(3);
-    const col = `rgba(120,88,50,${a})`, clear = 'rgba(120,88,50,0)';
-    const sides: [number, number, number, number, number, number, number, number][] = [
-      [x, y, x, y + edge, x, y, w, edge],
-      [x, y + h, x, y + h - edge, x, y + h - edge, w, edge],
-      [x, y, x + edge, y, x, y, edge, h],
-      [x + w, y, x + w - edge, y, x + w - edge, y, edge, h],
-    ];
-    for (const [x0, y0, x1, y1, rx, ry, rw, rh] of sides) {
-      const gr = ctx.createLinearGradient(x0, y0, x1, y1);
-      gr.addColorStop(0, col);
-      gr.addColorStop(1, clear);
-      ctx.fillStyle = gr;
-      ctx.fillRect(rx, ry, rw, rh);
-    }
+    // 预渲染的渐变条拉伸贴图，代替每次新建 4 个线性渐变（手机上每帧几十次很费）
+    const [top, bottom, left, right] = getPatinaStrips();
+    ctx.globalAlpha = prevAlpha * Math.min(1, 0.055 * pScale * alpha);
+    ctx.drawImage(top, x, y, w, edge);
+    ctx.drawImage(bottom, x, y + h - edge, w, edge);
+    ctx.drawImage(left, x, y, edge, h);
+    ctx.drawImage(right, x + w - edge, y, edge, h);
   }
 
-  ctx.restore();
+  ctx.globalAlpha = prevAlpha;
+  ctx.fillStyle = prevFill;
 }

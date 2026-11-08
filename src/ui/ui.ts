@@ -4,6 +4,7 @@ import type { TouchKind, TouchPoint } from '../platform/types';
 import { playSfx } from '../audio/sound';
 import { NEW_UI } from '../data/platformConfig';
 import { drawXuanTexture, XuanTextureOpts } from './xuanPaper';
+import { TextCache } from './textCache';
 
 // 立即模式 UI：每帧重新绘制并登记可点击区域；点击判定使用上一帧的区域表，天然支持弹窗遮挡。
 
@@ -63,6 +64,7 @@ export class UI {
   W: number;
   H: number;
   u: number; // 1 设计单位对应的设备像素（设计宽度 750）
+  textCache = new TextCache();
   safeTop: number;
   safeBottom: number;
 
@@ -134,7 +136,10 @@ export class UI {
           const s = this.scrolls[this.activeScroll];
           if (s) {
             const dy = p.y - this.lastMoveY;
-            s.offset = Math.max(-40 * this.u, Math.min(s.max + 40 * this.u, s.offset - dy));
+            // 越过边界后阻力加倍（只跟手一半），最多拉出 40 单位，不会拉出大片空白
+            let next = s.offset - dy;
+            if (next < 0 || next > s.max) next = s.offset - dy * 0.4;
+            s.offset = Math.max(-40 * this.u, Math.min(s.max + 40 * this.u, next));
             const dt = Math.max(0.001, this.time - this.lastMoveT);
             s.vel = -dy / dt;
             this.pressedId = null;
@@ -193,6 +198,12 @@ export class UI {
         s.offset += s.vel * dt;
         s.vel *= Math.pow(0.04, dt);
       } else s.vel = 0;
+      // 惯性滑到边界就停住：最多越界 24 单位再弹回（原来快速一划会冲出很远，露出大片空白）
+      const over = 24 * this.u;
+      if (s.offset < 0 || s.offset > s.max) {
+        if (s.offset < 0 && s.vel < 0 || s.offset > s.max && s.vel > 0) s.vel = 0;
+        s.offset = Math.max(-over, Math.min(s.max + over, s.offset));
+      }
       if (s.offset < 0) { s.offset += (0 - s.offset) * Math.min(1, dt * 12); if (s.offset > -0.5) s.offset = 0; }
       if (s.offset > s.max) { s.offset += (s.max - s.offset) * Math.min(1, dt * 12); if (s.offset - s.max < 0.5) s.offset = s.max; }
     }
@@ -334,27 +345,32 @@ export class UI {
     ctx.textBaseline = 'middle';
     const cLow = color.toLowerCase();
     const onPaper = this.isOnPaper(x, y);
+    const font = this.font(size, bold), px = Math.round(size * this.u);
     if (onPaper && cLow !== '#fbf4e4' && cLow !== '#f5ead4') {
       // 战斗里保留文字色相（金=进化、绿=推荐……），只压深成墨色调；其他场景按水墨映射表换色。
       const inkCol = this.preserveTextColors ? this.deepenInk(color) : this.mapInkColor(color);
-      if (stroke) {
-        // 水墨字在宣纸上统一衬一层淡淡的宣纸暖白光晕，即便跨过深色乌丝栏或山水印记也清晰如古籍刻本
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = Math.max(2, size * this.u * 0.14);
-        ctx.strokeStyle = 'rgba(246,238,222,0.85)';
-        ctx.strokeText(str, x, y);
-      }
-      ctx.fillStyle = inkCol;
-      ctx.fillText(str, x, y);
+      // 水墨字在宣纸上统一衬一层淡淡的宣纸暖白光晕，即便跨过深色乌丝栏或山水印记也清晰如古籍刻本
+      this.drawText(str, x, y, font, px, align, inkCol, stroke ? 'rgba(246,238,222,0.85)' : null, Math.max(2, size * this.u * 0.14));
       return;
     }
+    this.drawText(str, x, y, font, px, align, color, stroke, Math.max(2, size * this.u * 0.18));
+  }
+
+  /** 先走文字缓存（贴图）；画布正在缩放（弹窗动画等）或缓存停用时直接绘制。 */
+  private drawText(str: string, x: number, y: number, font: string, px: number, align: CanvasTextAlign, fill: string, stroke: string | null, lineWidth: number) {
+    const ctx = this.ctx;
+    let plain = true;
+    // 小游戏画布不一定实现 getTransform（或返回空），取不到时按未缩放处理
+    try { const m = ctx.getTransform ? ctx.getTransform() : null; if (m && typeof m.a === 'number') plain = m.a === 1 && m.d === 1 && m.b === 0 && m.c === 0; } catch (e) {}
+    if (plain && this.textCache.draw(ctx, str, x, y, font, px, align, fill, stroke, lineWidth)) return;
+    ctx.font = font;
     if (stroke) {
       ctx.lineJoin = 'round';
-      ctx.lineWidth = Math.max(2, size * this.u * 0.18);
+      ctx.lineWidth = lineWidth;
       ctx.strokeStyle = stroke;
       ctx.strokeText(str, x, y);
     }
-    ctx.fillStyle = color;
+    ctx.fillStyle = fill;
     ctx.fillText(str, x, y);
   }
 

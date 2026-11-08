@@ -86,6 +86,8 @@ export function createWebPlatform(): Platform {
   canvas.addEventListener('touchmove', (e) => { e.preventDefault(); emit('move', touchList(e)); }, { passive: false });
   canvas.addEventListener('touchend', (e) => { e.preventDefault(); emit('end', touchList(e)); }, { passive: false });
   canvas.addEventListener('touchcancel', (e) => { e.preventDefault(); emit('end', touchList(e)); }, { passive: false });
+  // 画布外（两侧黑边）的手势也拦住，iOS 网页容器不会整页回弹露出空白
+  document.addEventListener('touchmove', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
   let mouseDown = false;
   canvas.addEventListener('mousedown', (e) => { mouseDown = true; emit('start', [toPoint(-1, e.clientX, e.clientY)]); });
   window.addEventListener('mousemove', (e) => { if (mouseDown) emit('move', [toPoint(-1, e.clientX, e.clientY)]); });

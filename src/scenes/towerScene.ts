@@ -6,7 +6,7 @@ import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { BOSSES } from '../data/enemies';
 import { IS_WEB, IS_WX } from '../data/platformConfig';
 import { getPlatform } from '../platform';
-import { sprite } from '../gfx/atlas';
+import { sprite, scaled } from '../gfx/atlas';
 import { drawMissile, drawImpact, drawThunder, drawLobShadow } from '../gfx/towerEffects';
 import { drawTerrain, drawSpawnFlag } from '../gfx/art/tower';
 import { Death, TowerFx, arcHeight } from '../gfx/towerFx';
@@ -112,16 +112,24 @@ export class CommanderDialog implements Dialog {
   closed = false;
 }
 
+/** 当前战场坐标到屏幕像素的缩放：手机画布（微信 / 小红书）拉伸贴图时不认 imageSmoothingEnabled，
+ *  小精灵直接放大会糊，所以先取整数倍预放大的像素图，只剩接近 1 的残余缩放。 */
+let fieldScale = 1;
+
 function stamp(g: CanvasRenderingContext2D, name: string, x: number, bottom: number, size: number, heightRatio = 1) {
   const s = sprite(name), k = size / Math.max(s.w, s.h);
   const w = Math.round(s.w * k), h = Math.round(s.h * k * heightRatio);
-  g.drawImage(s.canvas, s.x, s.y, s.w, s.h, Math.round(x - w / 2), Math.round(bottom - h), w, h);
+  const ss = fieldScale * k >= 1.5 ? scaled(s, fieldScale * k) : s;
+  g.drawImage(ss.canvas, ss.x, ss.y, ss.w, ss.h, Math.round(x - w / 2), Math.round(bottom - h), w, h);
 }
 
 export class TowerScene implements Scene {
   readonly paperTheme = true;
   readonly battle: TowerBattle;
   private terrain!: HTMLCanvasElement;
+  /** 按屏幕像素最近邻放大好的地图（布局尺寸变了才重做），每帧 1:1 贴图 */
+  private terrainHi: HTMLCanvasElement | null = null;
+  private terrainKey = '';
   private speed = 1;
   private paused = false;
   private busy = false;
@@ -147,11 +155,32 @@ export class TowerScene implements Scene {
   enter() {
     const b = this.battle;
     this.terrain = this.sdk.createCanvas(FIELD_W, FIELD_H);
+    this.terrainKey = '';
     const ctx = this.terrain.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
+    fieldScale = 1;
     drawTerrain(ctx, b.map, (name, x, y, size) => stamp(ctx, name, x, y, size));
     playBgm('bgm_battle');
     this.sdk.report('battle_start', { mode: 'tower', chapter: b.map.id, hero: b.hero, leaks: 0 });
+  }
+  /** 把 320×400 的地图最近邻放大到 w×h 屏幕像素，效果与网页版的像素风一致。 */
+  private hiTerrain(fw: number, fh: number): HTMLCanvasElement {
+    const w = Math.max(1, Math.round(fw)), h = Math.max(1, Math.round(fh)), key = w + 'x' + h;
+    if (this.terrainHi && this.terrainKey === key) return this.terrainHi;
+    const src = new Uint32Array(this.terrain.getContext('2d')!.getImageData(0, 0, FIELD_W, FIELD_H).data.buffer);
+    const c = this.terrainHi && this.terrainHi.width === w && this.terrainHi.height === h ? this.terrainHi : this.sdk.createCanvas(w, h);
+    const g = c.getContext('2d')!;
+    const img = g.createImageData(w, h), dst = new Uint32Array(img.data.buffer);
+    const xs = new Int32Array(w);
+    for (let i = 0; i < w; i++) xs[i] = Math.min(FIELD_W - 1, Math.floor((i + 0.5) * FIELD_W / w));
+    for (let j = 0; j < h; j++) {
+      const row = Math.min(FIELD_H - 1, Math.floor((j + 0.5) * FIELD_H / h)) * FIELD_W, o = j * w;
+      for (let i = 0; i < w; i++) dst[o + i] = src[row + xs[i]];
+    }
+    g.putImageData(img, 0, 0);
+    this.terrainHi = c;
+    this.terrainKey = key;
+    return c;
   }
   onHide() { if (!this.result && !this.busy) this.paused = true; }
   /** 取走战斗事件交给特效层，并统一播放音效。 */
@@ -293,13 +322,21 @@ export class TowerScene implements Scene {
     g.rect(x, fy, fw, fh);
     g.clip();
     g.imageSmoothingEnabled = false;
+    // 地图按屏幕像素预先放大，1:1 贴图（手机上直接拉伸 320×400 的底图会糊）。
     // 晃动时先垫一张不动的底图，露出的边缘看不出来。
-    if (shx || shy) g.drawImage(this.terrain, x, fy, fw, fh);
+    let hi: HTMLCanvasElement | null = null;
+    try { hi = this.hiTerrain(fw, fh); } catch (e) { hi = null; } // 读不了像素的环境退回直接拉伸
+    if (hi) {
+      if (shx || shy) g.drawImage(hi, Math.round(x), Math.round(fy));
+      g.drawImage(hi, Math.round(x + shx * scaleX), Math.round(fy + shy * scaleY));
+    } else if (shx || shy) g.drawImage(this.terrain, x, fy, fw, fh);
     g.translate(x + shx * scaleX, fy + shy * scaleY);
     g.scale(scaleX, scaleY);
-    g.drawImage(this.terrain, 0, 0);
+    if (!hi) g.drawImage(this.terrain, 0, 0);
+    fieldScale = scaleX;
     this.drawUnits(g, scaleX / scaleY);
     g.restore();
+    fieldScale = 1;
     g.save();
     g.beginPath(); g.rect(x, fy, fw, fh); g.clip();
     this.drawOverlay(ui, x + shx * scaleX, fy + shy * scaleY, scaleX, scaleY, fw, fh);
