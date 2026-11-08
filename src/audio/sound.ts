@@ -36,12 +36,16 @@ function audioCtx(): AudioContext | null {
 
 class SynthSound implements SoundHandle {
   private buf: AudioBuffer | null = null;
+  private data: Float32Array | null = null;
   private src: AudioBufferSourceNode | null = null;
   private vol = 1;
   constructor(private make: () => Float32Array, private loop: boolean) {}
+  /** 提前合成波形（加载页里分帧调用；不需要 AudioContext，也不需要用户点击） */
+  prepare() { if (!this.buf && !this.data) this.data = this.make(); }
   private ensure(c: AudioContext) {
     if (this.buf) return;
-    const d = this.make();
+    const d = this.data || this.make();
+    this.data = null;
     const b = c.createBuffer(1, d.length, SR);
     b.getChannelData(0).set(d);
     this.buf = b;
@@ -95,6 +99,21 @@ export function initAudio() {
     hidden = false;
     if (currentBgm && save.settings.music) bgms[currentBgm]?.play();
   });
+}
+
+/**
+ * 小红书（现场合成音频）：返回逐个合成的任务，加载页每帧做一个。原来第一次播放才合成，
+ * 进主界面时合成整首背景音乐、第一次点按钮时合成点击声，都会卡住画面。其他平台读 mp3，返回空。
+ */
+export function audioPrewarmTasks(firstBgm: Bgm): (() => void)[] {
+  if (!IS_H5) return [];
+  const tasks: (() => void)[] = [];
+  tasks.push(() => {
+    if (!bgms[firstBgm]) { bgms[firstBgm] = createBgm(firstBgm); bgms[firstBgm]!.setVolume(0.42); }
+    (bgms[firstBgm] as SynthSound).prepare();
+  });
+  for (const s of SFX_LIST) tasks.push(() => { const h = sounds[s]; if (h instanceof SynthSound) h.prepare(); });
+  return tasks;
 }
 
 export function playSfx(s: Sfx) {

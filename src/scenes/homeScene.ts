@@ -60,7 +60,11 @@ export class HomeScene implements Scene {
   private autoPopped = false;
   private lastPreparationStage = '';
 
+  /** 加载页已经预热过（enter + 画过一帧）：真正切进来时不再重复初始化 */
+  private entered = false;
   enter() {
+    if (this.entered) { playBgm('bgm_home'); return; }
+    this.entered = true;
     const p = getPlatform();
     this.bg = new HomeBackground(p.width, p.height);
     this.camp = new HomeCamp();

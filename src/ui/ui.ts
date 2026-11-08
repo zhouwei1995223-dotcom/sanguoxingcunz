@@ -209,6 +209,9 @@ export class UI {
     }
   }
 
+  /** 丢掉本帧登记的点击区域（加载页离屏预热主界面后调用，免得加载中误触到主界面按钮） */
+  discardRegions() { this.regions = []; this.taps = {}; this.paperZones = []; this.darkZones = []; this.layer = 0; }
+
   end() {
     this.prevRegions = this.regions;
     this.prevTaps = this.taps;
