@@ -92,6 +92,9 @@ export interface TianjiState {
   /** 时来运转：接下来几签必是上签以上 */
   luck: number;
   poisonT: number;
+  /** 开局的敌人强度倍率（之后随时间往上乘） */
+  baseHp: number;
+  baseDmg: number;
   /** 借将连发（群英会）：大招放完接着放下一个 */
   ultQueue: string[];
 }
@@ -117,7 +120,7 @@ export function createTianji(): TianjiState {
     tickets: START_TICKETS, freeT: FREE_EVERY, paidDraws: 0, adDraws: 0, bonusDraws: 0, history: [], sinceTop: 0, badStreak: 0,
     timed: [], perm: { atk: 0, hp: 0, speed: 0, crit: 0, area: 0, cd: 0, dmg: 0 },
     thief: null, rust: [], meteors: [], meteorT: 0, treeT: 0, falls: [], coinsSpent: 0, lastTier: -1,
-    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, luck: 0, poisonT: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
+    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, luck: 0, poisonT: 0, baseHp: 0, baseDmg: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
   };
 }
 
@@ -198,6 +201,7 @@ function spawnFinal(b: Battle) {
   const e = b.spawnBoss(id, b.player.x + Math.cos(a) * 170, b.player.y + Math.sin(a) * 130, true, 1);
   e.hp = e.maxHp = 1e13;
   e.minTime = 0; // 血量无限，不需要保底时长（否则伤害会被削）
+  toughenBoss(e);
   e.scale = 2.5;
   st.final = e;
   b.recalc();
@@ -256,9 +260,29 @@ export function tianjiFinalHit(b: Battle, dmg: number) {
   if (!b.ult && b.rageLock <= 0) b.rage = Math.min(100, b.rage + 0.35 * b.rageMul);
 }
 
+/**
+ * 敌人随时间逐渐变强（2026-11-08 用户：难度太低）：在无尽本身的成长之外再乘一层，
+ * 前期很缓、后期加速：3 分钟约 ×1.2，10 分钟血量约 ×2.7、伤害约 ×2.4；新刷出来的敌人才吃到。
+ */
+function rampEnemies(b: Battle) {
+  const st = b.tj!;
+  if (!st.baseHp) { st.baseHp = b.enemyHpMul; st.baseDmg = b.enemyDmgMul; }
+  const m = b.t / 60;
+  b.enemyHpMul = st.baseHp * (1 + 0.02 * m + 0.015 * m * m);
+  b.enemyDmgMul = st.baseDmg * (1 + 0.02 * m + 0.012 * m * m);
+}
+
+/** 天机签的敌将更灵活、更狠：一登场就是二阶段（出招更快、范围技后可能连招），移速 +20%、伤害 +15% */
+export function toughenBoss(e: Enemy) {
+  e.phase2 = true;
+  e.speed *= 1.2;
+  e.dmg *= 1.15;
+}
+
 export function updateTianji(b: Battle, dt: number) {
   const st = b.tj!;
   const p = b.player;
+  rampEnemies(b);
   if (!st.final && b.t >= FINAL_AT) spawnFinal(b);
   if (st.final) updateFinal(b, dt);
   if (st.ultQueue.length && !b.ult) {
@@ -823,6 +847,7 @@ const EVENTS: EventDef[] = [
     const a = rand(TAU);
     const id = pick(ids);
     const e = b.spawnBoss(id, b.player.x + Math.cos(a) * 160, b.player.y + Math.sin(a) * 120, false, tianjiBossScale(id, b.t, 1 + b.t / 150));
+    toughenBoss(e);
     b.tj!.bounty = e;
   } }) },
 ];

@@ -5,7 +5,7 @@ import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL, TIANJI } from '../data/chapters';
-import { createTianji, levelTickets, canDraw, finalScoreMul } from '../battle/tianji';
+import { createTianji, levelTickets, canDraw, finalScoreMul, tianjiStats } from '../battle/tianji';
 import { TianjiDrawDialog, TianjiAdDialog, drawTianjiHud, drawTianjiFog } from './tianjiDialogs';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
@@ -150,7 +150,12 @@ export class BattleScene implements Scene {
       this.battle.recalc();
     }
     this.battle.heroSpriteName = this.chapter.tianji ? 'hero_wuming_awk' : heroSpriteName(save.hero);
-    if (this.chapter.tianji) { const b = this.battle; b.tj = createTianji(); b.weaponSlots = b.passiveSlots = 999; b.weapon('sword')!.lv = 2; b.recalc(); }
+    if (this.chapter.tianji) {
+      const b = this.battle; b.tj = createTianji(); b.weaponSlots = b.passiveSlots = 999; b.weapon('sword')!.lv = 2; b.recalc();
+      // 局外养成越强，敌人也跟着强一些（装备军略仍有优势，但不会把这个模式打成碾压）
+      const ratio = combatPower(stats) / combatPower(tianjiStats());
+      if (ratio > 1) { b.enemyHpMul *= Math.pow(ratio, 0.75); b.enemyDmgMul *= Math.pow(ratio, 0.45); }
+    }
     // 抖音录屏：整局录制，精彩时刻打点剪辑
     getPlatform().recorderStart();
     if (save.stats.runs === 0) funnel('b1_start');
