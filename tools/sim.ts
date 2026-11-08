@@ -54,6 +54,17 @@ for (let r = 0; r < runs; r++) {
   if (chId > 0) b.powerRatio = Number(process.env.POWER) || 1;
   // 开局奇遇：QIYU=none 不选，QIYU=<id> 指定，默认随机三选一里随便拿一个
   const tierN = [0, 0, 0, 0, 0];
+  // 每分钟：伤害总量 / 命中次数 / 最大单次、新刷小怪的平均血量、被打一下掉多少（占生命上限）
+  const mins: { dmg: number; hits: number; max: number; hp: number; hpN: number; taken: number; takenN: number; bossHit: number }[] = [];
+  const row = () => mins[Math.floor(b.t / 60)] || (mins[Math.floor(b.t / 60)] = { dmg: 0, hits: 0, max: 0, hp: 0, hpN: 0, taken: 0, takenN: 0, bossHit: 0 });
+  if (TJ && process.env.STATS) {
+    const od = b.damage.bind(b);
+    (b as any).damage = (e: any, base: number, ...rest: any[]) => { const before = e.hp; const r = od(e, base, ...rest); const d = Math.max(0, before - e.hp); const m = row(); m.dmg += d; m.hits++; if (d > m.max) m.max = d; return r; };
+    const os = b.spawnEnemy.bind(b);
+    (b as any).spawnEnemy = (...a: any[]) => { const e = os(...a); if (!e.elite) { const m = row(); m.hp += e.maxHp; m.hpN++; } return e; };
+    const oh = b.hurtPlayer.bind(b);
+    (b as any).hurtPlayer = (d: number, c?: boolean) => { const hp0 = b.player.hp; oh(d, c); const m = row(); const lost = (hp0 - b.player.hp) / b.player.maxHp; if (lost > 0) { m.taken += lost; m.takenN++; } };
+  }
   let mbStart = -1; const bossSecs: number[] = [];
   let coinsEarned = 0;
   if (TJ) {
@@ -61,7 +72,7 @@ for (let r = 0; r < runs; r++) {
     b.fxCap = 200; b.numCap = 14; b.gemCap = 60; b.weaponSlots = b.passiveSlots = 999;
     // GEAR=2：模拟有装备军略的号（攻击、生命 ×2），并按游戏里的规则让敌人跟着变强（战力比 ^0.75 / ^0.45）
     const gear = Number(process.env.GEAR || 1);
-    if (gear > 1) { b.base.atk *= gear; b.base.hp *= gear; b.player.maxHp = b.player.hp = b.base.hp; b.recalc(); b.enemyHpMul *= Math.pow(gear, 0.75); b.enemyDmgMul *= Math.pow(gear, 0.45); }
+    if (gear > 1) { b.base.atk *= gear; b.base.hp *= gear; b.player.maxHp = b.player.hp = b.base.hp; b.recalc(); b.tj.power = Math.max(1, combatPower(b.base) / combatPower(tianjiStats())); }
   }
   if (process.env.QIYU !== 'none' && !TJ) b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
   const dt = 1 / 30;
@@ -171,6 +182,7 @@ for (let r = 0; r < runs; r++) {
   if (profile) console.log('CAL', JSON.stringify({ chapter: chId, diff: D.id, minutes: chapter.duration / 60, hero: b.hero.id, target, power: combatPower(profile), win: b.won, bossSec: b.finalBossSec, timeout: b.bossTimedOut }));
   if (TJ) console.log(`   中途敌将用时：${bossSecs.map((x) => x.toFixed(0) + 's').join(' / ') || '-'}  天命伤害${Math.round(b.tj!.finalDmg)}`);
   if (TJ) console.log(`   签：上上${tierN[0]} 上${tierN[1]} 中${tierN[2]} 下${tierN[3]} 怪${tierN[4]} 共${b.tj!.history.length}  金币收入${coinsEarned} 花费${b.tj!.coinsSpent} 复活${b.reviveCount}`);
+  if (TJ && process.env.STATS) mins.forEach((m, i) => m && console.log(`   ${i + 1}分: 每秒伤害 ${Math.round(m.dmg / 60)} 平均一击 ${Math.round(m.dmg / Math.max(1, m.hits))} 最大一击 ${Math.round(m.max)} 小怪平均血 ${Math.round(m.hp / Math.max(1, m.hpN))} 平均受击 ${(m.taken / Math.max(1, m.takenN) * 100).toFixed(1)}%血`));
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));
 }

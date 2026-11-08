@@ -154,9 +154,9 @@ export class BattleScene implements Scene {
       const b = this.battle; b.tj = createTianji(); b.weaponSlots = b.passiveSlots = 999; b.weapon('sword')!.lv = 2; b.recalc();
       // 兵器不限数量，后期特效会堆很多：特效 200、小伤害数字 14 封顶（流畅优先）
       b.fxCap = 200; b.numCap = 14; b.gemCap = 60;
-      // 局外养成越强，敌人也跟着强一些（装备军略仍有优势，但不会把这个模式打成碾压）
-      const ratio = combatPower(stats) / combatPower(tianjiStats());
-      if (ratio > 1) { b.enemyHpMul *= Math.pow(ratio, 0.75); b.enemyDmgMul *= Math.pow(ratio, 0.45); }
+      // 本局敌军强度：入局时按战力算一次，整局不变（敌人属性按 tianji.ts 的表，不吃动态难度）
+      b.tj.power = Math.max(1, combatPower(stats) / combatPower(tianjiStats()));
+      if (b.tj.power > 1.05) this.banners.push({ text: `本局敌军强度 ×${Math.pow(b.tj.power, 1.2).toFixed(1)} · 按战力定，整局不变`, color: '#ff9ab0', t: -2.4 });
     }
     // 抖音录屏：整局录制，精彩时刻打点剪辑
     getPlatform().recorderStart();

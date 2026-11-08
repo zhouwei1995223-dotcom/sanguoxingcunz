@@ -96,9 +96,8 @@ export interface TianjiState {
   /** 时来运转：接下来几签必是上签以上 */
   luck: number;
   poisonT: number;
-  /** 开局的敌人强度倍率（之后随时间往上乘） */
-  baseHp: number;
-  baseDmg: number;
+  /** 本局敌军强度：入局时按战力算一次（当前战力 ÷ 白板战力，至少 1），整局不变 */
+  power: number;
   /** 借将连发（群英会）：大招放完接着放下一个 */
   ultQueue: string[];
 }
@@ -124,7 +123,7 @@ export function createTianji(): TianjiState {
     tickets: START_TICKETS, freeT: FREE_EVERY, paidDraws: 0, adDraws: 0, bonusDraws: 0, history: [], sinceTop: 0, badStreak: 0,
     timed: [], perm: { atk: 0, hp: 0, speed: 0, crit: 0, area: 0, cd: 0, dmg: 0 },
     thief: null, rust: [], meteors: [], meteorT: 0, treeT: 0, falls: [], coinsSpent: 0, lastTier: -1,
-    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, summonT: 6, lateFast: false, luck: 0, poisonT: 0, baseHp: 0, baseDmg: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
+    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, summonT: 6, lateFast: false, luck: 0, poisonT: 0, power: 1, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
   };
 }
 
@@ -208,6 +207,7 @@ function spawnFinal(b: Battle) {
   toughenBoss(e);
   e.scale = 2.5;
   st.final = e;
+  tianjiEnemyStats(b, e, false); // 按天命之主的伤害倍数重算（血量保持无限）
   // 天命降临：场上普通小兵一扫而空（不掉落），之后只剩天命之主和它召来的精锐
   for (const o of b.enemies) if (!o.dead && !o.boss && !o.elite) { o.dead = true; b.fx.push({ kind: 'puff', x: o.x, y: o.y, t: 0, dur: 0.3 }); }
   b.fx.push({ kind: 'shock', x: e.x, y: e.y, t: 0, dur: 0.8, r: 320, w: 16, color: '#ff4f6a' });
@@ -282,28 +282,48 @@ export function tianjiFinalHit(b: Battle, dmg: number) {
 }
 
 /**
- * 敌人随时间逐渐变强（2026-11-08 用户：难度太低）：在无尽本身的成长之外再乘一层，
- * 前期很缓、后期加速：3 分钟约 ×1.2，10 分钟血量约 ×2.7、伤害约 ×2.4；新刷出来的敌人才吃到。
+ * 天机签敌人属性（2026-11-08 重做，用户：兵器不限后数值膨胀、不要动态血量）：
+ * 不再叠无尽成长 / 动态难度 / 人多加血，全部按「第几分钟」查表，整局固定可预期；
+ * 只在入局时按战力乘一次（血 ×战力比^1.2、伤 ×战力比^0.9；模拟里养成号后期伤害约是白板的战力比^1.6 倍）。
+ * REF_DPS：白板剑客每分钟大致的每秒伤害（模拟实测后取平滑值）；小怪血量约为它的 0.12 秒、中途敌将约 10 秒（实战要边躲边打，约半分钟到一分钟）。
+ * 伤害按参考生命的百分比定：小怪 6%→18%，敌将约 22%，天命之主约 30%。
  */
-function rampEnemies(b: Battle) {
-  const st = b.tj!;
-  if (!st.baseHp) { st.baseHp = b.enemyHpMul; st.baseDmg = b.enemyDmgMul; }
+const REF_DPS = [200, 400, 700, 1500, 3000, 5000, 7000, 9500, 12000, 15000, 18000];
+/** 白板剑客大致的生命（随升级、生命签上涨）：伤害按它的百分比定，避免敌将一下打掉一整管血 */
+const REF_HP = [180, 190, 205, 220, 240, 260, 280, 300, 320, 340, 360];
+const lerpTable = (tbl: number[], m: number) => { const i = Math.max(0, Math.min(tbl.length - 2, Math.floor(m))); const k = Math.max(0, Math.min(1, m - i)); return tbl[i] + (tbl[i + 1] - tbl[i]) * k; };
+export const refDps = (t: number) => lerpTable(REF_DPS, t / 60);
+const refHp = (t: number) => lerpTable(REF_HP, t / 60);
+/** 小怪一下打掉参考生命的比例：6% 起，每分钟 +1.2%（10 分钟 18%）；按兵种伤害再浮动 */
+const minionFrac = (t: number) => 0.06 + 0.012 * (t / 60);
+/** 敌将普通一击约 15%，天命之主约 20%（技能再乘 1.1~1.5，后期大招约三四成血） */
+const BOSS_FRAC = 0.15, FINAL_FRAC = 0.2;
+
+/** spawnEnemy / spawnBoss 末尾调用：按表重设血量和伤害（覆盖通用公式） */
+export function tianjiEnemyStats(b: Battle, e: Enemy, elite: boolean, hpMul = 1) {
+  const st = b.tj!, P = st.power;
+  const hpP = Math.pow(P, 1.2), dmgP = Math.pow(P, 0.9);
   const m = b.t / 60;
-  b.enemyHpMul = st.baseHp * (1 + 0.02 * m + 0.015 * m * m);
-  b.enemyDmgMul = st.baseDmg * (1 + 0.02 * m + 0.012 * m * m);
+  if (e.boss) {
+    if (e !== st.final) e.maxHp = e.hp = Math.round(10 * refDps(b.t) * hpP * hpMul);
+    e.dmg = refHp(b.t) * (e === st.final ? FINAL_FRAC : BOSS_FRAC) * (1 + 0.05 * m) * dmgP;
+    return;
+  }
+  const type = (e.def?.hp || 25) / 25;
+  const dmgType = Math.max(0.6, Math.min(2, (e.def?.dmg || 8) / 8));
+  e.maxHp = e.hp = Math.max(1, Math.round(0.12 * refDps(b.t) * hpP * type * (elite ? 6.5 : 1) * hpMul));
+  e.dmg = refHp(b.t) * minionFrac(b.t) * dmgType * dmgP * (elite ? 1.5 : 1);
 }
 
-/** 天机签的敌将更灵活、更狠：一登场就是二阶段（出招更快、范围技后可能连招），移速 +20%、伤害 ×3.45 */
+/** 天机签的敌将更灵活：一登场就是二阶段（出招更快、范围技后可能连招），移速 +20%（伤害按表，见 tianjiEnemyStats） */
 export function toughenBoss(e: Enemy) {
   e.phase2 = true;
   e.speed *= 1.2;
-  e.dmg *= 3.45; // 2026-11-08 用户：敌将攻击翻三倍（原来 ×1.15）
 }
 
 export function updateTianji(b: Battle, dt: number) {
   const st = b.tj!;
   const p = b.player;
-  rampEnemies(b);
   if (!st.final && b.t >= FINAL_AT) spawnFinal(b);
   if (!st.lateFast && b.t >= 300) { st.lateFast = true; b.recalc(); b.hooks.banner('敌军杀红了眼 · 移速提升', '#e43b44'); }
   if (st.final) updateFinal(b, dt);

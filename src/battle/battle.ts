@@ -1,4 +1,4 @@
-import { updateTianji, tianjiOnKill, tianjiRecalc, tianjiTreeHit, tianjiFinalHit, type TianjiState } from './tianji';
+import { updateTianji, tianjiOnKill, tianjiRecalc, tianjiTreeHit, tianjiFinalHit, tianjiEnemyStats, type TianjiState } from './tianji';
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
@@ -996,6 +996,7 @@ export class Battle {
     e.born = this.t;
     e.scale = opts.elite ? 2 : 1;
     if (opts.elite) e.r = d.radius * 1.8;
+    if (this.tj) tianjiEnemyStats(this, e, !!opts.elite, opts.hpMul || 1);
     this.addEnemy(e);
     return e;
   }
@@ -1025,6 +1026,7 @@ export class Battle {
     e.state = 'move';
     e.stateT = 2;
     e.bskills = this.chapter.tutorial ? d.skills.filter((s) => BASIC_BOSS_SKILLS.includes(s)) : d.skills.slice();
+    if (this.tj) tianjiEnemyStats(this, e, false);
     this.addEnemy(e);
     if (isFinal) this.finalBoss = e; else this.midBoss = e;
     this.hooks.bossAppear(d);

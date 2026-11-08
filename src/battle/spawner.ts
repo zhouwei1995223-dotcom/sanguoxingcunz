@@ -1,5 +1,5 @@
 import { updateDefenseSpawner } from './defense';
-import { tianjiBossScale, toughenBoss } from './tianji';
+import { toughenBoss } from './tianji';
 import { lerp, rand, weighted, TAU } from '../core/math';
 import { ENEMIES } from '../data/enemies';
 import { ChapterEvent, ENDLESS_POOLS } from '../data/chapters';
@@ -82,7 +82,7 @@ function updateEndless(b: Battle, dt: number) {
     // 首领血量随时间成长
     const endlessGrow = b.chapter.hpMul * (1 + b.chapter.growth * m + (b.chapter.duration >= 1e8 ? 0.22 : 0.05) * m * m) * (0.75 + m * 0.08);
     // 天机签：敌将随机，但血量按时间换算（tianjiBossScale），不会抽到高章节敌将就打不动
-    const boss = b.spawnBoss(id, x, y, false, b.tj ? tianjiBossScale(id, b.t, endlessGrow) : endlessGrow);
+    const boss = b.spawnBoss(id, x, y, false, endlessGrow); // 天机签的血量 / 伤害在 spawnBoss 里按表重设
     if (b.tj) toughenBoss(boss);
     if (late) {
       const id2 = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
