@@ -5,7 +5,7 @@ import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL, TIANJI } from '../data/chapters';
-import { createTianji, levelTickets, canDraw, finalScoreMul, tianjiStats } from '../battle/tianji';
+import { createTianji, levelTickets, canDraw, finalScoreMul } from '../battle/tianji';
 import { TianjiDrawDialog, TianjiAdDialog, drawTianjiHud, drawTianjiFog } from './tianjiDialogs';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
@@ -17,7 +17,7 @@ import { WEAPONS, PASSIVES, SKILLS_BY_ID, MAX_WEAPON_LV, passiveMax, weaponLink,
 import type { QiyuId } from '../data/qiyu';
 import { BossDef } from '../data/enemies';
 import { STRAT_BY_ID, TIER_COLORS } from '../data/strategies';
-import { computeStats, combatPower } from '../meta/ops';
+import { computeStats, combatPower, TIANJI_CARRY } from '../meta/ops';
 import { save, markDirty, flushSave, activePreparationFor } from '../meta/save';
 import { playBgm, playSfx, vibrate, Sfx } from '../audio/sound';
 import { C, UI } from '../ui/ui';
@@ -132,7 +132,7 @@ export class BattleScene implements Scene {
     resetSpawner();
     this.renderer = new WorldRenderer(p.width, p.height, this.chapter.theme);
     // 天机签：无名剑客。装备、套装、军略照常生效（2026-11-08 用户要求带入局外养成），技能池全开
-    const stats = this.chapter.tianji ? { ...computeStats('wuming'), cleared: 99 } : computeStats();
+    const stats = this.chapter.tianji ? { ...computeStats('wuming', TIANJI_CARRY), cleared: 99 } : computeStats();
     if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
     infoHero = this.battle.hero.id;
@@ -154,9 +154,7 @@ export class BattleScene implements Scene {
       const b = this.battle; b.tj = createTianji(); b.weaponSlots = b.passiveSlots = 999; b.weapon('sword')!.lv = 2; b.recalc();
       // 兵器不限数量，后期特效会堆很多：特效 200、小伤害数字 14 封顶（流畅优先）
       b.fxCap = 200; b.numCap = 14; b.gemCap = 60;
-      // 本局敌军强度：入局时按战力算一次，整局不变（敌人属性按 tianji.ts 的表，不吃动态难度）
-      b.tj.power = Math.max(1, combatPower(stats) / combatPower(tianjiStats()));
-      if (b.tj.power > 1.05) this.banners.push({ text: `本局敌军强度 ×${Math.pow(b.tj.power, 1.2).toFixed(1)} · 按战力定，整局不变`, color: '#ff9ab0', t: -2.4 });
+      // 敌人属性对所有人一样（tianji.ts 按分钟查表）；养成只按比例带入（TIANJI_CARRY），不再按战力调敌人
     }
     // 抖音录屏：整局录制，精彩时刻打点剪辑
     getPlatform().recorderStart();

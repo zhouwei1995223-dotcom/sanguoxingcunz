@@ -125,7 +125,7 @@ export default async function ({ page, wait, shot }) {
   await click('tj_skipanim');
   assert.equal(await page.evaluate(() => window.__saveMod.save.settings.tjSkipAnim), true);
   const h0 = await page.evaluate(() => window.__game.scene.battle.tj.history.length);
-  await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.tickets = 3; b.tj.force = 'destiny'; });
+  await page.evaluate(() => { const b = window.__game.scene.battle; window.__game.dialogs.length = 0; b.dead = false; b.player.maxHp = b.player.hp = 1e9; b.tj.tickets = 3; b.tj.force = 'destiny'; });
   await click('tj_draw');
   await wait(300); await shot('tj-skip-float');
   const sk = await page.evaluate(() => ({ dlg: window.__game.dialogs.length, n: window.__game.scene.battle.tj.history.length, atk: window.__game.scene.battle.tj.perm.atk }));

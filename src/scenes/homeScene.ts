@@ -773,7 +773,7 @@ export class HomeScene implements Scene {
     ui.text('生存十分钟 · 全凭签运', tx, y + 70 * u + row * 0.55, 29, '#2a1d14', 'left', null);
     ui.text('砍树打怪攒金币，摇签得兵器、借名将', tx, y + 70 * u + row * 1.55, 19, '#5c4d3e', 'left', null);
 
-    ui.text(st.bestDmg ? `天命伤害最佳 ${fmtNum(st.bestDmg)}` : st.runs ? `最久 ${fmtTime(st.best)} · 活满 ${st.wins} 次` : '8:30 天命之主登场 · 伤害上排行', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
+    ui.text(st.bestDmg ? `天命伤害最佳 ${fmtNum(st.bestDmg)} · 养成带入 装备10% 军略50%` : '养成带入：装备 10% · 军略 50%', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
     ui.text('每局都有奖励 · 活得越久、伤害越高越多', tx, y + 70 * u + row * 3.45, 19, '#a22633', 'left', null);
     if (ui.button('tj_rules', 30 * u, L.by, 150 * u, L.bh, '玩法', C.btnGray, { size: 27, sub: '签与概率' })) game.openDialog(new TianjiRulesDialog());
     if (ui.button('tj_rank', 190 * u, L.by, 150 * u, L.bh, '排行', C.btnBlue, { size: 27, sub: '天命伤害' })) game.openDialog(new RankDialog('tianji'));

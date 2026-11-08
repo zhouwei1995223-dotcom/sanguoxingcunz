@@ -72,7 +72,7 @@ for (let r = 0; r < runs; r++) {
     b.fxCap = 200; b.numCap = 14; b.gemCap = 60; b.weaponSlots = b.passiveSlots = 999;
     // GEAR=2：模拟有装备军略的号（攻击、生命 ×2），并按游戏里的规则让敌人跟着变强（战力比 ^0.75 / ^0.45）
     const gear = Number(process.env.GEAR || 1);
-    if (gear > 1) { b.base.atk *= gear; b.base.hp *= gear; b.player.maxHp = b.player.hp = b.base.hp; b.recalc(); b.tj.power = Math.max(1, combatPower(b.base) / combatPower(tianjiStats())); }
+    if (gear > 1) { b.base.atk *= gear; b.base.hp *= gear; b.player.maxHp = b.player.hp = b.base.hp; b.recalc(); }
   }
   if (process.env.QIYU !== 'none' && !TJ) b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
   const dt = 1 / 30;

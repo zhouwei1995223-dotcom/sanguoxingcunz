@@ -43,6 +43,9 @@ export function itemStats(it: EquipItem): StatBlock {
   return out;
 }
 
+/** 天机签：装备带入 10%（难打满、数值大），军略带入 50%（容易满、主要是百分比） */
+export const TIANJI_CARRY = { gear: 0.1, talent: 0.5 };
+
 /** 武将自身（等级 + 星级）的攻击与生命 */
 export function heroBase(id: string): { atk: number; hp: number } {
   const h = HERO_BY_ID[id];
@@ -52,17 +55,21 @@ export function heroBase(id: string): { atk: number; hp: number } {
   return { atk: Math.round((h.baseAtk + h.atkPerLv * (lv - 1)) * mul), hp: Math.round((h.baseHp + h.hpPerLv * (lv - 1)) * mul) };
 }
 
-export function computeStats(heroId = save.hero): HeroStats {
+/**
+ * carry：装备（含套装）/ 军略带入的比例（天机签用：装备 10%、军略 50%，见 TIANJI_CARRY）。
+ * 不传就是 100%（其他模式）。不屈复活、奇谋、金疮药等级照常全额。
+ */
+export function computeStats(heroId = save.hero, carry: { gear: number; talent: number } = { gear: 1, talent: 1 }): HeroStats {
   const hb = heroBase(heroId);
   const s: StatBlock = { atk: hb.atk, hp: hb.hp };
   for (const slot of SLOTS) {
     const it = getEquipped(slot);
-    if (it) addStats(s, itemStats(it));
+    if (it) addStats(s, itemStats(it), carry.gear);
   }
   // 套装加成
   const tids: string[] = [];
   for (const slot of SLOTS) { const it = getEquipped(slot); if (it) tids.push(it.tid); }
-  for (const st of setBonuses(tids).stats) addStats(s, st);
+  for (const st of setBonuses(tids).stats) addStats(s, st, carry.gear);
   // 皮肤加成
   if (skinOn(heroId)) addStats(s, { dmg: SKIN_DMG_BONUS });
   // 五星觉醒造型、巅峰等级（每 10 级对敌将伤害 +5%）
@@ -76,7 +83,7 @@ export function computeStats(heroId = save.hero): HeroStats {
     if (t.stat === 'revive') revive += lv * t.per;
     else if (t.stat === 'reroll') reroll += lv * t.per;
     else if (t.stat === 'potion') potion += lv * t.per;
-    else addStats(s, { [t.stat]: lv * t.per });
+    else addStats(s, { [t.stat]: lv * t.per }, carry.talent);
   }
   const full: HeroStats = {
     atk: 0, hp: 0, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0,

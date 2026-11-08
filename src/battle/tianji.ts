@@ -96,8 +96,6 @@ export interface TianjiState {
   /** 时来运转：接下来几签必是上签以上 */
   luck: number;
   poisonT: number;
-  /** 本局敌军强度：入局时按战力算一次（当前战力 ÷ 白板战力，至少 1），整局不变 */
-  power: number;
   /** 借将连发（群英会）：大招放完接着放下一个 */
   ultQueue: string[];
 }
@@ -123,7 +121,7 @@ export function createTianji(): TianjiState {
     tickets: START_TICKETS, freeT: FREE_EVERY, paidDraws: 0, adDraws: 0, bonusDraws: 0, history: [], sinceTop: 0, badStreak: 0,
     timed: [], perm: { atk: 0, hp: 0, speed: 0, crit: 0, area: 0, cd: 0, dmg: 0 },
     thief: null, rust: [], meteors: [], meteorT: 0, treeT: 0, falls: [], coinsSpent: 0, lastTier: -1,
-    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, summonT: 6, lateFast: false, luck: 0, poisonT: 0, power: 1, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
+    final: null, finalDmg: 0, finalT: 0, phase: 0, flaw: 0, nextFlaw: 10, gifted: false, summonT: 6, lateFast: false, luck: 0, poisonT: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
   };
 }
 
@@ -284,7 +282,7 @@ export function tianjiFinalHit(b: Battle, dmg: number) {
 /**
  * 天机签敌人属性（2026-11-08 重做，用户：兵器不限后数值膨胀、不要动态血量）：
  * 不再叠无尽成长 / 动态难度 / 人多加血，全部按「第几分钟」查表，整局固定可预期；
- * 只在入局时按战力乘一次（血 ×战力比^1.2、伤 ×战力比^0.9；模拟里养成号后期伤害约是白板的战力比^1.6 倍）。
+ * 局外养成按比例带入（装备 10%、军略 50%，见 ops.TIANJI_CARRY），敌人不再按战力调整。
  * REF_DPS：白板剑客每分钟大致的每秒伤害（模拟实测后取平滑值）；小怪血量约为它的 0.12 秒、中途敌将约 10 秒（实战要边躲边打，约半分钟到一分钟）。
  * 伤害按参考生命的百分比定：小怪 6%→18%，敌将约 22%，天命之主约 30%。
  */
@@ -300,9 +298,15 @@ const minionFrac = (t: number) => 0.06 + 0.012 * (t / 60);
 const BOSS_FRAC = 0.15, FINAL_FRAC = 0.2;
 
 /** spawnEnemy / spawnBoss 末尾调用：按表重设血量和伤害（覆盖通用公式） */
+/**
+ * 表是按「普通玩家」定的：装备史诗 30 级左右 + 一半军略，按 TIANJI_CARRY 带入后攻击约 ×2.2、生命约 ×2.8，
+ * 所以血量 ×3、伤害 ×2.5（相对白板实测的 REF_DPS / REF_HP）。所有人同一张表，不按战力调。
+ */
+const TABLE_HP_K = 3, TABLE_DMG_K = 2.5;
+
 export function tianjiEnemyStats(b: Battle, e: Enemy, elite: boolean, hpMul = 1) {
-  const st = b.tj!, P = st.power;
-  const hpP = Math.pow(P, 1.2), dmgP = Math.pow(P, 0.9);
+  const st = b.tj!;
+  const hpP = TABLE_HP_K, dmgP = TABLE_DMG_K;
   const m = b.t / 60;
   if (e.boss) {
     if (e !== st.final) e.maxHp = e.hp = Math.round(10 * refDps(b.t) * hpP * hpMul);
