@@ -937,7 +937,7 @@ export class ResultDialog implements Dialog {
         ui.text('×' + n, cx + 22 * u, y + sh * 0.6, 22, n ? '#fff' : '#7a6a5a', 'left');
       });
       y += 128 * u;
-      ui.text(`共 ${hist.length} 签 · ${verdict.text}${this.res.tianji && !this.res.tianji.rewarded ? ' · 今日奖励次数已用完' : this.res.tianji ? ` · 今日奖励还剩 ${this.res.tianji.left} 次` : ''}`, ui.W / 2, y, 24, verdict.color);
+      ui.text(`共 ${hist.length} 签 · ${verdict.text}`, ui.W / 2, y, 24, verdict.color);
       y += 42 * u;
     }
     const rows: [string, string][] = [['坚守时间', fmtTime(b.t)], ['击败敌军', fmtNum(b.kills)], ['武将等级', 'Lv.' + b.level], ['斩获敌将', String(b.bossKills)]];

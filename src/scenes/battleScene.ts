@@ -5,7 +5,7 @@ import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL, TIANJI } from '../data/chapters';
-import { createTianji, levelTickets, canDraw } from '../battle/tianji';
+import { createTianji, levelTickets, canDraw, finalScoreMul } from '../battle/tianji';
 import { TianjiDrawDialog, TianjiAdDialog, drawTianjiHud, drawTianjiFog } from './tianjiDialogs';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
@@ -578,6 +578,10 @@ export class BattleScene implements Scene {
         // 天命之主：显示累计伤害（排行榜分数），伤害数字跳动
         const pulse = 1 + Math.max(0, Math.sin(ui.time * 10)) * 0.04;
         ui.text(`天命伤害 ${fmtNum(Math.round(b.tj.finalDmg))}`, clockX, top + 112 * u, Math.round(28 * pulse), '#ff9ab0', 'center', '#1a0a12');
+        const mul = finalScoreMul(b.tj);
+        const phaseName = ['', '一劫 · 试锋', '二劫 · 怒涛', '三劫 · 天罚'][Math.max(1, b.tj.phase)];
+        // 劫数 / 计分倍率写在天命之主血条下面（上面是兵器图标）
+        ui.text(`${phaseName}${mul > 1 ? ` · 计分 ×${+mul.toFixed(1)}` : ''}${b.tj.flaw > 0 ? ' · 破绽！' : ''}`, clockX, top + (b.coreWeapon ? 287 : 250) * u + 50 * u, 22, b.tj.flaw > 0 ? '#fee761' : '#ffd0d0', 'center', '#1a0a12');
       } else ui.text(`天机签 · 已抽 ${b.tj.history.length} 签`, clockX, top + 108 * u, 20, '#ffd08a');
     } else if (this.weekly) {
       ui.text(fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 70 * u, 40, '#fff');

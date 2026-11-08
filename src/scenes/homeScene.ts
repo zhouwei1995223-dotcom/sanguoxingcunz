@@ -26,7 +26,7 @@ import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
 import { TianjiRulesDialog } from './tianjiDialogs';
-import { TIANJI_DAILY } from '../meta/run';
+import { TIANJI_STAMINA } from '../meta/run';
 import {
   XhsFollowDialog, SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, ChestBatchResultDialog, StaminaDialog, RankDialog,
   SidebarDialog, PreparationDialog, PrepReminderDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
@@ -608,7 +608,7 @@ export class HomeScene implements Scene {
           ui.text(label, mx + mw / 2 + 14 * u, my + mh / 2, 24, on ? '#fbf4e4' : '#2e241c', 'center', on ? (m === 'chapter' ? '#4a100b' : m === 'tianji' ? '#2a0e40' : '#102e19') : null);
         }
         if (m === 'defense' && !on && save.defense?.day !== today) ui.redDot(mx + mw - 8 * u, my + 6 * u);
-        if (m === 'tianji' && !on && (save.daily.tianjiRuns || 0) < TIANJI_DAILY) ui.redDot(mx + mw - 8 * u, my + 6 * u);
+        if (m === 'tianji' && !on && !save.daily.tianjiRuns) ui.redDot(mx + mw - 8 * u, my + 6 * u);
         if (ui.clicked('mode_' + m, mx, my, mw, mh)) { save.homeMode = m; markDirty(); }
       });
     }
@@ -772,13 +772,14 @@ export class HomeScene implements Scene {
     const row = (L.chH - 70 * u) / 4.2;
     ui.text('生存十分钟 · 全凭签运', tx, y + 70 * u + row * 0.55, 29, '#2a1d14', 'left', null);
     ui.text('砍树打怪攒金币，摇签得兵器、借名将', tx, y + 70 * u + row * 1.55, 19, '#5c4d3e', 'left', null);
-    const left = Math.max(0, TIANJI_DAILY - (save.daily.tianjiRuns || 0));
+
     ui.text(st.bestDmg ? `天命伤害最佳 ${fmtNum(st.bestDmg)}` : st.runs ? `最久 ${fmtTime(st.best)} · 活满 ${st.wins} 次` : '8:30 天命之主登场 · 伤害上排行', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
-    ui.text(left ? `今日奖励还剩 ${left}/${TIANJI_DAILY} 次` : '今日奖励已领完 · 仍可随便玩', tx, y + 70 * u + row * 3.45, 20, left ? '#a22633' : '#8a7c6c', 'left', null);
+    ui.text('每局都有奖励 · 活得越久、伤害越高越多', tx, y + 70 * u + row * 3.45, 19, '#a22633', 'left', null);
     if (ui.button('tj_rules', 30 * u, L.by, 150 * u, L.bh, '玩法', C.btnGray, { size: 27, sub: '签与概率' })) game.openDialog(new TianjiRulesDialog());
     if (ui.button('tj_rank', 190 * u, L.by, 150 * u, L.bh, '排行', C.btnBlue, { size: 27, sub: '天命伤害' })) game.openDialog(new RankDialog('tianji'));
     this.startRect = [350 * u, L.by, 370 * u, L.bh];
-    if (ui.button('tj_start', ...this.startRect, '入 局', C.btnRed, { size: 44, sub: '不耗体力' })) {
+    if (ui.button('tj_start', ...this.startRect, '入 局', C.btnRed, { size: 44, sub: `体力 ${TIANJI_STAMINA}` })) {
+      if (!spendStamina(TIANJI_STAMINA)) { game.openDialog(new StaminaDialog()); return; }
       if (save.guide === 6) save.guide = 99;
       flushSave(true);
       playSfx('boss');

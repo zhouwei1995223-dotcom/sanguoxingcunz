@@ -25,8 +25,10 @@ export default async function ({ page, wait, shot }) {
   await shot('tj-rank-empty');
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(200);
+  const stam0 = await page.evaluate(() => window.__saveMod.save.stamina);
   await click('tj_start');
   await page.waitForFunction(() => window.__game.scene.battle?.tj);
+  assert.equal(await page.evaluate(() => window.__saveMod.save.stamina), stam0 - 10, 'costs 10 stamina');
   await wait(2500);
   const s0 = await S();
   assert.equal(s0.tickets, 2, 'start with 2 tickets');
@@ -97,15 +99,16 @@ export default async function ({ page, wait, shot }) {
   await shot('tj-tree-fallen');
 
   // 新签：几种看揭晓
-  for (const id of ['allstar', 'swordrain', 'midas', 'pickpocket', 'shuffle', 'bounty']) { await force(id, 'tj-new-' + id); await click('tj_ok'); await wait(300); }
+  for (const id of ['allstar', 'swordrain', 'midas', 'pickpocket', 'shuffle', 'bounty', 'wuhu', 'dice', 'thunderbolt', 'cavalry']) { await force(id, 'tj-new-' + id); await click('tj_ok'); await wait(300); }
   await wait(1500); await shot('tj-new-world');
 
   // 自动开签：有签就自己摇，选择签停下来等
-  await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; b.tj.tickets = 3; b.coins = 0; });
+  // 前面的五虎上将会排五个大招，自动开签在大招期间会等，这里清掉队列
+  await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.tj.ultQueue.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; b.tj.tickets = 3; b.coins = 0; });
   await click('tj_auto');
   assert.equal(await page.evaluate(() => window.__saveMod.save.settings.tjAuto), true);
   const a0 = await page.evaluate(() => window.__game.scene.battle.tj.history.length);
-  await page.waitForFunction((a0) => { const b = window.__game.scene.battle; return b.tj.history.length >= a0 + 3 || window.__game.dialogs.some((d) => d.res && d.res.options); }, a0, { timeout: 20000 });
+  await page.waitForFunction((a0) => { const b = window.__game.scene.battle; return b.tj.history.length >= a0 + 3 || window.__game.dialogs.some((d) => d.res && d.res.options); }, a0, { timeout: 40000 });
   await shot('tj-auto');
   await page.evaluate(() => { window.__saveMod.save.settings.tjAuto = false; const g = window.__game, d = g.dialogs.find((x) => x.res && x.res.options); if (d) d.res.options[0].act(); g.dialogs.length = 0; });
   // 很多兵器时 HUD 图标换行
@@ -138,6 +141,18 @@ export default async function ({ page, wait, shot }) {
   const fb = await page.evaluate(() => { const b = window.__game.scene.battle; return { dmg: b.tj.finalDmg, hp: b.tj.final.hp, max: b.tj.final.maxHp }; });
   console.log('final', JSON.stringify(fb));
   assert.ok(fb.dmg > 0 && fb.hp > fb.max * 0.99, 'final boss takes damage but never dies');
+  // 天命三劫：破绽（10 秒）、二劫（30 秒）、三劫（60 秒）
+  await page.evaluate(() => { window.__game.scene.battle.tj.finalT = 9.8; });
+  await page.waitForFunction(() => window.__game.scene.battle.tj.flaw > 0, null, { timeout: 4000 });
+  assert.equal(await page.evaluate(() => window.__game.scene.battle.tj.final.state), 'rest', 'boss staggered during flaw');
+  await wait(300); await shot('tj-final-flaw');
+  await page.evaluate(() => { window.__game.scene.battle.tj.finalT = 29.8; });
+  await page.waitForFunction(() => window.__game.scene.battle.tj.phase === 2, null, { timeout: 4000 });
+  await page.evaluate(() => { window.__game.scene.battle.tj.finalT = 59.8; });
+  await page.waitForFunction(() => window.__game.scene.battle.tj.phase === 3, null, { timeout: 4000 });
+  await wait(1500); await shot('tj-final-phase3');
+  const ph = await page.evaluate(() => { const st = window.__game.scene.battle.tj; return { gifted: st.gifted, meteor: st.timed.some((t) => t.id === 'meteor'), enraged: st.final.enraged }; });
+  assert.ok(ph.gifted && ph.meteor && ph.enraged, JSON.stringify(ph));
 
   // 金币不够：看视频抽签弹窗
   await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.tickets = 0; b.tj.bonusDraws = 0; b.coins = 0; window.__game.dialogs.length = 0; });

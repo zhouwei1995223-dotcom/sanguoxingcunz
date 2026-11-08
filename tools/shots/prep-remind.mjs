@@ -12,7 +12,26 @@ export default async function ({ page, wait, shot }) {
   await shot('prep-remind');
   await click('prep_rm_go');
   assert.ok(await page.evaluate(() => window.__game.dialogs.some((d) => d.constructor.name === 'PreparationDialog')), 'opens preparation');
-  await page.evaluate(() => { window.__game.dialogs.length = 0; });
+  // 备战里的「推荐」：一键填入并启用
+  await click('prep_recommend');
+  await wait(300); await shot('prep-recommend');
+  const rec = await page.evaluate(() => { const s = window.__saveMod.save, p = s.preparationPresets[s.hero]; return { n: p.slots[p.active].length, core: p.coreWeapons[p.active], list: p.slots[p.active] }; });
+  console.log('recommend', JSON.stringify(rec));
+  assert.ok(rec.n >= 6 && rec.core, 'recommended preset filled with a core weapon');
+  await page.evaluate(() => { window.__game.dialogs.length = 0; window.__saveMod.save.preparationPresets = {}; });
+  // 提醒框里「一键推荐并出征」
+  await wait(200);
+  await click('start_battle');
+  await click('prep_rm_auto');
+  await wait(300);
+  if (await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'duration_5'))) await click('duration_5');
+  await page.waitForFunction(() => window.__game.scene.battle, null, { timeout: 8000 });
+  assert.ok(await page.evaluate(() => { const s = window.__saveMod.save, p = s.preparationPresets[s.hero]; return p && p.slots[p.active].length > 0; }), 'auto recommend applied');
+  await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; g.scene.battle.player.hp = 0; });
+  await page.reload();
+  await page.waitForFunction(() => window.__game?.scene?.constructor.name === 'HomeScene');
+  await page.evaluate(() => { const s = window.__saveMod.save; window.__game.dialogs.length = 0; s.preparationPresets = {}; s.preparedSkills = {}; s.daily.prepNoRemind = false; s.guide = 99; });
+  await wait(300);
   // 守城：勾「今天不再提醒」后直接出征
   await page.evaluate(() => { window.__saveMod.save.homeMode = 'defense'; });
   await wait(300);

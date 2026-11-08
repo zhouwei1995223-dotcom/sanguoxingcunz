@@ -28,6 +28,7 @@ import { IS_XHS, GAME_INFO, SUBSCRIBE_CONFIG, NO_ADS, IS_H5, WEB_RULES } from '.
 import { USER_AGREEMENT, PRIVACY_POLICY, HEALTH_NOTICE } from '../data/texts';
 import { bestScore } from '../meta/run';
 import { HERO_BY_ID } from '../data/heroes';
+import { applyRecommendedPreparation } from '../meta/prepRecommend';
 import { skillPoolFor, fitPreparation, coreWeaponFits, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, SKILLS_BY_ID, WEAPONS, PASSIVES } from '../data/skills';
 import { setOf, redeem } from '../meta/goals';
 import { getEquipped } from '../meta/ops';
@@ -754,7 +755,7 @@ export class PrepReminderDialog implements Dialog {
   constructor(private go: () => void) {}
   draw(ui: UI) {
     const u = ui.u;
-    const w = ui.W - 120 * u, h = 560 * u;
+    const w = ui.W - 120 * u, h = 680 * u;
     const f = dialogFrame(ui, w, h, '还没备战', this.t || 0, 'prep_rm_x');
     if (f.close) return false;
     const lx = f.x + 50 * u;
@@ -768,12 +769,19 @@ export class PrepReminderDialog implements Dialog {
     if (ui.clicked('prep_rm_nomore', lx - 10 * u, y - 26 * u, 300 * u, 52 * u)) this.noMore = !this.noMore;
     const bw = (w - 120 * u) / 2, by = f.y + h - 150 * u;
     const remember = () => { if (this.noMore) { save.daily.prepNoRemind = true; markDirty(); } };
-    if (ui.button('prep_rm_go', f.x + 40 * u, by, bw, 100 * u, '去设置备战', C.btnGold, { size: 28 })) {
+    if (ui.button('prep_rm_auto', f.x + 40 * u, by - 124 * u, w - 80 * u, 104 * u, '一键推荐并出征', C.btnRed, { size: 32, sub: '自动配好兵器、兵法和核心武器' })) {
+      remember();
+      const n = applyRecommendedPreparation(save.hero);
+      ui.toast(`已按推荐方案备战（${n} 项）`);
+      this.go();
+      return false;
+    }
+    if (ui.button('prep_rm_go', f.x + 40 * u, by, bw, 100 * u, '自己设置', C.btnGold, { size: 28 })) {
       remember();
       game.openDialog(new PreparationDialog());
       return false;
     }
-    if (ui.button('prep_rm_skip', f.x + 80 * u + bw, by, bw, 100 * u, '直接出征', C.btnRed, { size: 28 })) {
+    if (ui.button('prep_rm_skip', f.x + 80 * u + bw, by, bw, 100 * u, '直接出征', C.btnGray, { size: 28 })) {
       remember();
       this.go();
       return false;
@@ -894,16 +902,25 @@ export class PreparationDialog implements Dialog {
       ui.ctx.fillRect(x + innerW + 5 * u, listY + thumbY, 4 * u, thumbH);
     }
     ui.wrapText(note, ui.W / 2, footerY - noteH, innerW, 22, skipped.length ? '#983e20' : C.textDim, 1.3, 'center');
-    const by = footerY + 12 * u, smallW = 154 * u, gap = 12 * u;
-    if (ui.button('prep_clear', x, by, smallW, 88 * u, choosingCore ? '取消核心' : '清空此预设', C.btnGray, { size: 23, disabled: !core && (choosingCore || !selected.length) })) {
+    const by = footerY + 12 * u, smallW = 126 * u, gap = 10 * u;
+    if (ui.button('prep_clear', x, by, smallW, 88 * u, choosingCore ? '取消核心' : '清空', C.btnGray, { size: 24, disabled: !core && (choosingCore || !selected.length) })) {
       this.presets.coreWeapons[this.slot] = null;
       if (!choosingCore) selected.length = 0;
     }
-    if (ui.button('prep_evo', x + smallW + gap, by, smallW, 88 * u, '进化表', C.btnBlue, { size: 27 })) {
+    // 推荐设置：一键填入并启用（专属兵器做核心、联动兵器优先、兵法配齐进化搭档）
+    if (ui.button('prep_recommend', x + smallW + gap, by, smallW, 88 * u, '推荐', C.btnGold, { size: 27, sub: '一键设置' })) {
+      const n = applyRecommendedPreparation(this.hero.id, this.slot);
+      const fresh = preparationPresetsFor(this.hero.id);
+      selected.splice(0, selected.length, ...fresh.slots[this.slot]);
+      this.presets.coreWeapons[this.slot] = fresh.coreWeapons[this.slot];
+      this.presets.active = this.slot;
+      ui.toast(`已按推荐方案设置预设${this.slot + 1}（${n} 项）并启用`);
+    }
+    if (ui.button('prep_evo', x + 2 * (smallW + gap), by, smallW, 88 * u, '进化表', C.btnBlue, { size: 25 })) {
       game.openDialog(new EvoTableDialog({ hero: this.hero, skillPool: this.pool, defense: this.stage.defense, selected: effective, preset: this.slot + 1, coreWeapon: core }));
     }
-    const saveX = x + 2 * (smallW + gap);
-    if (ui.button('prep_save', saveX, by, x + innerW - saveX, 88 * u, '保存并启用预设' + (this.slot + 1), C.btnRed, { size: 29 })) {
+    const saveX = x + 3 * (smallW + gap);
+    if (ui.button('prep_save', saveX, by, x + innerW - saveX, 88 * u, '保存并启用', C.btnRed, { size: 27, sub: '预设' + (this.slot + 1) })) {
       const stored = preparationPresetsFor(this.hero.id);
       stored.slots[this.slot] = fitPreparation(selected, this.fullPool, [this.hero.weapon]);
       stored.coreWeapons[this.slot] = this.presets.coreWeapons[this.slot];
