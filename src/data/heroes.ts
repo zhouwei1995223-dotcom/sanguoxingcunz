@@ -115,7 +115,7 @@ HEROES.forEach((h) => (HERO_BY_ID[h.id] = h));
 export const WUMING: HeroDef = {
   id: 'wuming' as HeroId, name: '无名剑客', title: '天涯孤剑', quote: '一剑一签，天命由我。', role: '随机应变',
   passive: '百家剑意：大招每次随机借用一位名将的绝技',
-  baseAtk: 22, baseHp: 130, atkPerLv: 0, hpPerLv: 0, moveSpeed: 80, pickup: 44,
+  baseAtk: 32, baseHp: 180, atkPerLv: 0, hpPerLv: 0, moveSpeed: 80, pickup: 44,
   weapon: 'sword', ult: 'dragon', ultName: '百家剑意', ultDesc: '随机借用一位名将的绝技',
   unlockText: '天机签模式', unlockShards: 0, color: '#e43b44',
 };

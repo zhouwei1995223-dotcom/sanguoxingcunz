@@ -7,7 +7,13 @@ let currentKey = 'score';
 function mmss(sec) {
   return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
 }
+function fmtBig(n) {
+  if (n >= 1e8) return (n / 1e8).toFixed(n >= 1e9 ? 1 : 2) + '亿';
+  if (n >= 1e4) return (n / 1e4).toFixed(n >= 1e6 ? 0 : 1) + '万';
+  return String(n);
+}
 function fmtScore(score) {
+  if (currentKey === 'tianji') return '天命伤害 ' + fmtBig(score);
   if (currentKey === 'endless') return '无尽坚持' + mmss(score);
   const idx = Math.floor(score / 10000), sec = score % 10000;
   const d = Math.min(2, Math.floor(idx / 10)), ch = idx % 10;

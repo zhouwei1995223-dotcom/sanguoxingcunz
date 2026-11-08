@@ -567,7 +567,7 @@ export class HomeScene implements Scene {
       // 四个页签收窄到两侧按钮之间（两侧按钮占 18~102 和 648~732）
       const mw = 128 * u, mh = 66 * u, my = L.cy - mh - 8 * u, gap = 8 * u;
       const today = new Date().toISOString().slice(0, 10);
-      (['chapter', 'defense', 'tower', 'tianji'] as const).forEach((m, i) => {
+      (['tianji', 'chapter', 'defense', 'tower'] as const).forEach((m, i) => {
         const mx = ui.W / 2 - (mw * 4 + gap * 3) / 2 + i * (mw + gap);
         const label = { chapter: '征 战', defense: '守 城', tower: '布 阵', tianji: '天 机' }[m];
         const on = mode === m;
@@ -761,6 +761,7 @@ export class HomeScene implements Scene {
     ctx.strokeRect(78 * u, y + 20 * u, cw - 76 * u, 38 * u);
     ctx.fillStyle = '#5a2a8c'; ctx.fillRect(104 * u, y + 20 * u, cw - 128 * u, 3 * u);
     ui.text('◆ 天机签 · 无名剑客 ◆', cx, y + 39 * u, 23, '#43216a', 'center', null);
+    void ctx;
     // 左：剑客站在签筒旁（待机动画）
     const sx = 160 * u, sy = y + 66 * u + (L.chH - 66 * u) * 0.48;
     ui.icon(heroIdleFrame('hero_wuming_awk', ui.time), sx, sy, Math.min(200 * u, (L.chH - 70 * u) * 1.05));
@@ -772,10 +773,11 @@ export class HomeScene implements Scene {
     ui.text('生存十分钟 · 全凭签运', tx, y + 70 * u + row * 0.55, 29, '#2a1d14', 'left', null);
     ui.text('砍树打怪攒金币，摇签得兵器、借名将', tx, y + 70 * u + row * 1.55, 19, '#5c4d3e', 'left', null);
     const left = Math.max(0, TIANJI_DAILY - (save.daily.tianjiRuns || 0));
-    ui.text(st.runs ? `不吃养成 · 最久 ${fmtTime(st.best)} · 活满 ${st.wins} 次` : '不吃养成 · 不耗体力 · 人人起点一样', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
+    ui.text(st.bestDmg ? `天命伤害最佳 ${fmtNum(st.bestDmg)}` : st.runs ? `最久 ${fmtTime(st.best)} · 活满 ${st.wins} 次` : '8:30 天命之主登场 · 伤害上排行', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
     ui.text(left ? `今日奖励还剩 ${left}/${TIANJI_DAILY} 次` : '今日奖励已领完 · 仍可随便玩', tx, y + 70 * u + row * 3.45, 20, left ? '#a22633' : '#8a7c6c', 'left', null);
-    if (ui.button('tj_rules', 30 * u, L.by, 200 * u, L.bh, '玩法', C.btnGray, { size: 28, sub: '签与概率' })) game.openDialog(new TianjiRulesDialog());
-    this.startRect = [250 * u, L.by, 470 * u, L.bh];
+    if (ui.button('tj_rules', 30 * u, L.by, 150 * u, L.bh, '玩法', C.btnGray, { size: 27, sub: '签与概率' })) game.openDialog(new TianjiRulesDialog());
+    if (ui.button('tj_rank', 190 * u, L.by, 150 * u, L.bh, '排行', C.btnBlue, { size: 27, sub: '天命伤害' })) game.openDialog(new RankDialog('tianji'));
+    this.startRect = [350 * u, L.by, 370 * u, L.bh];
     if (ui.button('tj_start', ...this.startRect, '入 局', C.btnRed, { size: 44, sub: '不耗体力' })) {
       if (save.guide === 6) save.guide = 99;
       flushSave(true);

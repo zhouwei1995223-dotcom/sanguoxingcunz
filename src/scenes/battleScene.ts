@@ -5,7 +5,7 @@ import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL, TIANJI } from '../data/chapters';
-import { createTianji, tianjiStats, levelTickets } from '../battle/tianji';
+import { createTianji, levelTickets } from '../battle/tianji';
 import { TianjiDrawDialog, TianjiAdDialog, drawTianjiHud, drawTianjiFog } from './tianjiDialogs';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
@@ -131,8 +131,8 @@ export class BattleScene implements Scene {
     const p = getPlatform();
     resetSpawner();
     this.renderer = new WorldRenderer(p.width, p.height, this.chapter.theme);
-    // 天机签：无名剑客，固定属性，不吃局外养成
-    const stats = this.chapter.tianji ? tianjiStats() : computeStats();
+    // 天机签：无名剑客。装备、套装、军略照常生效（2026-11-08 用户要求带入局外养成），技能池全开
+    const stats = this.chapter.tianji ? { ...computeStats('wuming'), cleared: 99 } : computeStats();
     if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
     infoHero = this.battle.hero.id;
@@ -476,7 +476,7 @@ export class BattleScene implements Scene {
   }
 
   /** 在武将身边逐行飘字（接在还没消失的文字下面） */
-  private floatLines(lines: { text: string; color: string }[]) {
+  floatLines(lines: { text: string; color: string }[]) {
     const b = this.battle;
     let base = 0;
     for (const f of b.fx) if (f.kind === 'text' && f.line !== undefined && f.t < f.dur * 0.7) base = Math.max(base, f.line + 1);
@@ -569,7 +569,11 @@ export class BattleScene implements Scene {
       // 天机签：倒计时 + 已抽几签
       const left = Math.max(0, this.chapter.duration - b.t);
       ui.text(fmtTime(left), clockX, top + 70 * u, 40, left < 60 ? '#fee761' : '#fff');
-      ui.text(`天机签 · 已抽 ${b.tj.history.length} 签`, clockX, top + 108 * u, 20, '#ffd08a');
+      if (b.tj.final) {
+        // 天命之主：显示累计伤害（排行榜分数），伤害数字跳动
+        const pulse = 1 + Math.max(0, Math.sin(ui.time * 10)) * 0.04;
+        ui.text(`天命伤害 ${fmtNum(Math.round(b.tj.finalDmg))}`, clockX, top + 112 * u, Math.round(28 * pulse), '#ff9ab0', 'center', '#1a0a12');
+      } else ui.text(`天机签 · 已抽 ${b.tj.history.length} 签`, clockX, top + 108 * u, 20, '#ffd08a');
     } else if (this.weekly) {
       ui.text(fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 70 * u, 40, '#fff');
       ui.text(`每周挑战 · ${this.weekly.name} · 最佳 ${save.weekly.best}`, ui.W / 2, top + 108 * u, 20, '#dc9be9');
@@ -661,9 +665,11 @@ export class BattleScene implements Scene {
     if (boss && this.bossBar) {
       const y = top + (b.coreWeapon ? 287 : 250) * u;
       const w = ui.W * 0.8;
-      ui.text(`${boss.boss!.title} · ${boss.boss!.name}${boss.enraged ? ' · 狂暴' : ''}`, ui.W / 2, y - 22 * u, 26, boss.enraged ? '#ff8a80' : '#ffd0d0');
-      ui.bar(ui.W / 2 - w / 2, y, w, 26 * u, boss.hp / boss.maxHp, '#e43b44', '#3a0d12');
-      ui.text(`${Math.max(0, Math.ceil((boss.hp / boss.maxHp) * 100))}%`, ui.W / 2, y + 13 * u, 18, '#fff');
+      const infinite = !!b.tj && boss === b.tj.final;
+      ui.text(infinite ? `天命之主 · ${boss.boss!.name}` : `${boss.boss!.title} · ${boss.boss!.name}${boss.enraged ? ' · 狂暴' : ''}`, ui.W / 2, y - 22 * u, 26, infinite ? '#ff9ab0' : boss.enraged ? '#ff8a80' : '#ffd0d0');
+      // 天命之主血量无限：血条常满、紫红流光，数字写「∞」
+      ui.bar(ui.W / 2 - w / 2, y, w, 26 * u, infinite ? 1 : boss.hp / boss.maxHp, infinite ? (Math.floor(ui.time * 4) % 2 ? '#b55088' : '#e43b44') : '#e43b44', '#3a0d12');
+      ui.text(infinite ? '∞' : `${Math.max(0, Math.ceil((boss.hp / boss.maxHp) * 100))}%`, ui.W / 2, y + 13 * u, infinite ? 24 : 18, '#fff');
       if (boss.shield > 0) {
         // 护盾条 + 倒计时
         ui.bar(ui.W / 2 - w / 2, y + 32 * u, w, 18 * u, boss.shield / boss.shieldMax, '#2ce8f5', '#0d2a3a');
@@ -870,7 +876,7 @@ export class BattleScene implements Scene {
     const b = this.battle;
     if (!b.tj || b.dead || b.won || game.dialogs.length || this.speedAdPending) return;
     this.joyId = null;
-    if (!TianjiDrawDialog.open(this)) game.openDialog(new TianjiAdDialog(this));
+    if (!TianjiDrawDialog.open(this, false, !!save.settings.tjSkipAnim)) game.openDialog(new TianjiAdDialog(this));
   }
 
   worldToScreen(x: number, y: number): [number, number] {

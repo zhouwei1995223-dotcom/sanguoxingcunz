@@ -20,6 +20,11 @@ export default async function ({ page, wait, shot }) {
   await shot('tj-rules');
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
   await wait(200);
+  await click('tj_rank');
+  await wait(500);
+  await shot('tj-rank-empty');
+  await page.evaluate(() => { window.__game.dialogs.length = 0; });
+  await wait(200);
   await click('tj_start');
   await page.waitForFunction(() => window.__game.scene.battle?.tj);
   await wait(2500);
@@ -43,9 +48,11 @@ export default async function ({ page, wait, shot }) {
     await page.evaluate((id) => { const b = window.__game.scene.battle; b.tj.force = id; b.tj.tickets = Math.max(b.tj.tickets, 1); window.__game.dialogs.length = 0; }, id);
     await page.evaluate(() => window.__game.scene.pressDraw());
     await page.waitForFunction(() => window.__game.dialogs.some((d) => d.constructor.name === 'TianjiDrawDialog'));
-    // 跳过摇签
+    // 跳过摇签（点击可能早于弹窗第一帧登记点击区，所以等到签文卡真正揭晓、按钮出现）
+    await wait(100);
     await page.mouse.click(200, 400);
-    await wait(900);
+    await page.waitForFunction(() => { const d = window.__game.dialogs.find((x) => x.constructor.name === 'TianjiDrawDialog'); return d && d.t > 1.6; }, null, { timeout: 5000 });
+    await wait(200);
     if (name) await shot(name);
   };
   await force('divine', 'tj-sign-divine');
@@ -66,6 +73,8 @@ export default async function ({ page, wait, shot }) {
   await force('giant'); await click('tj_ok');
   await force('fog'); await click('tj_ok');
   await force('thief', 'tj-sign-thief'); await click('tj_ok');
+  // 测试里让盗将耐打一些，免得还没检查就被打死
+  await page.evaluate(() => { const t = window.__game.scene.battle.tj.thief; if (t) t.e.hp = t.e.maxHp = 1e9; });
   await wait(1500); await shot('tj-world-effects');
   const th = await page.evaluate(() => { const b = window.__game.scene.battle; return { thief: !!b.tj.thief, timed: b.tj.timed.map((t) => t.id), scale: b.playerScale }; });
   assert.ok(th.thief); assert.equal(th.scale, 1.6); assert.ok(th.timed.includes('fog'));
@@ -84,16 +93,46 @@ export default async function ({ page, wait, shot }) {
   assert.ok(chop.falls >= 1, 'tree chopped down');
   await shot('tj-tree-fallen');
 
+  // 新签：几种看揭晓
+  for (const id of ['allstar', 'swordrain', 'midas', 'pickpocket', 'shuffle', 'bounty']) { await force(id, 'tj-new-' + id); await click('tj_ok'); await wait(300); }
+  await wait(1500); await shot('tj-new-world');
+
+  // 跳过动画：开关打开后抽签直接生效，文字飘在剑客身边；选择签仍弹卡
+  await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); });
+  await click('tj_skipanim');
+  assert.equal(await page.evaluate(() => window.__saveMod.save.settings.tjSkipAnim), true);
+  const h0 = await page.evaluate(() => window.__game.scene.battle.tj.history.length);
+  await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.tickets = 3; b.tj.force = 'destiny'; });
+  await click('tj_draw');
+  await wait(300); await shot('tj-skip-float');
+  const sk = await page.evaluate(() => ({ dlg: window.__game.dialogs.length, n: window.__game.scene.battle.tj.history.length, atk: window.__game.scene.battle.tj.perm.atk }));
+  assert.equal(sk.dlg, 0, 'no dialog when skipping'); assert.equal(sk.n, h0 + 1); assert.ok(sk.atk >= 25);
+  await page.evaluate(() => { window.__game.scene.battle.tj.force = 'gamble'; });
+  await click('tj_draw'); await wait(200);
+  assert.ok(await page.evaluate(() => window.__game.dialogs.some((d) => d.constructor.name === 'TianjiDrawDialog')), 'choice sign still asks');
+  await shot('tj-skip-choice');
+  await click('tj_opt_1'); await click('tj_ok');
+  await click('tj_skipanim');
+
+  // 天命之主：8:30 登场，血量无限，伤害累计
+  await page.evaluate(() => { const b = window.__game.scene.battle; window.__game.dialogs.length = 0; b.t = 508; });
+  await page.waitForFunction(() => window.__game.scene.battle.tj.final, null, { timeout: 8000 });
+  await page.evaluate(() => { const b = window.__game.scene.battle, e = b.tj.final; e.x = b.player.x + 40; e.y = b.player.y; b.player.maxHp = b.player.hp = 1e9; });
+  await wait(3500); await shot('tj-final');
+  const fb = await page.evaluate(() => { const b = window.__game.scene.battle; return { dmg: b.tj.finalDmg, hp: b.tj.final.hp, max: b.tj.final.maxHp }; });
+  console.log('final', JSON.stringify(fb));
+  assert.ok(fb.dmg > 0 && fb.hp > fb.max * 0.99, 'final boss takes damage but never dies');
+
   // 金币不够：看视频抽签弹窗
   await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.tickets = 0; b.tj.bonusDraws = 0; b.coins = 0; window.__game.dialogs.length = 0; });
   await page.evaluate(() => window.__game.scene.pressDraw());
   await wait(400); await shot('tj-ad');
   await page.evaluate(() => { window.__game.dialogs.length = 0; });
 
-  // 结算
+  // 结算：天命伤害记入纪录和前五
   await page.evaluate(() => { const s = window.__game.scene; s.battle.t = 600; s.battle.won = true; s.finish(true); });
   await wait(1500); await shot('tj-result');
-  const fin = await page.evaluate(() => ({ runs: window.__saveMod.save.tianji.runs, daily: window.__saveMod.save.daily.tianjiRuns }));
-  assert.equal(fin.runs, 1); assert.equal(fin.daily, 1);
+  const fin = await page.evaluate(() => ({ runs: window.__saveMod.save.tianji.runs, daily: window.__saveMod.save.daily.tianjiRuns, best: window.__saveMod.save.tianji.bestDmg, top: window.__saveMod.save.tianji.top.length }));
+  assert.equal(fin.runs, 1); assert.equal(fin.daily, 1); assert.ok(fin.best > 0); assert.equal(fin.top, 1);
   console.log('tianji ok', JSON.stringify(await S()));
 }

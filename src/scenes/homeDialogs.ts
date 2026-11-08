@@ -531,8 +531,9 @@ export class TextDialog implements Dialog {
 
 export class RankDialog implements Dialog {
   t?: number;
-  private key: 'score' | 'endless' = 'score';
+  private key: 'score' | 'endless' | 'tianji' = 'score';
   private requested = false;
+  constructor(key: 'score' | 'endless' | 'tianji' = 'score') { this.key = key; }
   /** 好友排行要用微信朋友关系：先过平台的隐私授权，同意后才请求开放数据域 */
   private privacy: 'idle' | 'wait' | 'ok' | 'no' = 'idle';
   private askPrivacy() {
@@ -547,7 +548,8 @@ export class RankDialog implements Dialog {
     if (f.close) { p.postToOpenData({ type: 'hide' }); return false; }
     const score = bestScore();
     const ch = Math.floor(score / 10000), sec = score % 10000;
-    ui.text(`我的最佳：${ch >= 1 ? `通关第${ch}章` : '未通关'}${sec ? ` · 第${Math.min(5, ch + 1)}章坚守${fmtTime(sec)}` : ''}`, ui.W / 2, f.y + 80 * u, 22, C.gold);
+    if (this.key === 'tianji') ui.text(`我的最佳天命伤害：${save.tianji.bestDmg ? fmtNum(save.tianji.bestDmg) : '还没打过天命之主'}`, ui.W / 2, f.y + 80 * u, 22, C.gold);
+    else ui.text(`我的最佳：${ch >= 1 ? `通关第${ch}章` : '未通关'}${sec ? ` · 第${Math.min(5, ch + 1)}章坚守${fmtTime(sec)}` : ''}`, ui.W / 2, f.y + 80 * u, 22, C.gold);
     if (p.name === 'wx' && this.privacy !== 'ok') {
       if (this.privacy === 'idle') this.askPrivacy();
       if (this.privacy === 'no') {
@@ -556,9 +558,9 @@ export class RankDialog implements Dialog {
       }
     } else if (p.name === 'wx') {
       const shared = p.getSharedCanvas();
-      const tbw = 200 * u;
-      (['score', 'endless'] as const).forEach((k, i) => {
-        if (ui.button('rk_tab_' + k, ui.W / 2 - tbw - 10 * u + i * (tbw + 20 * u), f.y + 110 * u, tbw, 64 * u, k === 'score' ? '闯关榜' : '无尽榜', this.key === k ? C.btnGold : C.btnGray, { size: 24 })) { this.key = k; this.requested = false; }
+      const tbw = 180 * u;
+      (['tianji', 'score', 'endless'] as const).forEach((k, i) => {
+        if (ui.button('rk_tab_' + k, ui.W / 2 - tbw * 1.5 - 15 * u + i * (tbw + 15 * u), f.y + 110 * u, tbw, 64 * u, { tianji: '天机榜', score: '闯关榜', endless: '无尽榜' }[k], this.key === k ? C.btnGold : C.btnGray, { size: 24 })) { this.key = k; this.requested = false; }
       });
       if (!this.requested) {
         this.requested = true;
@@ -570,8 +572,20 @@ export class RankDialog implements Dialog {
       ui.text('排行榜由抖音提供', ui.W / 2, f.y + 200 * u, 24, '#fff4d6');
       if (ui.button('rk_open', ui.W / 2 - 180 * u, f.y + 260 * u, 360 * u, 96 * u, '查看好友排行', C.btnGold)) p.showNativeRank();
     } else {
-      // 浏览器：展示本地战绩
+      // 浏览器 / 小红书：展示本地战绩（天机签：最佳天命伤害 + 前五局）
       let y = f.y + 130 * u;
+      ui.text('天机签 · 天命伤害', ui.W / 2, y, 28, '#c58cff');
+      y += 44 * u;
+      const top = save.tianji.top;
+      if (!top.length) { ui.text('还没打过天命之主（天机签 8:30 登场）', ui.W / 2, y, 22, C.textDim); y += 44 * u; }
+      top.forEach((r, i) => {
+        ui.pixRect(f.x + 40 * u, y - 4 * u, w - 80 * u, 60 * u, i === 0 ? '#5a3a6a' : '#4a3630');
+        ui.text(`${i + 1}`, f.x + 76 * u, y + 26 * u, 26, i < 3 ? ['#feae34', '#c0cbdc', '#d77643'][i] : '#fff', 'center');
+        ui.text(fmtNum(r.dmg), f.x + 120 * u, y + 26 * u, 26, '#fff', 'left');
+        ui.text(r.day, f.x + w - 70 * u, y + 26 * u, 20, C.textDim, 'right');
+        y += 68 * u;
+      });
+      y += 20 * u;
       ui.text(`无尽模式最佳：${save.endlessBest ? fmtTime(save.endlessBest) : '—'}`, ui.W / 2, y, 26, '#dc9be9');
       y += 40 * u;
       for (const df of DIFFICULTIES) {

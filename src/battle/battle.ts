@@ -1,4 +1,4 @@
-import { updateTianji, tianjiOnKill, tianjiRecalc, tianjiTreeHit, type TianjiState } from './tianji';
+import { updateTianji, tianjiOnKill, tianjiRecalc, tianjiTreeHit, tianjiFinalHit, type TianjiState } from './tianji';
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
@@ -1254,6 +1254,7 @@ export class Battle {
       toHp = cut;
     }
     this.recordDamage(opts.source ?? 'other', e, dmg - toHp + Math.min(toHp, Math.max(0, e.hp)));
+    if (this.tj && e === this.tj.final) tianjiFinalHit(this, toHp);
     e.hp -= toHp;
     if (broke) this.breakShield(e);
     // 敌将战没有小怪攒怒气：打敌将本身也涨怒气（打掉一整条血约 80 点）

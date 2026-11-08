@@ -85,7 +85,7 @@ export interface SaveData {
   homeMode?: 'chapter' | 'defense' | 'tower' | 'tianji';
   tower: { selected: number; commander?: string; cleared: number; stars: Record<number, number>; runs: number; wins: number; leaks: number; kills: number };
   /** 天机签：局数、活满十分钟的局数、最久存活秒数、单局最多上上签 */
-  tianji: { runs: number; wins: number; best: number; bestTop: number };
+  tianji: { runs: number; wins: number; best: number; bestTop: number; bestDmg: number; top: { dmg: number; day: string }[] };
   selectedDefense?: number;
   endlessBest: number;
   endlessRuns: number;
@@ -96,7 +96,7 @@ export interface SaveData {
   signinDay: string;
   daily: DailyState;
   goldChestCount: number;
-  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean; lowPower: boolean; screenShake: boolean; autoPick: boolean };
+  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean; lowPower: boolean; screenShake: boolean; autoPick: boolean; tjSkipAnim?: boolean };
   guide: number;
   /** 已经看过的一次性提示（首次遇到某个系统时显示） */
   tips: Record<string, boolean>;
@@ -176,7 +176,7 @@ function freshSave(): SaveData {
     firstClear: {},
     selectedChapter: 1,
     tower: freshTower(),
-    tianji: { runs: 0, wins: 0, best: 0, bestTop: 0 },
+    tianji: { runs: 0, wins: 0, best: 0, bestTop: 0, bestDmg: 0, top: [] },
     clears: {},
     bests: {},
     stars: {},
@@ -260,7 +260,7 @@ export function loadSave() {
       const base = freshSave();
       save = Object.assign(base, data);
       save.tower = { ...freshTower(), ...data.tower, stars: { ...data.tower?.stars } };
-      save.tianji = { runs: 0, wins: 0, best: 0, bestTop: 0, ...data.tianji };
+      save.tianji = { runs: 0, wins: 0, best: 0, bestTop: 0, bestDmg: 0, top: [], ...data.tianji };
       save.settings = Object.assign(base.settings, data.settings || {});
       save.stats = Object.assign(base.stats, data.stats || {});
       save.daily = Object.assign(freshDaily(), data.daily || {});

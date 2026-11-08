@@ -87,7 +87,7 @@ export interface RunResult {
   materialMultiplier?: number;
   convoyLoot?: { count: number; gold: number; yuanbao: number };
   /** 天机签：本局是否在每日奖励次数内、今天还剩几次 */
-  tianji?: { rewarded: boolean; left: number };
+  tianji?: { rewarded: boolean; left: number; dmg: number; newDmgBest: boolean };
 }
 
 /** 三星评价：通关 / 不复活 / 限时击败最终敌将 */
@@ -297,7 +297,8 @@ export function settleEndless(t: number, coins: number, kills: number, bossKills
 export const TIANJI_DAILY = 3;
 
 /** 天机签结算：不耗体力；每天前 3 局给元宝和碎片（按存活时间，活满十分钟另加），之后只给少量金币 */
-export function settleTianji(win: boolean, t: number, kills: number, bossKills: number, history: number[]): RunResult {
+/** finalDmg：对天命之主造成的伤害（排行榜分数） */
+export function settleTianji(win: boolean, t: number, kills: number, bossKills: number, history: number[], finalDmg = 0): RunResult {
   const st = save.tianji;
   const used = save.daily.tianjiRuns || 0;
   const rewarded = used < TIANJI_DAILY;
@@ -318,11 +319,20 @@ export function settleTianji(win: boolean, t: number, kills: number, bossKills: 
   const newBest = Math.floor(t) > st.best;
   if (newBest) st.best = Math.floor(t);
   st.bestTop = Math.max(st.bestTop, history.filter((x) => x === 0).length);
+  const dmg = Math.round(finalDmg);
+  const newDmgBest = dmg > st.bestDmg;
+  if (newDmgBest) st.bestDmg = dmg;
+  if (dmg > 0) {
+    st.top.push({ dmg, day: new Date().toISOString().slice(0, 10) });
+    st.top.sort((a, c) => c.dmg - a.dmg);
+    st.top.length = Math.min(st.top.length, 5);
+  }
+  if (st.bestDmg > 0) getPlatform().submitScore('tianji', st.bestDmg);
   progressTask('battle', 1);
   progressTask('kill', kills);
   if (bossKills) progressTask('boss', bossKills);
   markDirty();
-  return { win, firstClear: win && st.wins === 1, gold, iron: 0, yuanbao, items: [], newBest, shardReward, best: st.best, tianji: { rewarded, left: Math.max(0, TIANJI_DAILY - used - 1) } };
+  return { win, firstClear: win && st.wins === 1, gold, iron: 0, yuanbao, items: [], newBest, shardReward, best: st.best, tianji: { rewarded, left: Math.max(0, TIANJI_DAILY - used - 1), dmg, newDmgBest } };
 }
 
 /** 排行分数：最高进度（难度×10+章节）×10000 + 该关坚守秒数 */

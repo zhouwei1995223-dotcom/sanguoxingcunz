@@ -867,7 +867,7 @@ export class ResultDialog implements Dialog {
       this.tierCount = w.rewards.length;
     } else {
       this.res = b.tj
-        ? settleTianji(win, b.t, b.kills, b.bossKills, b.tj.history)
+        ? settleTianji(win, b.t, b.kills, b.bossKills, b.tj.history, b.tj.finalDmg)
         : b.def
         ? settleDefense(b.chapter.id, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx, WEB_RULES ? runStars(win, b.reviveCount, b.finalBossSec) : undefined)
         : b.chapter.tutorial
@@ -890,7 +890,12 @@ export class ResultDialog implements Dialog {
     const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0) + (IS_XHS && hasResultPublish() ? 100 * u : 0) + (b.tj ? 170 * u : 0);
     const f = dialogFrame(ui, w, h, b.tj ? '签运报告' : this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
-    if (b.tj) ui.text(this.win ? '活过十分钟！天命在我' : `撑过 ${fmtTime(b.t)}${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 32, this.win ? C.gold : '#fff4d6');
+    if (b.tj) {
+      const tj = this.res.tianji;
+      // 打到天命之主时，标题换成伤害（排行榜分数）
+      if (tj && tj.dmg > 0) ui.text(`天命伤害 ${fmtNum(tj.dmg)}${tj.newDmgBest ? ' · 新纪录！' : ''}`, ui.W / 2, y, 34, tj.newDmgBest ? C.gold : '#ff9ab0');
+      else ui.text(this.win ? '活过十分钟！天命在我' : `撑过 ${fmtTime(b.t)}${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 32, this.win ? C.gold : '#fff4d6');
+    }
     else if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
     else if (this.res.defense) ui.text(this.win ? (this.res.firstClear ? `首次守住${b.chapter.name}！${b.chapter.id < 10 ? '下一关已解锁' : ''}` : this.res.defense.dailyFirst ? '城池守住了！今日首胜碎片翻倍' : '城池守住了！') : `城池失守 · 守到第 ${this.res.defense.waves} 波${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 30, this.win ? C.gold : '#fff4d6');
     else if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);

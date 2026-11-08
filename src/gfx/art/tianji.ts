@@ -24,107 +24,98 @@ function ellipse(img: PixelImage, cx: number, cy: number, rx: number, ry: number
   }
 }
 
-/** 一帧无名剑客（面朝右）：斗笠、白衣、红围巾、青锋剑 */
+/** 一帧无名剑客（正面，脸参照觉醒步战造型）：斗笠、白衣交领、红围巾向一侧飘、右手斜持青锋剑 */
 function wumingFrame(ps: Pose): PixelImage {
   const img = new PixelImage(W, H);
   const by = 22 + ps.bob; // 衣身顶部
   const wv = (i: number, k = 1) => Math.round(Math.sin(i * 0.75 + ps.wave) * ps.wind * k * Math.min(1, i / 4));
 
-  // 1. 红围巾：从颈后向左后方长长飘出（最后画的身体会压住根部）
-  for (let i = 0; i < 13; i++) {
-    const x = 12 - i;
-    const y = by - 1 + Math.round(i * 0.3) + wv(i, 1.2);
-    img.set(x, y, i > 9 ? 'r' : 'R');
-    img.set(x, y + 1, 'r');
-    if (i > 3 && i < 11) img.set(x, y - 1, i % 3 === 0 ? 'f' : 'R');
+  // 1. 围巾的两条尾巴：从颈部左侧向左后方飘（先画，压在身后）
+  for (let i = 0; i < 11; i++) {
+    const x = 10 - i, y = by + Math.round(i * 0.35) + wv(i, 1.2);
+    img.set(x, y, i > 8 ? 'r' : 'R'); img.set(x, y + 1, 'r');
+    if (i > 2 && i < 10) img.set(x, y + 2 + (wv(i + 2, 0.6) > 0 ? 1 : 0), i % 2 ? 'R' : 'r');
   }
-  // 围巾末端的流苏
-  { const ex = 12 - 13, ey = by - 1 + 4 + wv(13, 1.2); img.set(ex, ey + 1, 'y'); img.set(ex + 1, ey + 2, 'y'); }
+  { const ey = by + 4 + wv(11, 1.2); img.set(-1 + 1, ey + 1, 'y'); img.set(1, ey + 2, 'y'); }
+  // 发尾：斗笠下从脑后向一侧飘
+  for (let i = 0; i < 4; i++) img.set(9 - i, by - 7 + i + wv(i + 3, 0.5), i < 3 ? 'k' : 'K');
 
-  // 2. 发尾（马尾）从斗笠下向后飘
-  for (let i = 0; i < 4; i++) img.set(10 - i, by - 8 + Math.round(i * 0.4) + wv(i + 2, 0.6), i < 3 ? 'k' : 'K');
-
-  // 3. 腿与靴：裹腿 + 黑靴，迈步时一腿前伸抬高
+  // 2. 腿与靴：正面两条腿，迈步时一条抬高
   const L = ps.stride, R = -ps.stride;
-  const leg = (x: number, s: number) => {
-    const lift = Math.max(0, s);
-    img.rect(x + s, by + 11, 3, 4 - lift, 'K');
-    img.rect(x + s, by + 12, 3, 1, 'p'); // 绑腿布条
-    img.rect(x + s - (s > 0 ? 0 : 1), by + 15 - lift, 4, 2, 'k');
-    img.set(x + s + 2, by + 15 - lift, 'n');
-  };
-  leg(11, L); leg(16, R);
+  img.rect(11, by + 10 + Math.max(0, -L), 3, 4 - Math.abs(L), 'K');
+  img.rect(17, by + 10 + Math.max(0, -R), 3, 4 - Math.abs(R), 'K');
+  img.rect(11, by + 11, 3, 1, 'p'); img.rect(17, by + 11, 3, 1, 'p'); // 绑腿
+  img.rect(10, by + 13 - Math.max(0, L), 5, 2, 'k'); img.set(13, by + 13 - Math.max(0, L), 'n');
+  img.rect(16, by + 13 - Math.max(0, R), 5, 2, 'k'); img.set(19, by + 13 - Math.max(0, R), 'n');
 
-  // 4. 白衣下摆（前后两片，随步伐微摆）
+  // 3. 白衣下摆：中间开衩
   img.rect(10, by + 8, 11, 4, 'w');
-  img.rect(10, by + 8, 1, 4, 'S'); img.rect(15, by + 9, 1, 3, 'S');
-  img.set(10 + (L > 0 ? 1 : 0), by + 11, 'S'); img.set(20 - (R > 0 ? 1 : 0), by + 11, 'S');
+  img.rect(15, by + 9, 1, 3, 'S'); img.rect(20, by + 8, 1, 4, 'S');
   img.rect(10, by + 11, 11, 1, 'S');
 
-  // 5. 上身：交领白衣 + 浅灰阴影 + 青色内衬
+  // 4. 上身：交领（V 字）+ 青色内衬 + 右侧阴影
   img.rect(10, by, 11, 8, 'w');
-  img.rect(10, by + 1, 1, 7, 'S'); img.rect(11, by + 6, 9, 1, 'S');
-  img.line(12, by, 16, by + 4, 't'); img.line(13, by, 16, by + 3, 'B'); // 交领与内衬
-  img.line(19, by, 17, by + 2, 'S');
-  // 腰带：深青色，系结与飘带
+  img.rect(20, by + 1, 1, 7, 'S');
+  img.line(12, by + 1, 15, by + 5, 't'); img.line(18, by + 1, 15, by + 5, 't');
+  img.rect(14, by + 2, 3, 2, 'B'); img.set(15, by + 4, 'B');
+  // 腰带 + 系结，两条带尾垂在左侧随步摆
   img.rect(10, by + 7, 11, 2, 'b'); img.rect(10, by + 7, 11, 1, 'B');
-  img.rect(14, by + 7, 2, 2, 'c');
-  img.set(13, by + 9 + (wv(3, 0.6) > 0 ? 1 : 0), 'b'); img.set(12, by + 10 + wv(4, 0.6), 'b');
-  img.set(12, by + 11 + wv(5, 0.6), 'B');
+  img.rect(14, by + 7, 3, 2, 'c'); img.set(15, by + 8, 'B');
+  img.set(13, by + 9, 'b'); img.set(13 + (wv(3, 0.6) > 0 ? -1 : 0), by + 10, 'b'); img.set(12 + (wv(4, 0.6) > 0 ? -1 : 0), by + 11, 'B');
 
-  // 6. 背后斜挎的剑鞘（左肩到右腰后，露出两端）
-  img.line(8, by + 9, 11, by + 6, 'U'); img.set(8, by + 10, 'y'); img.set(7, by + 10, 'Y');
-
-  // 7. 左臂（靠后，随步伐前后摆）
-  img.rect(8, by + 1, 2, 4, 'S');
-  img.rect(8, by + 4 + ps.arm, 2, 2, 'w');
-  img.rect(8, by + 6 + ps.arm, 2, 1, 'q');
-
-  // 8. 右臂持剑：剑尖斜指前下方，剑身一道流动的反光
-  img.rect(20, by + 1, 2, 3, 'w'); img.rect(21, by + 3, 2, 2, 'w');
-  img.rect(22, by + 4, 2, 2, 'q');
-  // 剑首 + 剑穗
-  img.set(21, by + 3, 'U'); img.set(20, by + 4, 'U');
-  img.set(19, by + 5 + (wv(2, 0.7) > 0 ? 1 : 0), 'R'); img.set(19, by + 6 + wv(3, 0.7), 'R'); img.set(18, by + 7 + wv(4, 0.7), 'r');
-  // 剑格
-  img.rect(23, by + 6, 2, 1, 'Y'); img.set(25, by + 5, 'Y'); img.set(22, by + 7, 'y');
-  // 剑身
+  // 5. 双臂：左臂随步伐摆，右臂持剑
+  img.rect(8, by + 1, 2, 4, 'w'); img.rect(8, by + 1, 1, 4, 'S');
+  img.rect(8, by + 5 + ps.arm, 2, 1, 'S'); img.rect(8, by + 6 + ps.arm, 2, 2, 'q');
+  img.rect(21, by + 1, 2, 4, 'w'); img.rect(22, by + 1, 1, 4, 'S');
+  img.rect(21, by + 5, 3, 2, 'q');
+  // 青锋剑：剑格在手下，剑身斜指右下，一道反光沿剑身流动；剑首垂红穗
+  img.set(22, by + 4, 'U'); img.set(23, by + 4, 'U');
+  img.set(24, by + 3 + (wv(2, 0.7) > 0 ? 1 : 0), 'R'); img.set(25, by + 4 + wv(3, 0.7), 'R'); img.set(25, by + 5 + wv(4, 0.7), 'r');
+  img.rect(21, by + 7, 4, 1, 'Y'); img.set(23, by + 8, 'y');
   for (let i = 0; i < 7; i++) {
-    const x = 24 + i, y = by + 7 + i;
+    const x = 23 + i, y = by + 8 + i;
     img.set(x, y, 'S'); img.set(x + 1, y, i < 6 ? 'w' : 'S');
   }
-  img.set(31, by + 14, 'w');
+  img.set(30, by + 15, 'w');
   const gl = 1 + ps.glint * 2;
-  img.set(24 + gl, by + 7 + gl, 'w'); img.set(25 + gl, by + 7 + gl, 'c'); img.set(25 + gl, by + 6 + gl, 'a');
+  img.set(23 + gl, by + 8 + gl, 'w'); img.set(24 + gl, by + 8 + gl, 'c'); img.set(24 + gl, by + 7 + gl, 'a');
 
-  // 9. 头：脸、眼、眉
-  const hx = 11, hy = by - 9;
-  img.rect(hx, hy + 2, 9, 7, 'q');
-  img.rect(hx, hy + 2, 9, 1, 'E'); // 斗笠投下的阴影
-  img.rect(hx + 1, hy + 8, 7, 1, 'q'); img.rect(hx + 2, hy + 9, 5, 1, 'E');
-  img.rect(hx, hy + 2, 1, 4, 'k'); // 鬓发
-  img.set(hx + 1, hy + 3, 'k');
-  // 剑眉星目
-  img.line(hx + 4, hy + 3, hx + 6, hy + 4, 'k'); img.set(hx + 8, hy + 3, 'k');
-  if (ps.blink) img.rect(hx + 5, hy + 5, 2, 1, 'k');
-  else { img.rect(hx + 5, hy + 4, 2, 2, 'k'); img.set(hx + 6, hy + 4, 'w'); }
-  img.set(hx + 8, hy + 5, 'k');
-  img.set(hx + 7, hy + 7, 'u'); // 嘴角
 
-  // 10. 斗笠：宽檐竹编，顶上红缨，檐边垂一缕红绳
-  const cx = 15, top = hy - 6;
-  for (let r = 0; r < 6; r++) {
-    const half = 2 + Math.round(r * 1.85);
-    img.rect(cx - half, top + r, half * 2 + 1, 1, r >= 4 ? 'u' : 'p');
-    // 竹编纹
-    for (let x = cx - half + (r % 2); x <= cx + half; x += 3) img.set(x, top + r, r >= 4 ? 'U' : 'e');
+  // 7. 脸（正面，参照觉醒造型）：两鬓黑发、剑眉、双眼带高光、鼻、嘴
+  const ox = 9, oy = by - 12, cx = ox + 6;
+  img.rect(ox + 1, oy + 4, 11, 7, 'q');
+  img.rect(ox + 2, oy + 11, 9, 1, 'q');
+  img.rect(ox + 4, oy + 12, 5, 1, 'q');
+  img.rect(ox + 1, oy + 4, 11, 1, 'E'); // 斗笠投下的阴影
+  img.rect(ox + 1, oy + 5, 1, 3, 'k'); img.rect(ox + 11, oy + 5, 1, 3, 'k'); // 两鬓
+  img.set(ox + 2, oy + 5, 'k'); img.set(ox + 10, oy + 5, 'k');
+  // 剑眉：外高内低，英气些
+  img.set(ox + 2, oy + 6, 'k'); img.set(ox + 3, oy + 6, 'k'); img.set(ox + 4, oy + 7, 'k');
+  img.set(ox + 10, oy + 6, 'k'); img.set(ox + 9, oy + 6, 'k'); img.set(ox + 8, oy + 7, 'k');
+  for (const ex of [ox + 3, ox + 8]) {
+    if (ps.blink) img.rect(ex, oy + 8, 2, 1, 'k');
+    else { img.rect(ex, oy + 7, 2, 2, 'k'); img.set(ex + (ex < cx ? 1 : 0), oy + 7, 'w'); }
   }
-  img.rect(cx - 13, top + 6, 27, 1, 'U'); // 檐边
-  img.rect(cx - 12, top + 5, 25, 1, 'u');
-  img.set(cx, top - 1, 'R'); img.set(cx, top - 2, 'R'); img.set(cx - 1 + (wv(2, 0.5) > 0 ? 0 : 1), top - 3, 'r'); // 顶缨
-  // 檐角垂绳
-  const sx = cx + 12;
-  img.set(sx, top + 7, 'R'); img.set(sx + (wv(1, 0.5) > 0 ? 1 : 0), top + 8, 'R'); img.set(sx + (wv(2, 0.6) > 0 ? 1 : 0), top + 9, 'y');
+  img.set(cx, oy + 9, 'u'); // 鼻
+  img.rect(cx - 1, oy + 11, 3, 1, 'E'); // 嘴
+
+  // 红围巾绕颈：画在下巴之后，围在领口上，左侧打结
+  img.rect(11, by, 10, 2, 'R'); img.rect(11, by + 1, 10, 1, 'r'); img.rect(13, by, 5, 1, 'f');
+  img.rect(9, by, 3, 3, 'R'); img.set(9, by + 2, 'r'); img.set(10, by + 1, 'f');
+
+  // 8. 斗笠：正面看是宽檐圆锥，竹编纹，檐下一圈深色，顶缨，右檐垂一缕红绳
+  const top = oy - 5;
+  for (let r = 0; r < 8; r++) {
+    const half = 1 + Math.round(r * 1.75);
+    const y = top + r;
+    img.rect(cx - half, y, half * 2 + 1, 1, r >= 6 ? 'u' : 'p');
+    for (let x = cx - half + (r % 2); x <= cx + half; x += 3) img.set(x, y, r >= 6 ? 'U' : 'e');
+  }
+  img.rect(cx - 14, top + 8, 29, 1, 'U'); // 檐边
+  img.set(cx - 14, top + 9, 'U'); img.set(cx + 14, top + 9, 'U'); // 檐角微垂
+  img.set(cx, top - 1, 'R'); img.set(cx, top - 2, 'R'); img.set(cx + (wv(2, 0.5) > 0 ? 1 : 0), top - 3, 'r');
+  const sx = cx + 13;
+  img.set(sx, top + 10, 'R'); img.set(sx + (wv(1, 0.5) > 0 ? 1 : 0), top + 11, 'R'); img.set(sx + (wv(2, 0.6) > 0 ? 1 : 0), top + 12, 'y');
 
   return img.outline();
 }

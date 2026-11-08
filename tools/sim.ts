@@ -54,6 +54,7 @@ for (let r = 0; r < runs; r++) {
   if (chId > 0) b.powerRatio = Number(process.env.POWER) || 1;
   // 开局奇遇：QIYU=none 不选，QIYU=<id> 指定，默认随机三选一里随便拿一个
   const tierN = [0, 0, 0, 0, 0];
+  let mbStart = -1; const bossSecs: number[] = [];
   let coinsEarned = 0;
   if (TJ) { b.tj = createTianji(); b.weapon('sword')!.lv = 2; b.recalc(); b.revives = Number(process.env.REV ?? 1); }
   if (process.env.QIYU !== 'none' && !TJ) b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
@@ -89,6 +90,11 @@ for (let r = 0; r < runs; r++) {
     const l = Math.hypot(fx, fy) || 1;
     b.moveX = fx / l; b.moveY = fy / l;
     b.update(dt);
+    if (TJ) {
+      const mb = b.midBoss && !b.midBoss.dead ? b.midBoss : null;
+      if (mb && mbStart < 0) mbStart = b.t;
+      if (!mb && mbStart >= 0) { log.push(`${b.t.toFixed(0)}s 中途敌将用时${(b.t - mbStart).toFixed(0)}s`); bossSecs.push(b.t - mbStart); mbStart = -1; }
+    }
     if (b.coins > coinsBefore) coinsEarned += b.coins - coinsBefore;
     // 后期压力：6~10 分钟里，玩家周围 100 像素内平均有多少敌人
     if (b.t > 360 && b.t < 600) {
@@ -157,6 +163,7 @@ for (let r = 0; r < runs; r++) {
   }
   console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 破盾/狂暴=${b.statShield.join("/")} 敌将战=${b.statBossSec.toFixed(0)}s 受伤=${Math.round(b.statDmgTaken)} 耗时${Date.now() - t0}ms`);
   if (profile) console.log('CAL', JSON.stringify({ chapter: chId, diff: D.id, minutes: chapter.duration / 60, hero: b.hero.id, target, power: combatPower(profile), win: b.won, bossSec: b.finalBossSec, timeout: b.bossTimedOut }));
+  if (TJ) console.log(`   中途敌将用时：${bossSecs.map((x) => x.toFixed(0) + 's').join(' / ') || '-'}  天命伤害${Math.round(b.tj!.finalDmg)}`);
   if (TJ) console.log(`   签：上上${tierN[0]} 上${tierN[1]} 中${tierN[2]} 下${tierN[3]} 怪${tierN[4]} 共${b.tj!.history.length}  金币收入${coinsEarned} 花费${b.tj!.coinsSpent} 复活${b.reviveCount}`);
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));

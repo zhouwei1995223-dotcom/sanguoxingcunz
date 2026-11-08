@@ -1,15 +1,15 @@
 import type { Battle } from './battle';
 import type { Breakable, Enemy, Warning } from './entities';
-import { HEROES } from '../data/heroes';
+import { HEROES, WUMING } from '../data/heroes';
 import { WEAPONS, PASSIVES, WeaponId, PassiveId, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, passiveMax } from '../data/skills';
 import { rand, TAU } from '../core/math';
+import { BOSSES } from '../data/enemies';
 import type { HeroStats } from '../meta/ops';
 
-/** 无名剑客的固定属性：不吃任何局外养成（装备、军略、武将等级），人人一样，全凭签运 */
-export const TIANJI_ATK = 32, TIANJI_HP = 180;
+/** 无名剑客的白板属性（模拟器用；游戏里走 computeStats('wuming')，装备、套装、军略都算，武将等级星级不算） */
 export function tianjiStats(): HeroStats {
   return {
-    atk: TIANJI_ATK, hp: TIANJI_HP, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0,
+    atk: WUMING.baseAtk, hp: WUMING.baseHp, def: 0, speed: 0, crit: 5, critDmg: 50, dmg: 0, pickup: 0, exp: 0, gold: 0, cd: 0, area: 0, regen: 0, bossDmg: 0,
     revive: 0, reroll: 0, potion: 0, hero: 'wuming', cleared: 99,
   };
 }
@@ -26,8 +26,8 @@ export const TIERS: { name: string; color: string; deep: string; glow: string; s
   { name: '下签', color: '#a8a8a8', deep: '#3a4466', glow: '#e0e0e0', sfx: 'hurt' },
   { name: '怪签', color: '#ff4f6a', deep: '#3e1030', glow: '#ff9ab0', sfx: 'boss' },
 ];
-/** 基础概率：上上 5%、上 15%、中 45%、下 25%、怪 10% */
-const TIER_W = [5, 15, 45, 25, 10];
+/** 基础概率：上上 6%、上 18%、中 43%、下 23%、怪 10% */
+export const TIER_W = [6, 18, 43, 23, 10];
 /** 每 40 秒自动送一签 */
 export const FREE_EVERY = 40;
 export const AD_DRAW_MAX = 3;
@@ -62,7 +62,14 @@ export interface TianjiState {
   timed: Timed[];
   /** 永久加成（百分比，加法叠加） */
   perm: { atk: number; hp: number; speed: number; crit: number; area: number; cd: number; dmg: number };
-  thief: { e: Enemy; weapon: WeaponId; lv: number; evo: boolean } | null;
+  /** 夺兵贼：抢了兵器（weapon）或签（tickets），击败夺回 */
+  thief: { e: Enemy; weapon?: WeaponId; lv: number; evo: boolean; tickets?: number } | null;
+  /** 斩将令召来的敌将：击败送两支好签 */
+  bounty: Enemy | null;
+  /** 万剑归宗：落剑点（只伤敌） */
+  strikes: { x: number; y: number; t: number; dmg: number }[];
+  swordT: number;
+  goldT: number;
   rust: { id: WeaponId; left: number }[];
   meteors: { w: Warning; dmg: number }[];
   meteorT: number;
@@ -73,7 +80,26 @@ export interface TianjiState {
   lastTier: Tier | -1;
   /** 测试用：下一签强制抽这个事件 id */
   force?: string;
+  /** 天命之主（8:30 登场、血量无限）与本局对它造成的伤害（排行榜分数） */
+  final: Enemy | null;
+  finalDmg: number;
+  /** 借将连发（群英会）：大招放完接着放下一个 */
+  ultQueue: string[];
 }
+
+/**
+ * 天机签的敌将血量只看时间、不看是哪位：敌将池里基础血量从 1800（夏侯恩）到 32 万（郭淮）差了上百倍，
+ * 原样随机会在 3:00 抽到第九章的敌将，怎么打都只掉一两格血（2026-11-08 用户反馈）。
+ * 按「虚拟基础血量」换算（3:00 为 800、6:00 为 1300），一场敌将战大约半分钟到一分钟。
+ */
+export function tianjiBossScale(id: string, t: number, grow: number): number {
+  const virtual = t < 270 ? 800 : t < 420 ? 1300 : 1800;
+  return grow * virtual / Math.max(1, BOSSES[id]?.hp || virtual);
+}
+
+/** 天命之主 8:30 登场，到 10:00 共 90 秒输出时间 */
+export const FINAL_AT = 510;
+const FINAL_POOL = ['caozhen', 'zhanghe', 'hande', 'guohuai', 'caochun', 'xuhuang', 'huaxiong', 'yanliang'];
 
 /** 开局：青锋剑 2 级、手里 2 支签（开局两分钟只出好签和中签，先把架子搭起来） */
 export const START_TICKETS = 2;
@@ -82,6 +108,7 @@ export function createTianji(): TianjiState {
     tickets: START_TICKETS, freeT: FREE_EVERY, paidDraws: 0, adDraws: 0, bonusDraws: 0, history: [], sinceTop: 0, badStreak: 0,
     timed: [], perm: { atk: 0, hp: 0, speed: 0, crit: 0, area: 0, cd: 0, dmg: 0 },
     thief: null, rust: [], meteors: [], meteorT: 0, treeT: 0, falls: [], coinsSpent: 0, lastTier: -1,
+    final: null, finalDmg: 0, ultQueue: [], bounty: null, strikes: [], swordT: 0, goldT: 0,
   };
 }
 
@@ -142,14 +169,47 @@ export function tianjiRecalc(b: Battle) {
   b.expMul *= 0.7;
   if (on('wisdom')) b.expMul *= 1.6;
   if (on('giant')) { b.dmgMul *= 1.4; b.areaMul += 0.3; b.dmgTakenMul *= 1.4; }
-  b.playerScale = on('giant') ? 1.6 : 1;
-  b.enemySpeedMul = (on('slowtime') ? 0.5 : 1) * (on('enrage') ? 1.35 : 1);
-  b.surgeMul = on('horde') || on('night') ? 2.5 : 1;
+  if (on('tiny')) { b.dmgMul *= 0.8; b.speed *= 1.4; b.dmgTakenMul *= 0.7; }
+  if (on('weaken')) b.dmgTakenMul *= 0.6;
+  if (on('golden')) b.dmgTakenMul = 0;
+  if (on('heavy')) b.speed *= 0.7;
+  b.playerScale = on('giant') ? 1.6 : on('tiny') ? 0.6 : 1;
+  b.enemySpeedMul = on('freeze') ? 0 : (on('slowtime') ? 0.5 : 1) * (on('enrage') ? 1.35 : 1);
+  b.surgeMul = (on('horde') || on('night') ? 2.5 : 1) * (st.final ? 0.5 : 1);
 }
 
 // —— 每帧 ——
+/** 天命之主：血量无限，打多少算多少 */
+function spawnFinal(b: Battle) {
+  const st = b.tj!;
+  const id = FINAL_POOL[(Math.random() * FINAL_POOL.length) | 0];
+  const a = rand(TAU);
+  const e = b.spawnBoss(id, b.player.x + Math.cos(a) * 170, b.player.y + Math.sin(a) * 130, true, 1);
+  e.hp = e.maxHp = 1e13;
+  e.minTime = 0; // 血量无限，不需要保底时长（否则伤害会被削）
+  e.scale = 2.5;
+  st.final = e;
+  b.recalc();
+  b.hooks.banner('天命之主降临 · 90 秒尽情输出！', '#ff4f6a');
+}
+
+/** 对天命之主造成的伤害（damage() 里调用） */
+export function tianjiFinalHit(b: Battle, dmg: number) {
+  const st = b.tj!;
+  st.finalDmg += dmg;
+  // 血量无限，按血量比例涨怒气会是 0：改成每次命中给一点
+  if (!b.ult && b.rageLock <= 0) b.rage = Math.min(100, b.rage + 0.35 * b.rageMul);
+}
+
 export function updateTianji(b: Battle, dt: number) {
   const st = b.tj!;
+  const p = b.player;
+  if (!st.final && b.t >= FINAL_AT) spawnFinal(b);
+  if (st.ultQueue.length && !b.ult) {
+    const h = HEROES.find((x) => x.id === st.ultQueue[0]);
+    st.ultQueue.shift();
+    if (h) b.castUlt(h);
+  }
   st.freeT -= dt;
   if (st.freeT <= 0) {
     st.freeT += FREE_EVERY;
@@ -204,7 +264,6 @@ export function updateTianji(b: Battle, dt: number) {
     for (const e of b.enemies) if (!e.dead && (e.x - m.w.x) ** 2 + ((e.y - m.w.y) / 0.8) ** 2 < (m.w.r + e.r) ** 2) b.damage(e, m.dmg, 0, 0, 80, { noCrit: true, source: 'other' });
   }
   // 贴着树走就会顺手砍（兵器打不到身边的树时也能砍，砍树不用找角度）
-  const p = b.player;
   for (let i = b.breakables.length - 1; i >= 0; i--) {
     const k = b.breakables[i];
     if (k.kind !== 'tree' || (k.hitCd || 0) > 0) continue;
@@ -212,6 +271,37 @@ export function updateTianji(b: Battle, dt: number) {
     b.fx.push({ kind: 'slash', x: k.x, y: k.y - 14, t: 0, dur: 0.18, r: 18, w: 0.9, a: Math.atan2(k.y - p.y, k.x - p.x), color: '#ffffff' });
     if (tianjiTreeHit(b, k)) b.breakables.splice(i, 1);
   }
+  // 万剑归宗：每 0.18 秒一把剑落在视野内随机敌人身上（只伤敌）
+  if (timedActive(st, 'swordrain')) {
+    st.swordT -= dt;
+    while (st.swordT <= 0) {
+      st.swordT += 0.18;
+      const vis = b.enemies.filter((e) => !e.dead && b.inView(e.x, e.y));
+      const e = vis.length ? vis[(Math.random() * vis.length) | 0] : null;
+      if (!e) break;
+      b.fx.push({ kind: 'meteor', x: e.x, y: e.y - 6, t: -0.12, dur: 0.22, color: '#9fe8ff' });
+      st.strikes.push({ x: e.x, y: e.y, t: 0.1, dmg: b.base.atk * 6 });
+    }
+  }
+  for (let i = st.strikes.length - 1; i >= 0; i--) {
+    const k = st.strikes[i];
+    k.t -= dt;
+    if (k.t > 0) continue;
+    st.strikes.splice(i, 1);
+    b.fx.push({ kind: 'ring', x: k.x, y: k.y, t: 0, dur: 0.25, r: 22, color: '#9fe8ff' });
+    for (const e of b.enemies) if (!e.dead && (e.x - k.x) ** 2 + (e.y - k.y) ** 2 < 26 * 26) b.damage(e, k.dmg, 0, 0, 40, { noCrit: false, source: 'other' });
+  }
+  // 金身不坏：金光护体，贴身的敌人被烫伤
+  if (timedActive(st, 'golden')) {
+    st.goldT -= dt;
+    if (st.goldT <= 0) {
+      st.goldT = 0.35;
+      b.fx.push({ kind: 'ring', x: p.x, y: p.y - 8, t: 0, dur: 0.35, r: 30, color: '#fee761' });
+      for (const e of b.enemies) if (!e.dead && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < 34 * 34) b.damage(e, b.base.atk * 3, e.x - p.x, e.y - p.y, 60, { noCrit: true, source: 'other' });
+    }
+  }
+  // 斩将令：召来的敌将被别的方式清掉就作废
+  if (st.bounty && st.bounty.dead && !b.won) st.bounty = null;
   // 树：保持视野附近有几棵
   st.treeT -= dt;
   if (st.treeT <= 0) {
@@ -258,6 +348,12 @@ export function tianjiTreeHit(b: Battle, t: Breakable): boolean {
 export function tianjiOnKill(b: Battle, e: Enemy) {
   const st = b.tj!;
   if (st.thief && st.thief.e === e) { returnStolen(b, true); return; }
+  if (st.bounty === e) {
+    st.bounty = null;
+    st.bonusDraws += 2;
+    b.hooks.banner('斩将令达成 · 获得两支好签！', '#fee761');
+  }
+  if (timedActive(st, 'vampire')) b.player.hp = Math.min(b.player.maxHp, b.player.hp + b.player.maxHp * 0.008);
   const storm = timedActive(st, 'goldrain') || timedActive(st, 'night');
   if (e.boss) for (let i = 0; i < 12; i++) b.dropPickup('coin', e.x + rand(-16, 16), e.y + rand(-10, 10), 2);
   else if (e.elite) for (let i = 0; i < 5; i++) b.dropPickup('coin', e.x + rand(-10, 10), e.y + rand(-8, 8), 2);
@@ -267,7 +363,14 @@ export function tianjiOnKill(b: Battle, e: Enemy) {
 function returnStolen(b: Battle, killed: boolean) {
   const st = b.tj!, th = st.thief!;
   st.thief = null;
-  if (b.weapon(th.weapon)) return;
+  if (th.tickets) {
+    const n = killed ? th.tickets * 2 : th.tickets;
+    st.tickets += n;
+    b.hooks.banner(killed ? `抓住小贼 · 签翻倍还你（${n} 支）` : `签找回来了（${n} 支）`, '#fee761');
+    b.hooks.sfx('levelup');
+    return;
+  }
+  if (!th.weapon || b.weapon(th.weapon)) return;
   const slotFree = b.weapons.length < WEAPON_SLOTS;
   if (!slotFree) return;
   b.addWeapon(th.weapon);
@@ -415,12 +518,12 @@ function borrow(b: Battle, title: string): Omit<DrawResult, 'tier' | 'id'> {
 }
 
 const STAT_UPS: { key: keyof TianjiState['perm']; name: string; v: number; icon: string }[] = [
-  { key: 'atk', name: '攻击', v: 10, icon: 'atk' },
-  { key: 'hp', name: '生命', v: 12, icon: 'hp' },
-  { key: 'speed', name: '移速', v: 10, icon: 'p_horseshoe' },
-  { key: 'crit', name: '暴击率', v: 6, icon: 'p_wine' },
-  { key: 'area', name: '技能范围', v: 10, icon: 'p_flag' },
-  { key: 'cd', name: '冷却缩减', v: 8, icon: 'p_book' },
+  { key: 'atk', name: '攻击', v: 15, icon: 'atk' },
+  { key: 'hp', name: '生命', v: 18, icon: 'hp' },
+  { key: 'speed', name: '移速', v: 15, icon: 'p_horseshoe' },
+  { key: 'crit', name: '暴击率', v: 8, icon: 'p_wine' },
+  { key: 'area', name: '技能范围', v: 15, icon: 'p_flag' },
+  { key: 'cd', name: '冷却缩减', v: 12, icon: 'p_book' },
 ];
 
 function timedBuff(b: Battle, id: string, name: string, sec: number, good: boolean, end?: () => void) {
@@ -438,7 +541,7 @@ const EVENTS: EventDef[] = [
     const r = borrow(b, '将星降世');
     return { ...r, desc: r.desc + '\n怒气同时充满', apply: () => { r.apply!(); b.rage = 100; } };
   } },
-  { id: 'destiny', tier: 0, w: 3, make: (b) => ({ title: '天命所归', icon: 'p_seal', desc: '攻击 +15%、生命 +15%、移速 +10%（永久）', apply: () => { const p = b.tj!.perm; p.atk += 15; p.hp += 15; p.speed += 10; b.recalc(); } }) },
+  { id: 'destiny', tier: 0, w: 3, make: (b) => ({ title: '天命所归', icon: 'p_seal', desc: '攻击 +25%、生命 +25%、移速 +15%（永久）', apply: () => { const p = b.tj!.perm; p.atk += 25; p.hp += 25; p.speed += 15; b.recalc(); } }) },
   { id: 'triple', tier: 0, w: 3, make: (b) => ({ title: '三连签', icon: 'tj_tong', desc: '签筒满溢！再免费连抽三签（不会出下签）', apply: () => { b.tj!.bonusDraws += 3; } }) },
 
   // —— 上签 ——
@@ -454,7 +557,7 @@ const EVENTS: EventDef[] = [
     const s = pick(STAT_UPS);
     return { title: '根骨奇佳', icon: s.icon, desc: `${s.name} +${s.v}%（永久）`, apply: () => { b.tj!.perm[s.key] += s.v; b.recalc(); } };
   } },
-  { id: 'level2', tier: 1, w: 2, make: (b) => ({ title: '醍醐灌顶', icon: 'gem2', desc: '立刻连升两级（每级再得一签）', apply: () => gainLevels(b, 2) }) },
+  { id: 'level2', tier: 1, w: 2, make: (b) => ({ title: '醍醐灌顶', icon: 'gem2', desc: '立刻连升三级（升级照样得签）', apply: () => gainLevels(b, 3) }) },
 
   // —— 中签 ——
   { id: 'weapon', tier: 2, w: 4, make: (b) => {
@@ -470,8 +573,8 @@ const EVENTS: EventDef[] = [
     return { title: '兵器升级', icon: weaponIcon(w.id), desc: `「${WEAPONS[w.id].name}」升一级`, apply: () => { w.lv = Math.min(MAX_WEAPON_LV, w.lv + 1); b.recalc(); } };
   } },
   { id: 'passive', tier: 2, w: 3, make: (b) => ({ title: '研习兵法', icon: 'p_book', desc: '随机一部兵法升一级', apply: () => { const r = upPassive(b, 1); b.hooks.banner(r.text, '#5fc8ff'); } }) },
-  { id: 'coins', tier: 2, w: 3, make: (b) => { const n = 40 + ((Math.random() * 5) | 0) * 10; return { title: '金币袋', icon: 'gold', desc: `金币 +${n}`, apply: () => { b.coins += n; } }; } },
-  { id: 'exp', tier: 2, w: 2, make: (b) => ({ title: '心有所悟', icon: 'gem1', desc: '获得半级经验', apply: () => b.gainExp((b.expNeed * 0.55) / b.expMul) }) },
+  { id: 'coins', tier: 2, w: 3, make: (b) => { const n = 60 + ((Math.random() * 10) | 0) * 10; return { title: '金币袋', icon: 'gold', desc: `金币 +${n}`, apply: () => { b.coins += n; } }; } },
+  { id: 'exp', tier: 2, w: 2, make: (b) => ({ title: '心有所悟', icon: 'gem1', desc: '立刻升一级', apply: () => gainLevels(b, 1) }) },
   { id: 'heal', tier: 2, w: 2, cond: (b) => b.player.hp < b.player.maxHp * 0.85, make: (b) => ({ title: '妙手回春', icon: 'bun', desc: '生命回满', apply: () => { b.player.hp = b.player.maxHp; } }) },
   { id: 'magnet', tier: 2, w: 2, make: (b) => ({ title: '吸星', icon: 'magnet', desc: '吸走全场经验宝石', apply: () => { b.dropPickup('magnet', b.player.x, b.player.y, 1); } }) },
   { id: 'bomb', tier: 2, w: 2, make: (b) => ({ title: '震天雷', icon: 'bomb', desc: '轰平眼前的敌军', apply: () => { b.dropPickup('bomb', b.player.x, b.player.y, 1); } }) },
@@ -482,9 +585,9 @@ const EVENTS: EventDef[] = [
   { id: 'slowtime', tier: 2, w: 1.5, make: (b) => ({ title: '光阴凝滞', icon: 'p_seal', desc: '20 秒内敌人移速减半', apply: () => timedBuff(b, 'slowtime', '光阴凝滞', 20, true) }) },
 
   // —— 下签（都有补偿）——
-  { id: 'horde', tier: 3, w: 3, make: (b) => ({ title: '怪潮来袭', icon: 'kills', desc: '30 秒内敌军暴增！\n扛过去送一只金宝箱', apply: () => {
+  { id: 'horde', tier: 3, w: 3, make: (b) => ({ title: '怪潮来袭', icon: 'kills', desc: '30 秒内敌军暴增！\n扛过去送金宝箱和 50 金币', apply: () => {
     b.hooks.banner('怪潮来袭！', '#e43b44');
-    timedBuff(b, 'horde', '怪潮', 30, false, () => { b.dropPickup('chest', b.player.x + 20, b.player.y, 1, true); b.hooks.banner('怪潮退去 · 天降金宝箱', '#fee761'); });
+    timedBuff(b, 'horde', '怪潮', 30, false, () => { b.dropPickup('chest', b.player.x + 20, b.player.y, 1, true); b.coins += 50; b.hooks.banner('怪潮退去 · 金宝箱 + 50 金币', '#fee761'); });
   } }) },
   { id: 'elites', tier: 3, w: 2, make: (b) => ({ title: '精英围剿', icon: 'kills', desc: '三名精英杀到！\n每击败一名都掉宝箱', apply: () => {
     for (let i = 0; i < 3; i++) { const [x, y] = b.spawnPoint(); b.spawnEnemy(b.t > 360 ? 'elite_guard' : 'wei_heavy', x, y, { elite: true }); }
@@ -534,6 +637,87 @@ const EVENTS: EventDef[] = [
     { label: '算了', sub: '拿 20 金币', act: () => { b.coins += 20; return '金币 +20'; } },
   ] }) },
   { id: 'night', tier: 4, w: 2, make: (b) => ({ title: '百鬼夜行', icon: 'gold', desc: '30 秒内敌军暴增\n但每个敌人都掉金币', apply: () => timedBuff(b, 'night', '百鬼夜行', 30, false) }) },
+
+  // —— 2026-11-08 第二批：更大胆的签 ——
+  { id: 'chestrain', tier: 0, w: 2, make: (b) => ({ title: '宝箱雨', icon: 'chest_gold', desc: '四只金宝箱从天而降', apply: () => {
+    for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.4; b.dropPickup('chest', b.player.x + Math.cos(a) * 34, b.player.y + Math.sin(a) * 26, 1, true); }
+  } }) },
+  { id: 'allstar', tier: 0, w: 2, make: (b) => {
+    const hs = HEROES.slice().sort(() => Math.random() - 0.5).slice(0, 3);
+    return { title: '群英会', icon: 'hero_' + hs[0].id + '_awk_4', desc: `${hs.map((h) => h.name).join('、')}\n三位名将接连放出大招！`, apply: () => { b.tj!.ultQueue.push(...hs.map((h) => h.id)); } };
+  } },
+  { id: 'resonance', tier: 0, w: 2, cond: (b) => b.weapons.some((w) => !w.evo && w.lv < MAX_WEAPON_LV), make: (b) => ({ title: '兵器共鸣', icon: 'atk', desc: '所有兵器同时升一级', apply: () => { for (const w of b.weapons) if (!w.evo) w.lv = Math.min(MAX_WEAPON_LV, w.lv + 1); b.recalc(); } }) },
+  { id: 'golden', tier: 0, w: 2, make: (b) => ({ title: '金身不坏', icon: 'p_armor', desc: '15 秒刀枪不入\n贴身的敌人被金光烫伤', apply: () => timedBuff(b, 'golden', '金身不坏', 15, true) }) },
+
+  { id: 'midas', tier: 1, w: 2, make: (b) => ({ title: '点石成金', icon: 'gold', desc: '屏幕内的小兵全部化作金币', apply: () => {
+    for (const e of b.enemies) {
+      if (e.dead || e.boss || e.elite || !b.inView(e.x, e.y)) continue;
+      b.killEnemy(e);
+      b.dropPickup('coin', e.x, e.y, 1);
+    }
+    b.hooks.sfx('coin'); b.hooks.shake(3);
+  } }) },
+  { id: 'freeze', tier: 1, w: 2, make: (b) => ({ title: '定身法', icon: 'p_seal', desc: '全场敌人定住 6 秒', apply: () => { timedBuff(b, 'freeze', '定身法', 6, true); b.fx.push({ kind: 'shock', x: b.player.x, y: b.player.y, t: 0, dur: 0.6, r: 200, w: 10, color: '#9fe8ff' }); } }) },
+  { id: 'jubao', tier: 1, w: 2, cond: (b) => b.tj!.paidDraws >= 3, make: (b) => ({ title: '聚宝盆', icon: 'gold', desc: '金币抽签的价格回到 15\n再送一支签', apply: () => { b.tj!.paidDraws = 0; b.tj!.tickets++; } }) },
+  { id: 'swordrain', tier: 1, w: 2, make: (b) => ({ title: '万剑归宗', icon: 'w_sword_evo', desc: '15 秒剑雨倾盆，专斩敌军', apply: () => timedBuff(b, 'swordrain', '万剑归宗', 15, true) }) },
+  { id: 'vampire', tier: 1, w: 2, make: (b) => ({ title: '嗜血', icon: 'hp', desc: '30 秒内每击杀一个敌人回一点血', apply: () => timedBuff(b, 'vampire', '嗜血', 30, true) }) },
+
+  { id: 'rage', tier: 2, w: 2, cond: (b) => b.rage < 80, make: (b) => ({ title: '怒发冲冠', icon: 'p_horn', desc: '怒气立刻充满', apply: () => { b.rage = 100; } }) },
+  { id: 'weaken', tier: 2, w: 1.5, make: (b) => ({ title: '敌军萎靡', icon: 'p_armor', desc: '30 秒内受到的伤害 -40%', apply: () => timedBuff(b, 'weaken', '敌军萎靡', 30, true) }) },
+  { id: 'grove', tier: 2, w: 1.5, make: (b) => ({ title: '天降森林', icon: 'tj_tree1', desc: '身边长出六棵树，砍了全是金币', apply: () => {
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; b.breakables.push({ x: b.player.x + Math.cos(a) * 60, y: b.player.y + Math.sin(a) * 46, r: 9, hp: 6, maxHp: 6, kind: 'tree', flash: 0, hits: 0, hitCd: 0, shake: 0.3, v: (Math.random() * 3) | 0 }); }
+  } }) },
+
+  { id: 'pickpocket', tier: 3, w: 2, cond: (b) => !b.tj!.thief && b.tj!.tickets >= 1, make: (b) => {
+    const n = Math.min(3, b.tj!.tickets);
+    return { title: '签被偷', icon: 'tj_tong', desc: `小贼偷走了 ${n} 支签！\n抓住他，签翻倍还你`, apply: () => {
+      const st = b.tj!; const k = Math.min(st.tickets, n); st.tickets -= k;
+      const a = rand(TAU);
+      const e = b.spawnEnemy('bandit', b.player.x + Math.cos(a) * 120, b.player.y + Math.sin(a) * 90, { elite: true, hpMul: 1.5 });
+      e.speed *= 1.3;
+      st.thief = { e, lv: 0, evo: false, tickets: k };
+    } };
+  } },
+  { id: 'heavy', tier: 3, w: 1.5, make: (b) => ({ title: '负重', icon: 'p_horseshoe', desc: '20 秒内移速 -30%\n熬过去再得一签', apply: () => timedBuff(b, 'heavy', '负重', 20, false, () => { b.tj!.tickets++; b.hooks.banner('卸下重担 · 获得一支签', '#fee761'); }) }) },
+  { id: 'ambush', tier: 3, w: 2, make: (b) => ({ title: '十面埋伏', icon: 'kills', desc: '四面八方围上来一圈敌军\n杀出重围再得一签', apply: () => {
+    const n = 28 + Math.floor(b.t / 30);
+    for (let i = 0; i < n; i++) { const a = (i / n) * TAU; b.spawnEnemy(b.t > 300 ? 'wu_shield' : 'wei_spear', b.player.x + Math.cos(a) * 150, b.player.y + Math.sin(a) * 120); }
+    b.hooks.banner('十面埋伏！', '#e43b44');
+    timedBuff(b, 'ambush', '十面埋伏', 20, false, () => { b.tj!.tickets++; b.hooks.banner('杀出重围 · 获得一支签', '#fee761'); });
+  } }) },
+
+  { id: 'tiny', tier: 4, w: 2, make: (b) => ({ title: '缩小术', icon: 'p_horseshoe', desc: '20 秒内身形变小：移速 +40%、受伤 -30%\n但伤害 -20%', apply: () => timedBuff(b, 'tiny', '缩小术', 20, true) }) },
+  { id: 'shuffle', tier: 4, w: 2, cond: (b) => b.weapons.some((w) => !w.evo && !isExclusive(w.id)), make: (b) => ({ title: '乾坤大挪移', icon: 'p_map', desc: '所有通用兵器随机换成别的\n等级保留', apply: () => {
+    const pool = commonWeapons(b);
+    for (const w of b.weapons.slice()) {
+      if (w.evo || isExclusive(w.id)) continue;
+      const cands = pool.filter((id) => !b.weapon(id));
+      if (!cands.length) break;
+      const id = pick(cands), lv = w.lv;
+      b.weapons.splice(b.weapons.indexOf(w), 1);
+      b.addWeapon(id);
+      b.weapon(id)!.lv = lv;
+    }
+    b.recalc();
+    b.hooks.banner('乾坤大挪移！兵器全换了', '#ff4f6a');
+  } }) },
+  { id: 'allin', tier: 4, w: 2, cond: (b) => b.coins >= 40, make: (b) => {
+    const n = b.coins;
+    return { title: '孤注一掷', icon: 'gold', desc: `押上全部 ${n} 金币\n五成翻倍，五成归零`, options: [
+      { label: '押！', sub: `翻倍到 ${n * 2} / 归零`, color: '#a22633', act: () => {
+        if (Math.random() < 0.5) { b.coins += n; b.hooks.sfx('evolve'); return `赢了！金币翻倍到 ${b.coins}`; }
+        b.coins = Math.max(0, b.coins - n); b.hooks.sfx('hurt'); return '输光了……下次一定';
+      } },
+      { label: '不押', sub: '稳一点', act: () => '收手了' },
+    ] };
+  } },
+  { id: 'bounty', tier: 4, w: 2, cond: (b) => !b.tj!.bounty && !b.tj!.final && b.t < 480, make: (b) => ({ title: '斩将令', icon: 'kills', desc: '一员敌将立刻杀到！\n斩了他，送两支好签', apply: () => {
+    const ids = ['xiahouen', 'chenying', 'xuhuang', 'hanying', 'suyong', 'huaxiong', 'yanliang', 'caimao'];
+    const a = rand(TAU);
+    const id = pick(ids);
+    const e = b.spawnBoss(id, b.player.x + Math.cos(a) * 160, b.player.y + Math.sin(a) * 120, false, tianjiBossScale(id, b.t, 1 + b.t / 150));
+    b.tj!.bounty = e;
+  } }) },
 ];
 
 /** 结算评语：按上上 / 上签占比和怪签数量 */

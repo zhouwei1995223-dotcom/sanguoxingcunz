@@ -6,11 +6,11 @@ import { playSfx, vibrate } from '../audio/sound';
 import { getPlatform } from '../platform';
 import { NO_ADS } from '../data/platformConfig';
 import { progressTask } from '../meta/ops';
-import { save } from '../meta/save';
+import { save, markDirty } from '../meta/save';
 import { WEAPONS } from '../data/skills';
 import type { BattleScene } from './battleScene';
 import type { Battle } from '../battle/battle';
-import { TIERS, Tier, DrawResult, drawSign, canDraw, drawCost, FREE_EVERY, AD_DRAW_MAX } from '../battle/tianji';
+import { TIERS, TIER_W, Tier, DrawResult, drawSign, canDraw, drawCost, FREE_EVERY, AD_DRAW_MAX } from '../battle/tianji';
 
 // 天机签的界面：摇签动画（签筒摇晃 → 签飞出 → 光芒中翻开签文）、金币不足时的看视频抽签、战斗 HUD 上的签筒按钮。
 
@@ -66,13 +66,19 @@ export class TianjiDrawDialog implements Dialog {
     playSfx('click');
   }
 
-  /** 尝试开始一次抽签（签 / 金币 / 视频）；抽不起返回 false */
-  static open(scene: BattleScene, viaAd = false): boolean {
+  /**
+   * 尝试开始一次抽签（签 / 金币 / 视频）；抽不起返回 false。
+   * skipAnim：跳过动画——直接生效，结果以文字飘在剑客身边；要玩家做选择的签（换兵器、赌局……）直接弹签文卡。
+   */
+  static open(scene: BattleScene, viaAd = false, skipAnim = false): boolean {
     const b = scene.battle;
     if (!viaAd && !canDraw(b)) return false;
     const res = drawSign(b, viaAd);
     if (!res) return false;
-    game.openDialog(new TianjiDrawDialog(scene, res));
+    if (skipAnim && !res.options) { quickReveal(scene, res); return true; }
+    const d = new TianjiDrawDialog(scene, res);
+    if (skipAnim) d.t = REVEAL;
+    game.openDialog(d);
     return true;
   }
 
@@ -243,12 +249,25 @@ export class TianjiDrawDialog implements Dialog {
       const sub = st.bonusDraws > 0 ? `三连签 · 还剩 ${st.bonusDraws}` : st.tickets > 0 ? `签 ×${st.tickets}` : `${drawCost(st)} 金币`;
       if (ui.button('tj_again', cx + 12 * u, by, bw, bh, '再抽一签', C.btnRed, { size: 32, sub })) {
         this.closed = true;
-        TianjiDrawDialog.open(this.scene);
+        TianjiDrawDialog.open(this.scene, false, !!save.settings.tjSkipAnim);
         return false;
       }
     }
   }
   closed?: boolean;
+}
+
+/** 跳过动画时：签立刻生效，品级色的字飘在剑客头顶右侧，脚下爆一圈同色粒子 */
+function quickReveal(scene: BattleScene, res: DrawResult) {
+  const b = scene.battle, T = TIERS[res.tier];
+  playSfx(T.sfx as never);
+  if (res.tier === 0) vibrate(true);
+  if (res.apply) res.apply();
+  const line = (res.outcome || res.desc).split('\n')[0];
+  // 飘字在头顶右侧，太长会出屏：截到 13 个字
+  const first = line.length > 13 ? line.slice(0, 12) + '…' : line;
+  scene.floatLines([{ text: `【${T.name}】${res.title}`, color: T.color }, { text: first, color: '#fff4d6' }]);
+  b.burst(b.player.x, b.player.y - 10, res.tier === 0 ? 30 : 14, [T.color, T.glow, '#ffffff'], 120, 0.7);
 }
 
 /** 金币不足：看视频抽一签（小红书没有广告，每局免费一次） */
@@ -348,6 +367,18 @@ export function drawTianjiHud(scene: BattleScene, ui: UI, blocked: boolean): { x
   }
   ui.text(free ? '抽 签' : `${drawCost(st)} 金`, bx, byy + r + 22 * u, 24, free ? '#fee761' : afford ? '#fff4d6' : '#ff8a80', 'center', '#1a1210');
   if (!blocked && ui.clicked('tj_draw', bx - r, byy - r, r * 2, r * 2)) scene.pressDraw();
+  // 「跳过动画」开关：签筒上方的小纸签
+  const skip = !!save.settings.tjSkipAnim;
+  const tw = 156 * u, th = 44 * u, tx = bx - tw / 2, ty = byy - r - th - 30 * u;
+  g.fillStyle = skip ? 'rgba(162,38,51,0.9)' : 'rgba(40,26,18,0.72)';
+  g.fillRect(tx, ty, tw, th);
+  g.strokeStyle = skip ? '#fee761' : 'rgba(255,244,214,0.5)'; g.lineWidth = 2 * u; g.strokeRect(tx, ty, tw, th);
+  ui.text((skip ? '☑' : '☐') + ' 跳过动画', bx, ty + th / 2, 21, '#fff4d6', 'center', null);
+  if (!blocked && ui.clicked('tj_skipanim', tx - 6 * u, ty - 6 * u, tw + 12 * u, th + 12 * u)) {
+    save.settings.tjSkipAnim = !skip;
+    markDirty();
+    ui.toast(!skip ? '已跳过抽签动画：奖励直接飘字显示' : '已恢复抽签动画');
+  }
   return { x: bx, y: byy, r };
 }
 
@@ -369,8 +400,8 @@ function drawThiefMarker(scene: BattleScene, ui: UI, b: Battle) {
   const [x, y] = scene.worldToScreen(th.e.x, th.e.y - 34);
   const bob = Math.sin(ui.time * 6) * 6 * u;
   if (x < 0 || x > ui.W || y < 0 || y > ui.H) return;
-  ui.icon(WEAPONS[th.weapon].icon, x, y - 40 * u + bob, 64 * u);
-  ui.text('夺兵贼', x, y - 90 * u + bob, 22, '#ff8a80', 'center', '#1a1210');
+  ui.icon(th.weapon ? WEAPONS[th.weapon].icon : 'tj_tong', x, y - 40 * u + bob, 64 * u);
+  ui.text(th.weapon ? '夺兵贼' : `偷签贼 ×${th.tickets}`, x, y - 90 * u + bob, 22, '#ff8a80', 'center', '#1a1210');
 }
 
 export { REVEAL };
@@ -386,8 +417,8 @@ export class TianjiRulesDialog implements Dialog {
     let y = f.y + 100 * u;
     const lx = f.x + 50 * u;
     const lines = [
-      '无名剑客独闯乱世，撑过十分钟即胜利。',
-      '不吃任何养成，人人起点一样，全凭签运。',
+      '无名剑客独闯乱世，撑过十分钟即胜利。装备、军略照常生效。',
+      '8:30 天命之主登场（血量无限），90 秒内的伤害记入排行榜。',
       '签从哪来：升级（20 级后每两级）、每 40 秒一签、',
       '金币抽签（15 金起，每次 +8，最多 200）、看视频抽签。',
       '砍树、打怪、开宝箱都能攒金币。',
@@ -397,8 +428,8 @@ export class TianjiRulesDialog implements Dialog {
     y += 20 * u;
     ui.text('签运基础概率', ui.W / 2, y, 30, '#5a2a8c', 'center', null);
     y += 50 * u;
-    const ex = ['专属兵器 · 立即进化 · 借名将大招 · 三连签', '名将兵器 · 连升两级 · 永久属性 · 宝箱', '兵器 · 兵法 · 金币 · 经验 · 短时增益', '怪潮 · 精英 · 夺兵 · 迷雾（都有补偿）', '巨人化 · 陨石雨 · 赌局 · 以血换力'];
-    const pct = [5, 15, 45, 25, 10];
+    const ex = ['神兵天降 · 群英会 · 宝箱雨 · 金身不坏 · 三连签', '名将兵器 · 万剑归宗 · 点石成金 · 定身法 · 聚宝盆', '兵器 · 兵法 · 金币 · 怒气 · 天降森林 · 短时增益', '怪潮 · 夺兵 · 签被偷 · 十面埋伏（都有补偿）', '巨人化 · 乾坤大挪移 · 孤注一掷 · 斩将令'];
+    const pct = TIER_W;
     TIERS.forEach((T, i) => {
       g.fillStyle = '#2a1d14'; g.fillRect(lx - 2 * u, y - 30 * u, 22 * u, 64 * u);
       g.fillStyle = '#f1e2bd'; g.fillRect(lx, y - 28 * u, 18 * u, 60 * u);

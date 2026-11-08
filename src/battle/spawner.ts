@@ -1,4 +1,5 @@
 import { updateDefenseSpawner } from './defense';
+import { tianjiBossScale } from './tianji';
 import { lerp, rand, weighted, TAU } from '../core/math';
 import { ENEMIES } from '../data/enemies';
 import { ChapterEvent, ENDLESS_POOLS } from '../data/chapters';
@@ -65,16 +66,18 @@ function updateEndless(b: Battle, dt: number) {
   fire('swarm', 75, { t, type: 'swarm', enemy: 'bandit', count: Math.min(60, 20 + Math.floor(m * 2)), text: '流寇来袭！' });
   fire('lantern', 45, { t, type: 'lanterns' });
   et.boss -= dt;
+  // 天机签：3:00、6:00 各一名随机敌将，8:30 由天命之主接手（tianji.ts），不再刷 9:00 那名
+  if (b.tj && b.t > 450) et.boss = 999;
   if (et.boss <= 0) {
     et.boss = b.mods?.bossEvery || 180;
     // 天机签：敌将也是随机的；9:00 那一个是「天命之战」
     const id = b.tj ? ENDLESS_BOSSES[(Math.random() * ENDLESS_BOSSES.length) | 0] : ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
     et.bossIdx++;
-    if (b.tj && b.t > 500) b.hooks.banner('天命之战！', '#ff4f6a');
     const [x, y] = b.spawnPoint();
     // 首领血量随时间成长
     const endlessGrow = b.chapter.hpMul * (1 + b.chapter.growth * m + (b.chapter.duration >= 1e8 ? 0.22 : 0.05) * m * m) * (0.75 + m * 0.08);
-    b.spawnBoss(id, x, y, false, endlessGrow);
+    // 天机签：敌将随机，但血量按时间换算（tianjiBossScale），不会抽到高章节敌将就打不动
+    b.spawnBoss(id, x, y, false, b.tj ? tianjiBossScale(id, b.t, endlessGrow) : endlessGrow);
     if (late) {
       const id2 = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
       et.bossIdx++;
