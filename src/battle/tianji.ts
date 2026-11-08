@@ -1,7 +1,7 @@
 import type { Battle } from './battle';
 import type { Breakable, Enemy, Warning } from './entities';
 import { HEROES, WUMING } from '../data/heroes';
-import { WEAPONS, PASSIVES, WeaponId, PassiveId, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, passiveMax } from '../data/skills';
+import { WEAPONS, PASSIVES, WeaponId, PassiveId, MAX_WEAPON_LV, passiveMax } from '../data/skills';
 import { rand, TAU } from '../core/math';
 import { BOSSES } from '../data/enemies';
 import type { HeroStats } from '../meta/ops';
@@ -33,7 +33,7 @@ export const FREE_EVERY = 40;
 export const AD_DRAW_MAX = 3;
 const TREE_TARGET = 9;
 
-export interface DrawOption { label: string; sub?: string; color?: string; act: () => string | void }
+export interface DrawOption { label: string; sub?: string; color?: string; icon?: string; act: () => string | void }
 export interface DrawResult {
   tier: Tier;
   id: string;
@@ -371,7 +371,13 @@ function returnStolen(b: Battle, killed: boolean) {
     return;
   }
   if (!th.weapon || b.weapon(th.weapon)) return;
-  const slotFree = b.weapons.length < WEAPON_SLOTS;
+  // 被夺的是专属兵器、这期间又抽到了别的专属兵器：只能带一件，夺回来的折成金币
+  if (isExclusive(th.weapon) && heldExclusive(b)) {
+    b.coins += 100;
+    b.hooks.banner(`夺回${WEAPONS[th.weapon].name}，但已有专属兵器 · 折成 100 金币`, '#fee761');
+    return;
+  }
+  const slotFree = b.weapons.length < b.weaponSlots;
   if (!slotFree) return;
   b.addWeapon(th.weapon);
   const w = b.weapon(th.weapon)!;
@@ -440,43 +446,33 @@ interface EventDef {
 
 function weaponIcon(id: WeaponId) { return WEAPONS[id].icon; }
 
-/** 获得一件专属武器：已有专属武器时让玩家选择是否替换（继承等级） */
-function exclusiveDraw(b: Battle, lv: number, title: string): Omit<DrawResult, 'tier' | 'id'> {
+/**
+ * 专属兵器签：从 n 位名将的专属兵器里挑一件（2026-11-08 用户：拿兵器要让玩家自己选，跳过动画时也弹出）。
+ * 已经带着专属兵器时，每个选项写明继承等级，另加「留着原来的」（改得 50 金币）。只能带一件专属兵器。
+ */
+function exclusiveDraw(b: Battle, lv: number, title: string, n: number): Omit<DrawResult, 'tier' | 'id'> {
   const cur = heldExclusive(b);
-  const choices = EXCLUSIVE.filter((id) => id !== cur?.id);
-  const id = pick(choices);
-  const owner = HEROES.find((h) => h.weapon === id)!;
-  const name = WEAPONS[id].name;
-  if (!cur) {
-    const full = b.weapons.length >= WEAPON_SLOTS;
-    return {
-      title, icon: weaponIcon(id),
-      desc: full ? `${owner.name}的${name}……可惜兵器位已满，化作 60 金币` : `获得${owner.name}的专属兵器「${name}」· ${lv} 级`,
-      apply: () => {
-        if (full) { b.coins += 60; return; }
-        b.addWeapon(id);
-        b.weapon(id)!.lv = lv;
-        b.recalc();
-      },
-    };
-  }
-  const keepLv = cur.evo ? MAX_WEAPON_LV : cur.lv;
+  const cands = EXCLUSIVE.filter((id) => id !== cur?.id).sort(() => Math.random() - 0.5).slice(0, n);
+  const keepLv = cur ? (cur.evo ? MAX_WEAPON_LV : cur.lv) : 0;
   const newLv = Math.max(lv, keepLv);
-  const curName = WEAPONS[cur.id].name;
+  const owner = (id: WeaponId) => HEROES.find((h) => h.weapon === id)!.name;
+  const options: DrawOption[] = cands.map((id) => ({
+    label: `${owner(id)} · ${WEAPONS[id].name}`,
+    sub: cur ? `替换${WEAPONS[cur.id].name} · 继承 ${newLv} 级` : `${lv} 级`,
+    icon: WEAPONS[id].icon,
+    act: () => {
+      if (cur) { const i = b.weapons.indexOf(cur); if (i >= 0) b.weapons.splice(i, 1); }
+      b.addWeapon(id);
+      b.weapon(id)!.lv = cur ? newLv : lv;
+      b.recalc();
+      return `获得「${WEAPONS[id].name}」· ${b.weapon(id)!.lv} 级`;
+    },
+  }));
+  if (cur) options.push({ label: `留着${WEAPONS[cur.id].name}`, sub: '改得 50 金币', act: () => { b.coins += 50; return '金币 +50'; } });
   return {
-    title, icon: weaponIcon(id),
-    desc: `${owner.name}的专属兵器「${name}」！\n只能携带一件专属兵器，是否替换「${curName}」？`,
-    options: [
-      { label: `换成${name}`, sub: `继承等级 · ${newLv} 级${cur.evo ? '（需重新进化）' : ''}`, color: '#a22633', act: () => {
-        const i = b.weapons.indexOf(cur);
-        b.weapons.splice(i, 1);
-        b.addWeapon(id);
-        b.weapon(id)!.lv = newLv;
-        b.recalc();
-        return `${curName} → ${name} · ${newLv} 级`;
-      } },
-      { label: `留着${curName}`, sub: '改得 50 金币', act: () => { b.coins += 50; return '金币 +50'; } },
-    ],
+    title, icon: WEAPONS[cands[0]].icon,
+    desc: cur ? `${cands.length} 件名将兵器任选其一\n专属兵器只能带一件，选了会替换「${WEAPONS[cur.id].name}」` : `${cands.length} 件名将兵器任选其一`,
+    options,
   };
 }
 
@@ -492,7 +488,7 @@ function upWeapon(b: Battle, n: number): string {
 
 function upPassive(b: Battle, n: number): { text: string; icon: string } {
   const owned = b.passives.filter((p) => p.lv < passiveMax(p.id));
-  const fresh = b.passives.length < PASSIVE_SLOTS ? b.skillPool.passives.filter((id) => !b.passives.some((p) => p.id === id)) : [];
+  const fresh = b.passives.length < b.passiveSlots ? b.skillPool.passives.filter((id) => !b.passives.some((p) => p.id === id)) : [];
   const cands: PassiveId[] = [...owned.map((p) => p.id), ...fresh];
   if (!cands.length) { b.coins += 40; return { text: '兵法已满，改得 40 金币', icon: 'gold' }; }
   const id = pick(cands);
@@ -532,7 +528,7 @@ function timedBuff(b: Battle, id: string, name: string, sec: number, good: boole
 
 const EVENTS: EventDef[] = [
   // —— 上上签 ——
-  { id: 'divine', tier: 0, w: 4, make: (b) => exclusiveDraw(b, 3, '神兵天降') },
+  { id: 'divine', tier: 0, w: 4, make: (b) => exclusiveDraw(b, 3, '神兵天降', 3) },
   { id: 'evolve', tier: 0, w: 3, cond: (b) => b.weapons.some((w) => !w.evo), make: (b) => {
     const w = pick(b.weapons.filter((x) => !x.evo));
     return { title: '神兵进化', icon: WEAPONS[w.id].evoIcon, desc: `「${WEAPONS[w.id].name}」直接进化为「${WEAPONS[w.id].evoName}」！`, apply: () => { w.lv = MAX_WEAPON_LV; b.applyChoice({ kind: 'evo', id: w.id }); } };
@@ -545,7 +541,7 @@ const EVENTS: EventDef[] = [
   { id: 'triple', tier: 0, w: 3, make: (b) => ({ title: '三连签', icon: 'tj_tong', desc: '签筒满溢！再免费连抽三签（不会出下签）', apply: () => { b.tj!.bonusDraws += 3; } }) },
 
   // —— 上签 ——
-  { id: 'heroweapon', tier: 1, w: 3, make: (b) => exclusiveDraw(b, 1, '名将兵器') },
+  { id: 'heroweapon', tier: 1, w: 3, make: (b) => exclusiveDraw(b, 1, '名将兵器', 2) },
   { id: 'weapon2', tier: 1, w: 3, cond: (b) => upgradable(b).length > 0, make: (b) => {
     const ws = upgradable(b); const w = pick(ws);
     return { title: '武艺精进', icon: weaponIcon(w.id), desc: `「${WEAPONS[w.id].name}」连升两级`, apply: () => { w.lv = Math.min(MAX_WEAPON_LV, w.lv + 2); b.recalc(); } };
@@ -561,10 +557,14 @@ const EVENTS: EventDef[] = [
 
   // —— 中签 ——
   { id: 'weapon', tier: 2, w: 4, make: (b) => {
-    const fresh = b.weapons.length < WEAPON_SLOTS ? commonWeapons(b).filter((id) => !b.weapon(id)) : [];
+    const fresh = b.weapons.length < b.weaponSlots ? commonWeapons(b).filter((id) => !b.weapon(id)) : [];
     if (fresh.length) {
-      const id = pick(fresh);
-      return { title: '获得兵器', icon: weaponIcon(id), desc: `获得「${WEAPONS[id].name}」`, apply: () => { b.addWeapon(id); b.recalc(); } };
+      // 新兵器：三选一（跳过动画时也会弹出让玩家选）
+      const ids = fresh.sort(() => Math.random() - 0.5).slice(0, 3);
+      return { title: '获得兵器', icon: weaponIcon(ids[0]), desc: `${ids.length} 件兵器任选其一`, options: ids.map((id) => ({
+        label: WEAPONS[id].name, sub: WEAPONS[id].intro.slice(0, 12), icon: WEAPONS[id].icon,
+        act: () => { b.addWeapon(id); b.recalc(); return `获得「${WEAPONS[id].name}」`; },
+      })) };
     }
     return { title: '兵器升级', icon: 'atk', desc: '随机一件兵器升一级', apply: () => { b.hooks.banner(upWeapon(b, 1), '#5fc8ff'); } };
   } },

@@ -29,7 +29,7 @@ import { TianjiRulesDialog } from './tianjiDialogs';
 import { TIANJI_DAILY } from '../meta/run';
 import {
   XhsFollowDialog, SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, ChestBatchResultDialog, StaminaDialog, RankDialog,
-  SidebarDialog, PreparationDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
+  SidebarDialog, PreparationDialog, PrepReminderDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
 } from './homeDialogs';
 import { guidePointer } from '../ui/guide';
 import { NewbieDialog, CodexDialog, WeeklyDialog } from './featureDialogs';
@@ -730,12 +730,12 @@ export class HomeScene implements Scene {
     // 战力碾压：战力达到推荐的 SWEEP_K 倍，可以不打直接拿胜利奖励（出征按钮让出一半位置）
     const canSweep = unlocked && power >= (need ?? legacyChapterPower(ch, diff)) * SWEEP_K;
     if (canSweep) {
-      if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
+      if (ui.button('start_battle', ui.W / 2 - 200 * u, by, 250 * u, bh, '出 征', C.btnRed, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.withPrepCheck(() => this.chooseCampaign(ch.id, d));
       const sweepLabel = WEB_RULES ? (chapterStars(d, ch.id) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
       if (ui.button('sweep_battle', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) {
         this.sweep(() => settleRun(ch, diff, true, WEB_RULES ? null : ch.duration, 150, 1500, 2, 2, THREE_STARS), `第${ch.id}章 ${ch.name}`, 'chapter', ch.id, d);
       }
-    } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.chooseCampaign(ch.id, d);
+    } else if (ui.button('start_battle', ui.W / 2 - bw / 2, by, bw, bh, '出 征', C.btnRed, { size: 48, disabled: !unlocked, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.withPrepCheck(() => this.chooseCampaign(ch.id, d));
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     // 无尽模式入口
     const eo = endlessOpen();
@@ -885,10 +885,10 @@ export class HomeScene implements Scene {
     // 出征 / 无尽 / 关卡总览
     const bw = 400 * u, bh = L.bh, by = L.by;
     if (open && power >= ch.power * SWEEP_K) {
-      if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
+      if (ui.button('start_defense', ui.W / 2 - 200 * u, by, 250 * u, bh, '守 城', C.btnGreen, { size: 42, sub: `体力 ${STAMINA.costPerRun}` })) this.withPrepCheck(() => this.startBattle(-3, lv));
       const sweepLabel = WEB_RULES ? (defenseStars(lv) === THREE_STARS ? undefined : '三星领元宝') : '免挑战';
       if (ui.button('sweep_defense', ui.W / 2 + 60 * u, by, 140 * u, bh, '碾压', C.btnGold, { size: 34, sub: sweepLabel })) this.sweep(() => settleDefense(lv, true, WEB_RULES ? null : ch.duration, 120, 1200, 2, 1, 12, WEB_RULES ? THREE_STARS : undefined), `守城 · ${ch.name}`, 'defense', lv, 0);
-    } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.startBattle(-3, lv);
+    } else if (ui.button('start_defense', ui.W / 2 - bw / 2, by, bw, bh, '守 城', C.btnGreen, { size: 48, disabled: !open, sub: `消耗体力 ${STAMINA.costPerRun}` })) this.withPrepCheck(() => this.startBattle(-3, lv));
     this.startRect = [ui.W / 2 - bw / 2, by, bw, bh];
     const ew = 150 * u;
     const eo = endlessOpen();
@@ -910,6 +910,14 @@ export class HomeScene implements Scene {
     flushSave(true);
     playSfx('victory');
     game.openDialog(new SweepDialog(title, res));
+  }
+
+  /** 征战 / 守城出发前：备战还没设置（当前方案没有兵器、兵法、核心武器）就先提醒；新手引导期间、今天点过不再提醒时不弹 */
+  private withPrepCheck(go: () => void) {
+    const plan = activePreparationFor(save.hero);
+    const empty = !plan.skills.length && !plan.core;
+    if (WEB_RULES && empty && save.guide >= 99 && !save.daily.prepNoRemind) game.openDialog(new PrepReminderDialog(go));
+    else go();
   }
 
   private chooseCampaign(id: number, diff: number) {

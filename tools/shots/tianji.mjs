@@ -56,6 +56,9 @@ export default async function ({ page, wait, shot }) {
     if (name) await shot(name);
   };
   await force('divine', 'tj-sign-divine');
+  // 神兵天降：三选一
+  assert.ok(await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'tj_opt_2')), 'divine offers 3 choices');
+  await click('tj_opt_0');
   await click('tj_ok');
   await force('heroweapon', 'tj-sign-swap');
   const hasOpt = await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'tj_opt_0'));
@@ -96,6 +99,19 @@ export default async function ({ page, wait, shot }) {
   // 新签：几种看揭晓
   for (const id of ['allstar', 'swordrain', 'midas', 'pickpocket', 'shuffle', 'bounty']) { await force(id, 'tj-new-' + id); await click('tj_ok'); await wait(300); }
   await wait(1500); await shot('tj-new-world');
+
+  // 自动开签：有签就自己摇，选择签停下来等
+  await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; b.tj.tickets = 3; b.coins = 0; });
+  await click('tj_auto');
+  assert.equal(await page.evaluate(() => window.__saveMod.save.settings.tjAuto), true);
+  const a0 = await page.evaluate(() => window.__game.scene.battle.tj.history.length);
+  await page.waitForFunction((a0) => { const b = window.__game.scene.battle; return b.tj.history.length >= a0 + 3 || window.__game.dialogs.some((d) => d.res && d.res.options); }, a0, { timeout: 20000 });
+  await shot('tj-auto');
+  await page.evaluate(() => { window.__saveMod.save.settings.tjAuto = false; const g = window.__game, d = g.dialogs.find((x) => x.res && x.res.options); if (d) d.res.options[0].act(); g.dialogs.length = 0; });
+  // 很多兵器时 HUD 图标换行
+  await page.evaluate(() => { const b = window.__game.scene.battle; for (const id of ['crossbow', 'horse', 'fire', 'aura', 'rock', 'knife', 'catapult', 'thunder', 'caltrop', 'drum']) if (!b.weapon(id)) b.addWeapon(id); b.recalc(); });
+  await wait(400); await shot('tj-many-weapons');
+  assert.ok(await page.evaluate(() => window.__game.scene.battle.weapons.length) > 8, 'no weapon cap');
 
   // 跳过动画：开关打开后抽签直接生效，文字飘在剑客身边；选择签仍弹卡
   await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); });

@@ -16,6 +16,8 @@ export async function startCampaign(page) {
   await page.waitForTimeout(200);
   await clickId(page, 'start_battle');
   await page.waitForTimeout(250);
+  // 还没备战时先弹提醒：直接出征
+  if (await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'prep_rm_skip'))) { await clickId(page, 'prep_rm_skip'); await page.waitForTimeout(250); }
   if (await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'duration_5'))) await clickId(page, 'duration_5');
   await page.waitForFunction(() => window.__game.scene.battle, null, { timeout: 8000 });
 }

@@ -89,13 +89,18 @@ function wumingFrame(ps: Pose): PixelImage {
   img.rect(ox + 1, oy + 4, 11, 1, 'E'); // 斗笠投下的阴影
   img.rect(ox + 1, oy + 5, 1, 3, 'k'); img.rect(ox + 11, oy + 5, 1, 3, 'k'); // 两鬓
   img.set(ox + 2, oy + 5, 'k'); img.set(ox + 10, oy + 5, 'k');
-  // 剑眉：外高内低，英气些
-  img.set(ox + 2, oy + 6, 'k'); img.set(ox + 3, oy + 6, 'k'); img.set(ox + 4, oy + 7, 'k');
-  img.set(ox + 10, oy + 6, 'k'); img.set(ox + 9, oy + 6, 'k'); img.set(ox + 8, oy + 7, 'k');
-  for (const ex of [ox + 3, ox + 8]) {
-    if (ps.blink) img.rect(ex, oy + 8, 2, 1, 'k');
-    else { img.rect(ex, oy + 7, 2, 2, 'k'); img.set(ex + (ex < cx ? 1 : 0), oy + 7, 'w'); }
+  // 剑眉：一行、略向外挑，和眼睛隔开一行
+  img.rect(ox + 2, oy + 5, 3, 1, 'k'); img.set(ox + 1, oy + 5, 'k');
+  img.rect(ox + 8, oy + 5, 3, 1, 'k'); img.set(ox + 11, oy + 5, 'k');
+  // 眼睛：3×2 黑瞳，两眼高光都在左上（和觉醒造型一致）
+  for (const ex of [ox + 2, ox + 8]) {
+    if (ps.blink) { img.rect(ex, oy + 8, 3, 1, 'k'); continue; }
+    img.rect(ex, oy + 7, 3, 2, 'k');
+    img.set(ex, oy + 7, 'w'); // 高光
+    img.set(ex + 2, oy + 8, 'K'); // 瞳仁边缘稍浅，不显得死黑
   }
+  // 腮红（很淡）
+  img.set(ox + 2, oy + 10, 'e'); img.set(ox + 10, oy + 10, 'e');
   img.set(cx, oy + 9, 'u'); // 鼻
   img.rect(cx - 1, oy + 11, 3, 1, 'E'); // 嘴
 

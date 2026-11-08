@@ -213,6 +213,9 @@ export class Battle {
   def: DefenseState | null = null;
   /** 天机签模式的状态（其他模式为 null） */
   tj: TianjiState | null = null;
+  /** 兵器 / 兵法位上限（天机签不设上限，2026-11-08 用户要求） */
+  weaponSlots = WEAPON_SLOTS;
+  passiveSlots = PASSIVE_SLOTS;
   /** 敌人移速倍率（天机签的子弹时间 / 敌军狂暴） */
   enemySpeedMul = 1;
   /** 刷怪密度额外倍率（天机签的怪潮） */
@@ -481,7 +484,7 @@ export class Battle {
     if (id === 'dianbing') this.rerolls += 2;
     if (id === 'xunshao') this.banishes += 2;
     if (id === 'xianfeng') this.rage = Math.min(RAGE_MAX, this.rage + 60);
-    if (id === 'shenbing' && this.weapons.length < WEAPON_SLOTS) {
+    if (id === 'shenbing' && this.weapons.length < this.weaponSlots) {
       // 神兵天降：送一件还没有的兵器，直接 2 级
       const ids = this.skillPool.weapons.filter(w => !this.weapon(w));
       if (ids.length) {
@@ -2336,12 +2339,12 @@ export class Battle {
     for (const w of this.weapons) if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id: w.id, lv: w.lv + 1, isNew: false }, w: 3 });
     for (const p of this.passives) if (p.lv < passiveMax(p.id)) pool.push({ c: { kind: 'passive', id: p.id, lv: p.lv + 1, isNew: false }, w: 2.2 });
     // 新技能的总出现几率不随技能总数膨胀，避免已有技能升不上去
-    if (this.weapons.length < WEAPON_SLOTS) {
+    if (this.weapons.length < this.weaponSlots) {
       const ids = this.skillPool.weapons.filter(id => !this.weapon(id) && ok('weapon', id));
       const k = Math.min(1, 6 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: (weaponLink(id, this.hero.id) ? 2.8 : 2.2) * k });
     }
-    if (this.passives.length < PASSIVE_SLOTS) {
+    if (this.passives.length < this.passiveSlots) {
       const ids = this.skillPool.passives.filter(id => !this.passiveLv(id) && ok('passive', id));
       const k = Math.min(1, 8 / Math.max(1, ids.length));
       for (const id of ids) pool.push({ c: { kind: 'passive', id, lv: 1, isNew: true }, w: (wanted.has(id) ? 3 : 1.4) * k });
@@ -2377,7 +2380,7 @@ export class Battle {
     if (d.cityHp < d.cityMax * 0.85) pool.push({ c: { kind: 'repair' }, w: 2 + 10 * (1 - d.cityHp / d.cityMax) });
     for (const id of this.skillPool.weapons) {
       const w = this.weapon(id);
-      if (!w) { if (this.weapons.length < WEAPON_SLOTS && ok('weapon', id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 1.6 }); }
+      if (!w) { if (this.weapons.length < this.weaponSlots && ok('weapon', id)) pool.push({ c: { kind: 'weapon', id, lv: 1, isNew: true }, w: 1.6 }); }
       else if (!w.evo && w.lv < MAX_WEAPON_LV) pool.push({ c: { kind: 'weapon', id, lv: w.lv + 1, isNew: false }, w: id === this.hero.weapon ? 2.6 : 2 });
       else if (!w.evo) pool.push({ c: { kind: 'evo', id }, w: 6 });
     }
@@ -2508,13 +2511,13 @@ export class Battle {
     const w = this.weapon(id), data = WEAPONS[id];
     if (w?.evo) return '已进化 · ' + (weaponLink(id, this.hero.id)?.name || data.evoName);
     if (!w && this.banned.has('weapon:' + id)) return data.name + ' · 本局已封禁';
-    if (!w && this.weapons.length >= WEAPON_SLOTS) return data.name + ' · 武器位已满';
+    if (!w && this.weapons.length >= this.weaponSlots) return data.name + ' · 武器位已满';
     const level = w?.lv ?? 0;
     const progress = data.name + ' ' + level + '/' + MAX_WEAPON_LV;
     const partner = data.evoPassive;
     if (!this.def && !this.passiveLv(partner)) {
       if (this.banned.has('passive:' + partner)) return progress + ' · ' + PASSIVES[partner].name + '已封禁';
-      if (this.passives.length >= PASSIVE_SLOTS) return progress + ' · 兵法位已满';
+      if (this.passives.length >= this.passiveSlots) return progress + ' · 兵法位已满';
       return progress + ' · 待取' + PASSIVES[partner].name;
     }
     if (level >= MAX_WEAPON_LV) return data.name + ' · 下一箱进化';
@@ -2540,7 +2543,7 @@ export class Battle {
     const out: Choice[] = [];
     let firstEvo = coreReady ?? evo[0];
     let count = boss ? 3 : Math.random() < 0.08 ? 5 : Math.random() < 0.3 ? 3 : 1;
-    if (boss && !evo.length && this.passives.length < PASSIVE_SLOTS) {
+    if (boss && !evo.length && this.passives.length < this.passiveSlots) {
       const w = this.weapons.find(x => {
         const needed = WEAPONS[x.id].evoPassive;
         return !x.evo && x.lv >= MAX_WEAPON_LV && !this.passiveLv(needed)

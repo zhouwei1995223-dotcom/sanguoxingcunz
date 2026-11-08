@@ -182,9 +182,10 @@ export class TianjiDrawDialog implements Dialog {
 
     // 签文卡：弹出放大，怪签抖一抖
     const pop = easeOutBack(Math.min(1, r / 0.32));
-    const cw = 560 * u, ch = 640 * u;
+    const many = (this.res.options?.length || 0) > 2 && this.chosen === null;
+    const cw = 560 * u, ch = (many ? 560 : 640) * u;
     const jit = tier === 4 && r < 0.5 ? (Math.random() - 0.5) * 16 * u * (1 - r / 0.5) : 0;
-    const x = cx - cw / 2 + jit, y = H * 0.44 - ch / 2;
+    const x = cx - cw / 2 + jit, y = (many ? H * 0.36 : H * 0.44) - ch / 2;
     g.save();
     g.translate(cx, H * 0.44);
     g.scale(0.4 + 0.6 * pop, 0.4 + 0.6 * pop);
@@ -229,18 +230,26 @@ export class TianjiDrawDialog implements Dialog {
     if (r < 0.35) return;
     const opts = this.res.options;
     if (opts && this.chosen === null) {
-      const bw = 270 * u;
-      opts.forEach((o, i) => {
-        const bx = cx + (i === 0 ? -bw - 12 * u : 12 * u);
-        if (ui.button('tj_opt_' + i, bx, by, bw, bh, o.label, i === 0 ? C.btnRed : C.btnGray, { size: 32, sub: o.sub })) {
-          const out = o.act();
-          this.chosen = out || o.label;
-          playSfx('levelup');
-        }
-      });
+      const pickOpt = (o: typeof opts[number]) => { const out = o.act(); this.chosen = out || o.label; playSfx('levelup'); };
+      if (opts.length <= 2) {
+        const bw = 270 * u;
+        opts.forEach((o, i) => {
+          const bx = cx + (i === 0 ? -bw - 12 * u : 12 * u);
+          if (ui.button('tj_opt_' + i, bx, by, bw, bh, o.label, i === 0 ? C.btnRed : C.btnGray, { size: 32, sub: o.sub })) pickOpt(o);
+        });
+      } else {
+        // 三个以上（兵器任选其一）：竖排，每项带兵器图标
+        const bw = cw, oh = 84 * u;
+        opts.forEach((o, i) => {
+          const oy2 = by - 16 * u + i * (oh + 10 * u);
+          if (ui.button('tj_opt_' + i, cx - bw / 2, oy2, bw, oh, o.label, o.icon ? C.btnGold : C.btnGray, { size: 28, sub: o.sub, icon: o.icon })) pickOpt(o);
+        });
+      }
       return;
     }
     const b2 = this.scene.battle;
+    // 自动开签：不用选择的签揭晓 1.8 秒后自己收下，接着摇下一签
+    if (save.settings.tjAuto && (!opts || this.chosen !== null) && r > (this.chosen !== null ? 2.4 : 1.8)) return false;
     const more = canDraw(b2) && !b2.dead && !b2.won;
     const bw = more ? 270 * u : 360 * u;
     if (ui.button('tj_ok', more ? cx - bw - 12 * u : cx - bw / 2, by, bw, bh, '收 下', C.btnGold, { size: 34 })) return false;
@@ -311,7 +320,9 @@ export function drawTianjiHud(scene: BattleScene, ui: UI, blocked: boolean): { x
   const u = ui.u, g = ui.ctx;
   drawThiefMarker(scene, ui, b);
   // 计时效果标签：左侧金币下面一列
-  let cy = ui.safeTop + 190 * u;
+  let cy = Math.max(ui.safeTop + 190 * u, scene.hudIconBottom);
+  // 有敌将血条时排到血条下面，免得压住血条
+  if ((b.finalBoss && !b.finalBoss.dead) || (b.midBoss && !b.midBoss.dead)) cy = Math.max(cy, ui.safeTop + 8 * u + 300 * u);
   for (const t of st.timed) {
     const w = 210 * u, h = 40 * u;
     g.fillStyle = t.good ? 'rgba(30,90,50,0.82)' : 'rgba(120,24,30,0.85)';
@@ -378,6 +389,18 @@ export function drawTianjiHud(scene: BattleScene, ui: UI, blocked: boolean): { x
     save.settings.tjSkipAnim = !skip;
     markDirty();
     ui.toast(!skip ? '已跳过抽签动画：奖励直接飘字显示' : '已恢复抽签动画');
+  }
+  // 「自动开签」开关：在「跳过动画」上方。开着时有签或金币够就自动摇签，选择类的签仍会停下来等玩家
+  const auto = !!save.settings.tjAuto;
+  const ay = ty - th - 12 * u;
+  g.fillStyle = auto ? 'rgba(90,42,140,0.92)' : 'rgba(40,26,18,0.72)';
+  g.fillRect(tx, ay, tw, th);
+  g.strokeStyle = auto ? '#fee761' : 'rgba(255,244,214,0.5)'; g.lineWidth = 2 * u; g.strokeRect(tx, ay, tw, th);
+  ui.text((auto ? '☑' : '☐') + ' 自动开签', bx, ay + th / 2, 21, '#fff4d6', 'center', null);
+  if (!blocked && ui.clicked('tj_auto', tx - 6 * u, ay - 6 * u, tw + 12 * u, th + 6 * u)) {
+    save.settings.tjAuto = !auto;
+    markDirty();
+    ui.toast(!auto ? '已开启自动开签：有签就自动摇，选择类的签会停下来等你' : '已关闭自动开签');
   }
   return { x: bx, y: byy, r };
 }

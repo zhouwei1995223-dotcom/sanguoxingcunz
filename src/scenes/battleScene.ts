@@ -5,7 +5,7 @@ import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
 import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL, TIANJI } from '../data/chapters';
-import { createTianji, levelTickets } from '../battle/tianji';
+import { createTianji, levelTickets, canDraw } from '../battle/tianji';
 import { TianjiDrawDialog, TianjiAdDialog, drawTianjiHud, drawTianjiFog } from './tianjiDialogs';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
@@ -150,7 +150,7 @@ export class BattleScene implements Scene {
       this.battle.recalc();
     }
     this.battle.heroSpriteName = this.chapter.tianji ? 'hero_wuming_awk' : heroSpriteName(save.hero);
-    if (this.chapter.tianji) { this.battle.tj = createTianji(); this.battle.weapon('sword')!.lv = 2; this.battle.recalc(); }
+    if (this.chapter.tianji) { const b = this.battle; b.tj = createTianji(); b.weaponSlots = b.passiveSlots = 999; b.weapon('sword')!.lv = 2; b.recalc(); }
     // 抖音录屏：整局录制，精彩时刻打点剪辑
     getPlatform().recorderStart();
     if (save.stats.runs === 0) funnel('b1_start');
@@ -309,6 +309,11 @@ export class BattleScene implements Scene {
       this.checkTips(dt);
     }
 
+    // 天机签「自动开签」：有签或金币够、没有弹窗和大招时，每 0.8 秒自动摇一签
+    if (b.tj && save.settings.tjAuto && !game.dialogs.length && !this.speedAdPending && !this.paused && !b.ult && !b.dead && !b.won && b.pendingLevelUps === 0) {
+      this.tjAutoT -= dt;
+      if (this.tjAutoT <= 0 && canDraw(b)) { this.tjAutoT = 0.8; this.pressDraw(); }
+    } else this.tjAutoT = Math.max(this.tjAutoT, 0.4);
     // 天机签：升级不弹三选一，每升一级得一支签
     if (b.tj && b.pendingLevelUps > 0) {
       const n = levelTickets(b.level - b.pendingLevelUps, b.level);
@@ -639,20 +644,28 @@ export class BattleScene implements Scene {
     // 已拥有技能
     let ix = 18 * u;
     const iy = top + 136 * u;
-    const isz = 44 * u;
-    for (const w of b.weapons) {
-      ui.qualityFrame(ix, iy, isz, w.evo ? '#feae34' : '#5a6988');
-      ui.icon(w.evo ? WEAPONS[w.id].evoIcon : WEAPONS[w.id].icon, ix + isz / 2, iy + isz / 2, isz * 0.7);
-      if (!w.evo) ui.text(String(w.lv), ix + isz - 6 * u, iy + isz - 8 * u, 16, '#fff', 'center');
+    // 天机签不限兵器 / 兵法数量：每行 8 个、图标略小、自动换行
+    const wrap = b.tj ? 8 : 99;
+    const isz = (b.tj ? 38 : 44) * u;
+    let ry = iy;
+    b.weapons.forEach((w, i) => {
+      if (i && i % wrap === 0) { ix = 18 * u; ry += isz + 4 * u; }
+      ui.qualityFrame(ix, ry, isz, w.evo ? '#feae34' : '#5a6988');
+      ui.icon(w.evo ? WEAPONS[w.id].evoIcon : WEAPONS[w.id].icon, ix + isz / 2, ry + isz / 2, isz * 0.7);
+      if (!w.evo) ui.text(String(w.lv), ix + isz - 6 * u, ry + isz - 8 * u, 16, '#fff', 'center');
       ix += isz + 4 * u;
-    }
+    });
     ix = 18 * u;
-    for (const pz of b.passives) {
-      ui.qualityFrame(ix, iy + isz + 4 * u, isz * 0.8, '#3a4466');
-      ui.icon(PASSIVES[pz.id].icon, ix + isz * 0.4, iy + isz + 4 * u + isz * 0.4, isz * 0.55);
-      ui.text(String(pz.lv), ix + isz * 0.8 - 5 * u, iy + isz * 1.8 - 4 * u, 14, '#fff', 'center');
+    let py2 = ry + isz + 4 * u;
+    b.passives.forEach((pz, i) => {
+      if (i && i % wrap === 0) { ix = 18 * u; py2 += isz * 0.8 + 4 * u; }
+      ui.qualityFrame(ix, py2, isz * 0.8, '#3a4466');
+      ui.icon(PASSIVES[pz.id].icon, ix + isz * 0.4, py2 + isz * 0.4, isz * 0.55);
+      ui.text(String(pz.lv), ix + isz * 0.8 - 5 * u, py2 + isz * 0.8 - 4 * u, 14, '#fff', 'center');
       ix += isz * 0.8 + 4 * u;
-    }
+    });
+    // 天机签的计时效果标签从图标下面开始排
+    this.hudIconBottom = b.passives.length ? py2 + isz * 0.8 + 8 * u : ry + isz + 8 * u;
 
     if (b.coreWeapon && this.chestAlertT <= 0) {
       const text = '★ ' + b.coreProgressText();
@@ -870,6 +883,9 @@ export class BattleScene implements Scene {
 
   private ultBtn: { x: number; y: number; r: number } | null = null;
   private tjBtn: { x: number; y: number; r: number } | null = null;
+  /** HUD 左上兵器 / 兵法图标的底边（天机签的计时效果标签接着往下排） */
+  hudIconBottom = 0;
+  private tjAutoT = 0.8;
 
   /** 天机签：点签筒。有签 / 金币够就摇签，不够就问要不要看视频抽 */
   pressDraw() {

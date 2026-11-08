@@ -42,6 +42,8 @@ export interface DailyState {
   chestTenAd?: Record<string, boolean>;
   /** 天机签今天打了几局（前 3 局有元宝 / 碎片奖励） */
   tianjiRuns?: number;
+  /** 今天不再提醒设置备战 */
+  prepNoRemind?: boolean;
   freeGift: boolean;
   sidebar: boolean;
   /** 今天点过游戏圈（红点只在每天第一次显示） */
@@ -96,7 +98,7 @@ export interface SaveData {
   signinDay: string;
   daily: DailyState;
   goldChestCount: number;
-  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean; lowPower: boolean; screenShake: boolean; autoPick: boolean; tjSkipAnim?: boolean };
+  settings: { music: boolean; sfx: boolean; vibrate: boolean; dmgNum: boolean; ultRight: boolean; lowPower: boolean; screenShake: boolean; autoPick: boolean; tjSkipAnim?: boolean; tjAuto?: boolean };
   guide: number;
   /** 已经看过的一次性提示（首次遇到某个系统时显示） */
   tips: Record<string, boolean>;

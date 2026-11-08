@@ -747,6 +747,40 @@ export class SidebarDialog implements Dialog {
   }
 }
 
+/** 出征 / 守城前：还没设置备战就提醒一下（可直接出征，可今天不再提醒） */
+export class PrepReminderDialog implements Dialog {
+  t?: number;
+  private noMore = false;
+  constructor(private go: () => void) {}
+  draw(ui: UI) {
+    const u = ui.u;
+    const w = ui.W - 120 * u, h = 560 * u;
+    const f = dialogFrame(ui, w, h, '还没备战', this.t || 0, 'prep_rm_x');
+    if (f.close) return false;
+    const lx = f.x + 50 * u;
+    let y = f.y + 110 * u;
+    for (const l of ['提前选好想要的兵器和兵法，', '升级时会自动帮你挑，战斗更轻松。', `当前武将：${HERO_BY_ID[save.hero].name}`]) {
+      ui.text(l, lx, y, 26, '#fff4d6', 'left'); y += 48 * u;
+    }
+    // 今天不再提醒
+    y += 10 * u;
+    ui.text((this.noMore ? '☑' : '☐') + ' 今天不再提醒', lx, y, 24, C.textDim, 'left');
+    if (ui.clicked('prep_rm_nomore', lx - 10 * u, y - 26 * u, 300 * u, 52 * u)) this.noMore = !this.noMore;
+    const bw = (w - 120 * u) / 2, by = f.y + h - 150 * u;
+    const remember = () => { if (this.noMore) { save.daily.prepNoRemind = true; markDirty(); } };
+    if (ui.button('prep_rm_go', f.x + 40 * u, by, bw, 100 * u, '去设置备战', C.btnGold, { size: 28 })) {
+      remember();
+      game.openDialog(new PreparationDialog());
+      return false;
+    }
+    if (ui.button('prep_rm_skip', f.x + 80 * u + bw, by, bw, 100 * u, '直接出征', C.btnRed, { size: 28 })) {
+      remember();
+      this.go();
+      return false;
+    }
+  }
+}
+
 export class PreparationDialog implements Dialog {
   t?: number;
   private readonly hero = HERO_BY_ID[save.hero];
