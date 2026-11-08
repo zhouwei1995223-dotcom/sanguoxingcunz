@@ -55,3 +55,21 @@ export function drawResultPublish(ui: UI, prefix: string, x: number, y: number, 
     });
   });
 }
+
+/** 天机签结算专属：发一篇笔记领 3000 元宝，每人只能领一次（2026-11-08 用户要求） */
+export const TIANJI_NOTE_YB = 3000;
+export function tianjiNoteAvailable() { return canPublish('note') && !save.xhsTianjiNote; }
+export function drawTianjiNote(ui: UI, x: number, y: number, w: number, copy: PublishCopy) {
+  ui.button('res_tj_note', x, y, w, 80 * ui.u, '发天机笔记', C.btnRed, {
+    size: 26, sub: `领 ${TIANJI_NOTE_YB} 元宝 · 每人一次`, disabled: publishing,
+    tap: async () => {
+      if (publishing || save.xhsTianjiNote) return;
+      if (!await publish('note', copy)) { ui.toast('未完成，可重试'); return; }
+      if (save.xhsTianjiNote) return;
+      save.xhsTianjiNote = true;
+      save.yuanbao += TIANJI_NOTE_YB;
+      flushSave(true);
+      ui.toast(`笔记已提交，元宝+${TIANJI_NOTE_YB}`);
+    },
+  });
+}

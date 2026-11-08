@@ -126,6 +126,8 @@ export interface SaveData {
   redeemed: Record<string, boolean>;
   subscribed: boolean;
   xhsFollowClaimed?: boolean;
+  /** 小红书：天机签结算发笔记领 3000 元宝，每人一次 */
+  xhsTianjiNote?: boolean;
   videoShareDay: string;
   agreedPrivacy: boolean;
   lastLogin: number;

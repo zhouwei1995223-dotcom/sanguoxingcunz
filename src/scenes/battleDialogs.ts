@@ -4,7 +4,7 @@ import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { dialogFrame, adButton, rewardRow, rewardEntries } from '../ui/widgets';
 import { EvoTableDialog } from './evoTableDialog';
-import { hasResultPublish, drawResultPublish } from './xhsRewards';
+import { hasResultPublish, drawResultPublish, tianjiNoteAvailable, drawTianjiNote } from './xhsRewards';
 import { DamageReportDialog } from './damageReportDialog';
 import type { BattleScene } from './battleScene';
 import { choiceInfo } from './battleScene';
@@ -1018,7 +1018,14 @@ export class ResultDialog implements Dialog {
       game.setScene(new HomeScene());
       return false;
     }
-    if (IS_XHS && hasResultPublish()) {
+    if (IS_XHS && b.tj && tianjiNoteAvailable()) {
+      // 天机签：专属笔记奖励（每人一次），领过之后才显示每日的笔记 / 评论奖励
+      const dmg = this.res.tianji?.dmg || 0;
+      const verdict = luckVerdict(b.tj.history).text;
+      const title = dmg ? `天机签打出${fmtNum(dmg)}天命伤害` : '无名剑客闯天机签';
+      const content = `${title}！${this.win ? '活满十分钟' : '撑过' + fmtTime(b.t)}，共抽 ${b.tj.history.length} 签，签运「${verdict}」。#长坂单骑传 #天机签`;
+      drawTianjiNote(ui, bx, y + 110 * u, bw, { title, content, comment: content });
+    } else if (IS_XHS && hasResultPublish()) {
       const title = b.hero.name + (this.win ? '拿下' : '挑战') + this.scene.label;
       const content = title + '，坚守' + fmtTime(b.t) + '，斩敌' + b.kills + '人。';
       drawResultPublish(ui, 'res', bx, y + 110 * u, bw, { title, content, comment: content });
