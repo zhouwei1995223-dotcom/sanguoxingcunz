@@ -40,6 +40,8 @@ export interface DailyState {
   xhsNoteReward?: boolean;
   xhsCommentReward?: boolean;
   chestTenAd?: Record<string, boolean>;
+  /** 天机签今天打了几局（前 3 局有元宝 / 碎片奖励） */
+  tianjiRuns?: number;
   freeGift: boolean;
   sidebar: boolean;
   /** 今天点过游戏圈（红点只在每天第一次显示） */
@@ -80,8 +82,10 @@ export interface SaveData {
   selectedChapter: number;
   selectedDiff: number;
   /** 主界面选中的模式与守城关卡 */
-  homeMode?: 'chapter' | 'defense' | 'tower';
+  homeMode?: 'chapter' | 'defense' | 'tower' | 'tianji';
   tower: { selected: number; commander?: string; cleared: number; stars: Record<number, number>; runs: number; wins: number; leaks: number; kills: number };
+  /** 天机签：局数、活满十分钟的局数、最久存活秒数、单局最多上上签 */
+  tianji: { runs: number; wins: number; best: number; bestTop: number };
   selectedDefense?: number;
   endlessBest: number;
   endlessRuns: number;
@@ -172,6 +176,7 @@ function freshSave(): SaveData {
     firstClear: {},
     selectedChapter: 1,
     tower: freshTower(),
+    tianji: { runs: 0, wins: 0, best: 0, bestTop: 0 },
     clears: {},
     bests: {},
     stars: {},
@@ -255,6 +260,7 @@ export function loadSave() {
       const base = freshSave();
       save = Object.assign(base, data);
       save.tower = { ...freshTower(), ...data.tower, stars: { ...data.tower?.stars } };
+      save.tianji = { runs: 0, wins: 0, best: 0, bestTop: 0, ...data.tianji };
       save.settings = Object.assign(base.settings, data.settings || {});
       save.stats = Object.assign(base.stats, data.stats || {});
       save.daily = Object.assign(freshDaily(), data.daily || {});

@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+// 天机签整体巡检：主界面卡片、玩法、开局 HUD、摇签动画三个阶段、各类签的揭晓、砍树、巨人化 / 迷雾 / 陨石 / 夺兵、结算。
+// Q='?skip=1' node tools/shot.mjs tianji（ROOT=dist/xhs 测小红书版）
+export default async function ({ page, wait, shot }) {
+  const pt = (id) => page.evaluate((id) => {
+    const ui = window.__game.ui, r = ui.prevRegions.find((v) => v.id === id), c = document.querySelector('canvas').getBoundingClientRect();
+    return r && [c.x + (r.x + r.w / 2) * c.width / ui.W, c.y + (r.y + r.h / 2) * c.height / ui.H];
+  }, id);
+  const click = async (id) => { await page.waitForFunction((id) => window.__game.ui.prevRegions.some((r) => r.id === id), id, { timeout: 8000 }); const p = await pt(id); await page.mouse.click(p[0], p[1]); await wait(150); };
+  const S = () => page.evaluate(() => { const s = window.__game.scene, b = s.battle; return { scene: s.constructor.name, dlg: window.__game.dialogs.map((d) => d.constructor.name), t: b?.t, tickets: b?.tj?.tickets, coins: b?.coins, hist: b?.tj?.history.length, weapons: b?.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)) }; });
+
+  await page.waitForFunction(() => window.__game?.scene?.constructor.name === 'HomeScene');
+  await wait(400);
+  await page.evaluate(() => { window.__game.closeAll ? window.__game.closeAll() : (window.__game.dialogs.length = 0); });
+  await click('mode_tianji');
+  await wait(600);
+  await shot('tj-home');
+  await click('tj_rules');
+  await wait(500);
+  await shot('tj-rules');
+  await page.evaluate(() => { window.__game.dialogs.length = 0; });
+  await wait(200);
+  await click('tj_start');
+  await page.waitForFunction(() => window.__game.scene.battle?.tj);
+  await wait(2500);
+  const s0 = await S();
+  assert.equal(s0.tickets, 2, 'start with 2 tickets');
+  assert.deepEqual(s0.weapons, ['sword2']);
+  await shot('tj-hud');
+
+  // 摇签：三个阶段（第一签固定成金币袋，后面的断言才稳定）
+  await page.evaluate(() => { window.__game.scene.battle.tj.force = 'coins'; });
+  await click('tj_draw');
+  await wait(350); await shot('tj-draw-shake');
+  await wait(500); await shot('tj-draw-fly');
+  await wait(900); await shot('tj-draw-reveal');
+  await click('tj_ok');
+  const s1 = await S();
+  assert.equal(s1.hist, 1); assert.equal(s1.tickets, 1);
+
+  // 指定各类签看揭晓
+  const force = async (id, name) => {
+    await page.evaluate((id) => { const b = window.__game.scene.battle; b.tj.force = id; b.tj.tickets = Math.max(b.tj.tickets, 1); window.__game.dialogs.length = 0; }, id);
+    await page.evaluate(() => window.__game.scene.pressDraw());
+    await page.waitForFunction(() => window.__game.dialogs.some((d) => d.constructor.name === 'TianjiDrawDialog'));
+    // 跳过摇签
+    await page.mouse.click(200, 400);
+    await wait(900);
+    if (name) await shot(name);
+  };
+  await force('divine', 'tj-sign-divine');
+  await click('tj_ok');
+  await force('heroweapon', 'tj-sign-swap');
+  const hasOpt = await page.evaluate(() => window.__game.ui.prevRegions.some((r) => r.id === 'tj_opt_0'));
+  assert.ok(hasOpt, 'exclusive swap asks the player');
+  await click('tj_opt_0'); await wait(500); await shot('tj-sign-swap-done');
+  await click('tj_ok');
+  const s2 = await S();
+  const excl = s2.weapons.filter((w) => /^(spear|blade|snake|fan|halberd|bow|lance|chakram|ji|meteor)/.test(w));
+  assert.equal(excl.length, 1, 'only one exclusive weapon: ' + s2.weapons.join(','));
+  await force('gamble', 'tj-sign-gamble');
+  await click('tj_opt_0'); await wait(500); await shot('tj-sign-gamble-done'); await click('tj_ok');
+  await force('starlord', 'tj-sign-borrow'); await click('tj_ok');
+  await wait(400); await shot('tj-borrow-cutin');
+  await wait(3000);
+  await force('giant'); await click('tj_ok');
+  await force('fog'); await click('tj_ok');
+  await force('thief', 'tj-sign-thief'); await click('tj_ok');
+  await wait(1500); await shot('tj-world-effects');
+  const th = await page.evaluate(() => { const b = window.__game.scene.battle; return { thief: !!b.tj.thief, timed: b.tj.timed.map((t) => t.id), scale: b.playerScale }; });
+  assert.ok(th.thief); assert.equal(th.scale, 1.6); assert.ok(th.timed.includes('fog'));
+  // 击败夺兵贼：兵器回来并升一级
+  const back = await page.evaluate(() => { const b = window.__game.scene.battle, th = b.tj.thief; const lv = th.lv; b.killEnemy(th.e); const w = b.weapon(th.weapon); return { ok: !!w, lv: w && w.lv, before: lv, thief: b.tj.thief }; });
+  assert.ok(back.ok && back.thief === null && back.lv >= Math.min(5, back.before + 1), JSON.stringify(back));
+  await force('meteor'); await click('tj_ok');
+  await wait(2500); await shot('tj-meteor');
+
+  // 砍树：把一棵树挪到剑客身边
+  await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; const t = b.breakables.find((k) => k.kind === 'tree'); if (t) { t.x = b.player.x + 12; t.y = b.player.y + 4; } });
+  await wait(900); await shot('tj-tree-chop');
+  await wait(3500);
+  const chop = await page.evaluate(() => { const b = window.__game.scene.battle; return { falls: b.tj.falls.length, trees: b.breakables.filter((k) => k.kind === 'tree').length }; });
+  console.log('trees', JSON.stringify(chop));
+  assert.ok(chop.falls >= 1, 'tree chopped down');
+  await shot('tj-tree-fallen');
+
+  // 金币不够：看视频抽签弹窗
+  await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.tickets = 0; b.tj.bonusDraws = 0; b.coins = 0; window.__game.dialogs.length = 0; });
+  await page.evaluate(() => window.__game.scene.pressDraw());
+  await wait(400); await shot('tj-ad');
+  await page.evaluate(() => { window.__game.dialogs.length = 0; });
+
+  // 结算
+  await page.evaluate(() => { const s = window.__game.scene; s.battle.t = 600; s.battle.won = true; s.finish(true); });
+  await wait(1500); await shot('tj-result');
+  const fin = await page.evaluate(() => ({ runs: window.__saveMod.save.tianji.runs, daily: window.__saveMod.save.daily.tianjiRuns }));
+  assert.equal(fin.runs, 1); assert.equal(fin.daily, 1);
+  console.log('tianji ok', JSON.stringify(await S()));
+}

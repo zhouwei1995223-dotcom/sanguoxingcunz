@@ -25,6 +25,8 @@ import { fmtNum, fmtTime } from '../core/math';
 import { itemSlot, currencyBar, adButton } from '../ui/widgets';
 import { playBgm, playSfx } from '../audio/sound';
 import { BattleScene } from './battleScene';
+import { TianjiRulesDialog } from './tianjiDialogs';
+import { TIANJI_DAILY } from '../meta/run';
 import {
   XhsFollowDialog, SigninDialog, TasksDialog, PatrolDialog, SettingsDialog, ItemDialog, ChestResultDialog, ChestBatchResultDialog, StaminaDialog, RankDialog,
   SidebarDialog, PreparationDialog, CampaignDurationDialog, ChapterStoryDialog, ChapterListDialog, DefenseListDialog, SweepDialog, TextDialog, staminaAdGain,
@@ -403,7 +405,7 @@ export class HomeScene implements Scene {
   }
 
   private drawBattleTab(ui: UI) {
-    if (WEB_RULES && save.homeMode !== 'tower') {
+    if (WEB_RULES && save.homeMode !== 'tower' && save.homeMode !== 'tianji') {
       const { defense, chapter } = selectedPreparationStage();
       const key = `${save.hero}:${defense}:${chapter}`;
       if (this.lastPreparationStage && key !== this.lastPreparationStage) {
@@ -502,7 +504,7 @@ export class HomeScene implements Scene {
     ];
     const sideR: typeof side = [
       ...(IS_XHS && !save.xhsFollowClaimed ? [{ id: 'xhs', icon: 'hero_sunshangxiang_0', label: '关注', dot: true, on: () => game.openDialog(new XhsFollowDialog()) }] : []),
-      ...(WEB_RULES && save.homeMode !== 'tower' ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
+      ...(WEB_RULES && save.homeMode !== 'tower' && save.homeMode !== 'tianji' ? [{ id: 'prepare', icon: 'p_flag', label: '备战', dot: false, on: () => game.openDialog(new PreparationDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();
@@ -562,11 +564,12 @@ export class HomeScene implements Scene {
     // 模式切换：征战 / 守城（章节卡上方两个轻盈宣纸/篆印页签）
     const mode = save.homeMode || 'chapter';
     {
-      const mw = 164 * u, mh = 66 * u, my = L.cy - mh - 8 * u;
+      // 四个页签收窄到两侧按钮之间（两侧按钮占 18~102 和 648~732）
+      const mw = 128 * u, mh = 66 * u, my = L.cy - mh - 8 * u, gap = 8 * u;
       const today = new Date().toISOString().slice(0, 10);
-      (['chapter', 'defense', 'tower'] as const).forEach((m, i) => {
-        const mx = (ui.W - mw) / 2 + (i - 1) * (mw + 10 * u);
-        const label = { chapter: '征 战', defense: '守 城', tower: '布 阵' }[m];
+      (['chapter', 'defense', 'tower', 'tianji'] as const).forEach((m, i) => {
+        const mx = ui.W / 2 - (mw * 4 + gap * 3) / 2 + i * (mw + gap);
+        const label = { chapter: '征 战', defense: '守 城', tower: '布 阵', tianji: '天 机' }[m];
         const on = mode === m;
         if (!NEW_UI) {
           ui.pixRect(mx, my, mw, mh, on ? (m === 'chapter' ? '#a22633' : '#2f7a3a') : 'rgba(20,12,10,0.78)');
@@ -583,6 +586,9 @@ export class HomeScene implements Scene {
             if (m === 'chapter') {
               tGrad.addColorStop(0, '#bf3428');
               tGrad.addColorStop(1, '#962016');
+            } else if (m === 'tianji') {
+              tGrad.addColorStop(0, '#6a3a9a');
+              tGrad.addColorStop(1, '#43216a');
             } else {
               tGrad.addColorStop(0, '#3b8050');
               tGrad.addColorStop(1, '#265c36');
@@ -597,16 +603,18 @@ export class HomeScene implements Scene {
             ctx.lineWidth = Math.max(1, u);
             ctx.strokeRect(mx + b * 2.2, my + b * 2.2, mw - b * 4.4, mh - b * 4.4);
           }
-          const iconName = m === 'chapter' ? 'atk' : m === 'defense' ? 'p_armor' : 'td_arrow1';
-          ui.icon(iconName, mx + mw / 2 - 46 * u, my + mh / 2, 28 * u, on ? 1 : 0.72);
-          ui.text(label, mx + mw / 2 + 14 * u, my + mh / 2, 25, on ? '#fbf4e4' : '#2e241c', 'center', on ? (m === 'chapter' ? '#4a100b' : '#102e19') : null);
+          const iconName = m === 'chapter' ? 'atk' : m === 'defense' ? 'p_armor' : m === 'tower' ? 'td_arrow1' : 'tj_tong';
+          ui.icon(iconName, mx + mw / 2 - 38 * u, my + mh / 2, 28 * u, on ? 1 : 0.72);
+          ui.text(label, mx + mw / 2 + 14 * u, my + mh / 2, 24, on ? '#fbf4e4' : '#2e241c', 'center', on ? (m === 'chapter' ? '#4a100b' : m === 'tianji' ? '#2a0e40' : '#102e19') : null);
         }
         if (m === 'defense' && !on && save.defense?.day !== today) ui.redDot(mx + mw - 8 * u, my + 6 * u);
+        if (m === 'tianji' && !on && (save.daily.tianjiRuns || 0) < TIANJI_DAILY) ui.redDot(mx + mw - 8 * u, my + 6 * u);
         if (ui.clicked('mode_' + m, mx, my, mw, mh)) { save.homeMode = m; markDirty(); }
       });
     }
     if (mode === 'defense') { this.drawDefenseCard(ui, L); return; }
     if (mode === 'tower') { this.drawTowerCard(ui, L); return; }
+    if (mode === 'tianji') { this.drawTianjiCard(ui, L); return; }
 
     // 章节卡（含难度切换）
     const ch = CHAPTERS[Math.min(CHAPTERS.length, save.selectedChapter) - 1];
@@ -741,6 +749,40 @@ export class HomeScene implements Scene {
     if (ui.button('chapters', ui.W - ew - 20 * u, by, ew, bh, '章节', C.btnBlue, { size: 32, sub: `${save.maxCleared}/${CHAPTERS.length}` })) game.openDialog(new ChapterListDialog((c, dd) => { save.selectedChapter = c; save.selectedDiff = dd; markDirty(); }));
   }
   private startRect: [number, number, number, number] = [0, 0, 0, 0];
+
+  /** 天机签卡片：无名剑客待机 + 规则一句话 + 纪录 + 今日奖励次数；不耗体力 */
+  private drawTianjiCard(ui: UI, L: { chH: number; bh: number; by: number; cy: number }) {
+    const u = ui.u, ctx = ui.ctx, st = save.tianji;
+    const y = L.cy, cx = ui.W / 2, cw = ui.W - 80 * u;
+    ui.panel(40 * u, y, cw, L.chH, 'paper');
+    const p = Math.max(2, Math.round(u * 2));
+    ui.pixRect(76 * u, y + 18 * u, cw - 72 * u, 42 * u, '#fbf5e6', p);
+    ctx.strokeStyle = '#5a2a8c'; ctx.lineWidth = Math.max(1.2, u * 1.5);
+    ctx.strokeRect(78 * u, y + 20 * u, cw - 76 * u, 38 * u);
+    ctx.fillStyle = '#5a2a8c'; ctx.fillRect(104 * u, y + 20 * u, cw - 128 * u, 3 * u);
+    ui.text('◆ 天机签 · 无名剑客 ◆', cx, y + 39 * u, 23, '#43216a', 'center', null);
+    // 左：剑客站在签筒旁（待机动画）
+    const sx = 160 * u, sy = y + 66 * u + (L.chH - 66 * u) * 0.48;
+    ui.icon(heroIdleFrame('hero_wuming_awk', ui.time), sx, sy, Math.min(200 * u, (L.chH - 70 * u) * 1.05));
+    ui.icon('tj_tong', sx + 96 * u, sy + 34 * u, 64 * u);
+    // 右：规则与纪录
+    const tx = 300 * u;
+    // 卡片高度随屏幕变化（约 230 单位），四行按卡高均分
+    const row = (L.chH - 70 * u) / 4.2;
+    ui.text('生存十分钟 · 全凭签运', tx, y + 70 * u + row * 0.55, 29, '#2a1d14', 'left', null);
+    ui.text('砍树打怪攒金币，摇签得兵器、借名将', tx, y + 70 * u + row * 1.55, 19, '#5c4d3e', 'left', null);
+    const left = Math.max(0, TIANJI_DAILY - (save.daily.tianjiRuns || 0));
+    ui.text(st.runs ? `不吃养成 · 最久 ${fmtTime(st.best)} · 活满 ${st.wins} 次` : '不吃养成 · 不耗体力 · 人人起点一样', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
+    ui.text(left ? `今日奖励还剩 ${left}/${TIANJI_DAILY} 次` : '今日奖励已领完 · 仍可随便玩', tx, y + 70 * u + row * 3.45, 20, left ? '#a22633' : '#8a7c6c', 'left', null);
+    if (ui.button('tj_rules', 30 * u, L.by, 200 * u, L.bh, '玩法', C.btnGray, { size: 28, sub: '签与概率' })) game.openDialog(new TianjiRulesDialog());
+    this.startRect = [250 * u, L.by, 470 * u, L.bh];
+    if (ui.button('tj_start', ...this.startRect, '入 局', C.btnRed, { size: 44, sub: '不耗体力' })) {
+      if (save.guide === 6) save.guide = 99;
+      flushSave(true);
+      playSfx('boss');
+      game.setScene(new BattleScene(-4));
+    }
+  }
 
   private drawTowerCard(ui: UI, L: { chH: number; bh: number; by: number; cy: number }) {
     const u = ui.u, st = save.tower;

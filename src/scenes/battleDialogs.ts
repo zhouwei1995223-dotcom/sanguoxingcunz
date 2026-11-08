@@ -1,3 +1,4 @@
+import { TIERS, luckVerdict } from '../battle/tianji';
 import { game, Dialog } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
@@ -13,7 +14,7 @@ import { WEAPONS, PASSIVES, MAX_WEAPON_LV, passiveMax, weaponLink } from '../dat
 import type { BossDef } from '../data/enemies';
 import { FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
 import { save, markDirty, flushSave } from '../meta/save';
-import { settleRun, settleEndless, settleDefense, settleWeeklyRun, settleTutorial, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
+import { settleRun, settleEndless, settleDefense, settleWeeklyRun, settleTutorial, settleTianji, RunResult, runStars, STAR_LABELS, starCount, diffOpen } from '../meta/run';
 import { settleWeekly } from '../meta/goals';
 import { progressTask } from '../meta/ops';
 import { playSfx, playBgm, refreshMusic } from '../audio/sound';
@@ -865,7 +866,9 @@ export class ResultDialog implements Dialog {
       }
       this.tierCount = w.rewards.length;
     } else {
-      this.res = b.def
+      this.res = b.tj
+        ? settleTianji(win, b.t, b.kills, b.bossKills, b.tj.history)
+        : b.def
         ? settleDefense(b.chapter.id, win, b.t, b.coins, b.kills, b.bossKills, b.equipDrops, b.def.waveIdx, WEB_RULES ? runStars(win, b.reviveCount, b.finalBossSec) : undefined)
         : b.chapter.tutorial
         ? settleTutorial(win, b.coins, b.kills)
@@ -884,10 +887,11 @@ export class ResultDialog implements Dialog {
     const t = this.t || 0;
     const nEntries = 3 + (this.res.yuanbao ? 1 : 0) + this.res.items.length + (this.res.heroReward ? 1 : 0) + (this.res.shardReward ? 1 : 0);
     const showStars = this.res.stars !== undefined && this.win && !this.scene.weekly;
-    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0) + (IS_XHS && hasResultPublish() ? 100 * u : 0);
-    const f = dialogFrame(ui, w, h, this.win ? '大获全胜' : '战斗结束', t);
+    const w = ui.W - 60 * u, h = (nEntries > 5 ? 1130 : 960) * u - (this.doubled ? 120 * u : 0) + (this.video && !this.shared ? 104 * u : 0) + (showStars ? 128 * u : 0) + (this.canRecommend ? 84 * u : 0) + (IS_XHS && hasResultPublish() ? 100 * u : 0) + (b.tj ? 170 * u : 0);
+    const f = dialogFrame(ui, w, h, b.tj ? '签运报告' : this.win ? '大获全胜' : '战斗结束', t);
     let y = f.y + 90 * u;
-    if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
+    if (b.tj) ui.text(this.win ? '活过十分钟！天命在我' : `撑过 ${fmtTime(b.t)}${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 32, this.win ? C.gold : '#fff4d6');
+    else if (this.scene.weekly) ui.text(this.res.newBest ? `本周新纪录！击败 ${b.kills}` : `本周最佳 ${this.weeklyBest}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
     else if (this.res.defense) ui.text(this.win ? (this.res.firstClear ? `首次守住${b.chapter.name}！${b.chapter.id < 10 ? '下一关已解锁' : ''}` : this.res.defense.dailyFirst ? '城池守住了！今日首胜碎片翻倍' : '城池守住了！') : `城池失守 · 守到第 ${this.res.defense.waves} 波${this.res.newBest ? '（新纪录）' : ''}`, ui.W / 2, y, 30, this.win ? C.gold : '#fff4d6');
     else if (this.win) ui.text(this.res.heroReward ? `首次通关！获得武将${HERO_BY_ID[this.res.heroReward].name}！` : this.res.firstClear ? '首次通关！' : '凯旋而归', ui.W / 2, y, 34, C.gold);
     else if (this.res.endless) ui.text(this.res.newBest ? `新纪录！坚持 ${fmtTime(b.t)}` : `最佳纪录 ${fmtTime(this.res.best || 0)}`, ui.W / 2, y, 30, this.res.newBest ? C.gold : '#fff4d6');
@@ -912,6 +916,24 @@ export class ResultDialog implements Dialog {
       const hard = !this.res.defense && this.res.firstClear && this.scene.diff.id === 0 && this.scene.chapter.id === 1 && diffOpen(1) ? '困难难度已解锁，去挑战吧！' : '';
       if (tip || hard) ui.text(hard || tip, ui.W / 2, y, 20, this.res.starBonus ? C.gold : '#9be37a');
       y += 36 * u;
+    }
+    if (b.tj) {
+      // 签运：五档签各抽到几支 + 评语
+      const hist = b.tj.history, verdict = luckVerdict(hist);
+      const sw = (w - 100 * u) / 5;
+      TIERS.forEach((T, i) => {
+        const n = hist.filter((x) => x === i).length;
+        const cx = f.x + 50 * u + sw * i + sw / 2;
+        const sh = 70 * u;
+        ui.ctx.fillStyle = '#2a1d14'; ui.ctx.fillRect(cx - 9 * u, y - 2 * u, 18 * u, sh + 4 * u);
+        ui.ctx.fillStyle = '#f1e2bd'; ui.ctx.fillRect(cx - 7 * u, y, 14 * u, sh);
+        ui.ctx.fillStyle = T.color; ui.ctx.fillRect(cx - 7 * u, y, 14 * u, sh * 0.28);
+        ui.text(T.name, cx, y + sh + 24 * u, 19, n ? T.color : '#7a6a5a');
+        ui.text('×' + n, cx + 22 * u, y + sh * 0.6, 22, n ? '#fff' : '#7a6a5a', 'left');
+      });
+      y += 128 * u;
+      ui.text(`共 ${hist.length} 签 · ${verdict.text}${this.res.tianji && !this.res.tianji.rewarded ? ' · 今日奖励次数已用完' : this.res.tianji ? ` · 今日奖励还剩 ${this.res.tianji.left} 次` : ''}`, ui.W / 2, y, 24, verdict.color);
+      y += 42 * u;
     }
     const rows: [string, string][] = [['坚守时间', fmtTime(b.t)], ['击败敌军', fmtNum(b.kills)], ['武将等级', 'Lv.' + b.level], ['斩获敌将', String(b.bossKills)]];
     rows.forEach((r, i) => {

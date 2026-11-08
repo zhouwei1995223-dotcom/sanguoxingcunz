@@ -7,6 +7,7 @@ import { emplacementImage, passGate } from './art/tower';
 import { TOWER_KINDS } from '../data/tower';
 import { heroFramesFor, heroSkinFrames, HERO_IDS } from './art/heroes';
 import { awakenFrames } from './art/awaken';
+import { wumingFrames, treeImage, stumpImage, tongImage } from './art/tianji';
 import { tentImage, weaponRackImage, suppliesImage, stakeImage, torchPoleImage } from './art/camp';
 import { cityImage, ramFrames, catapultFrames, crossbowCartFrames, withLadder, arrowTowerImage, shuCatapultFrames } from './art/defense';
 import { soldierFrames, generalFrames } from './art/units';
@@ -157,6 +158,11 @@ function addUnit(name: string, frames: PixelImage[]) {
 
 export function buildAtlas() {
   for (const id of HERO_IDS) { addUnit('hero_' + id, DEBUG.artV2 && id === 'zhaoyun' ? zhaoyunFramesV2() : heroFramesFor(id)); addUnit('hero_' + id + '_skin', heroSkinFrames(id)); addUnit('hero_' + id + '_awk', awakenFrames(id)); }
+  // 天机签：无名剑客（带待机帧，按觉醒造型命名）、可砍的树、树桩、签筒
+  addUnit('hero_wuming_awk', wumingFrames());
+  for (const v of [0, 1, 2]) addSprite('tj_tree' + v, treeImage(v), 'bottom');
+  addSprite('tj_stump', stumpImage(), 'bottom');
+  addSprite('tj_tong', tongImage());
   for (const k in SOLDIER_STYLES) addUnit('u_' + k, soldierFrames(SOLDIER_STYLES[k]));
   for (const k in GENERAL_STYLES) addUnit('u_' + k, generalFrames(GENERAL_STYLES[k]));
   // 主界面营地

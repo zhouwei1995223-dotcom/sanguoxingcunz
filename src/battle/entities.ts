@@ -193,9 +193,14 @@ export interface Breakable {
   y: number;
   r: number;
   hp: number;
-  kind: 'lantern' | 'cart';
+  kind: 'lantern' | 'cart' | 'tree';
   flash: number;
   hits: number;
+  /** 天机签的树：最大血量、受击冷却、摇晃计时、造型（0 松 / 1 阔叶 / 2 竹） */
+  maxHp?: number;
+  hitCd?: number;
+  shake?: number;
+  v?: number;
 }
 
 export interface Fx {

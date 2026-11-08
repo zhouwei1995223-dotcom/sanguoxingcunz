@@ -37,7 +37,7 @@ function updateEndless(b: Battle, dt: number) {
   let pool = ENDLESS_POOLS[0].pool;
   for (const p of ENDLESS_POOLS) if (t >= p.from) pool = p.pool;
   if (b.mods?.pool) pool = b.mods.pool;
-  const density = Math.min(300, 18 + m * 20) * (1 + 0.4 * b.crowdRamp()) * b.densityMul;
+  const density = Math.min(300, 18 + m * 20) * (1 + 0.4 * b.crowdRamp()) * b.densityMul * b.surgeMul;
   b.targetDensity = density;
   b.spawnT -= dt;
   if (b.spawnT <= 0) {
@@ -67,8 +67,10 @@ function updateEndless(b: Battle, dt: number) {
   et.boss -= dt;
   if (et.boss <= 0) {
     et.boss = b.mods?.bossEvery || 180;
-    const id = ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
+    // 天机签：敌将也是随机的；9:00 那一个是「天命之战」
+    const id = b.tj ? ENDLESS_BOSSES[(Math.random() * ENDLESS_BOSSES.length) | 0] : ENDLESS_BOSSES[et.bossIdx % ENDLESS_BOSSES.length];
     et.bossIdx++;
+    if (b.tj && b.t > 500) b.hooks.banner('天命之战！', '#ff4f6a');
     const [x, y] = b.spawnPoint();
     // 首领血量随时间成长
     const endlessGrow = b.chapter.hpMul * (1 + b.chapter.growth * m + (b.chapter.duration >= 1e8 ? 0.22 : 0.05) * m * m) * (0.75 + m * 0.08);

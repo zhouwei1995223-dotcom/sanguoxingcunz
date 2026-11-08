@@ -1,9 +1,10 @@
+import { updateTianji, tianjiOnKill, tianjiRecalc, tianjiTreeHit, type TianjiState } from './tianji';
 import { SpatialGrid } from '../core/grid';
 import { clamp, rand, pick, shuffle, weighted, TAU } from '../core/math';
 import { ChapterDef, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
 import { WEB_RULES } from '../data/platformConfig';
 import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
-import { HERO_BY_ID, HeroDef, UltKind } from '../data/heroes';
+import { HERO_BY_ID, HEROES, HeroDef, UltKind } from '../data/heroes';
 import type { WeeklyDef } from '../data/goals';
 import {
   WEAPONS, PASSIVES, WeaponId, PassiveId, SkillPool, skillPoolFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
@@ -210,6 +211,17 @@ export class Battle {
   midBoss: Enemy | null = null;
   /** 守城模式的状态（其他模式为 null） */
   def: DefenseState | null = null;
+  /** 天机签模式的状态（其他模式为 null） */
+  tj: TianjiState | null = null;
+  /** 敌人移速倍率（天机签的子弹时间 / 敌军狂暴） */
+  enemySpeedMul = 1;
+  /** 刷怪密度额外倍率（天机签的怪潮） */
+  surgeMul = 1;
+  /** 武将体型（天机签的巨人化） */
+  playerScale = 1;
+  /** 本次大招借用的武将（无名剑客随机借将 / 天机签的借将）；切入画面用它的名字、颜色和造型 */
+  ultHero: HeroDef | null = null;
+  ultSprite = '';
   eventIdx = 0;
   spawnT = 0;
   moveX = 0;
@@ -334,7 +346,7 @@ export class Battle {
     this.chapter = chapter;
     this.convoyTimes = WEB_RULES && chapter.campaignMinutes && !chapter.defense && !chapter.endless && !chapter.tutorial
       ? convoySchedule(chapter.duration) : [];
-    this.stratTimes = chapter.defense ? STRAT_TIMES_DEFENSE : chapter.endless ? STRAT_TIMES_ENDLESS
+    this.stratTimes = chapter.tianji ? [] : chapter.defense ? STRAT_TIMES_DEFENSE : chapter.endless ? STRAT_TIMES_ENDLESS
       : chapter.campaignMinutes ? STRAT_TIMES.map(t => Math.round(t * chapter.duration / 360)) : STRAT_TIMES;
     this.base = base;
     this.viewW = viewW;
@@ -450,6 +462,7 @@ export class Battle {
     if (Q('zhanjiang')) this.eliteDmg += 0.3;
     if (Q('yedu')) { this.durMul += 0.2; this.crit += 0.03; }
     if (Q('xunshao')) this.pickupR *= 1.15;
+    if (this.tj) tianjiRecalc(this);
   }
 
   /** 开局奇遇：随机 3 个 */
@@ -740,6 +753,7 @@ export class Battle {
     for (const e of this.enemies) if (!e.dead) this.grid.insert(e);
 
     updateSpawner(this, dt);
+    if (this.tj) updateTianji(this, dt);
     this.updateDirector(dt);
     this.updateEnemies(dt);
     if (WEB_RULES && this.def?.lost) return;
@@ -1053,7 +1067,7 @@ export class Battle {
       e.flash = Math.max(0, e.flash - dt);
       e.atkCd = Math.max(0, e.atkCd - dt);
       if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
-      const spd = e.speed * (1 - e.slow);
+      const spd = e.speed * (1 - e.slow) * this.enemySpeedMul;
       if (e.convoyGuard && escortGuard(this, e, spd, dt)) continue;
       // 守城：敌人的目标可能是城池或我方士兵
       const tgt = this.def ? enemyTarget(this, e) : null;
@@ -1326,6 +1340,7 @@ export class Battle {
     if (ration) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * 0.0002 * ration);
     this.hooks.sfx('kill');
     this.spawnCorpse(e);
+    if (this.tj) tianjiOnKill(this, e);
     // 掉落
     if (e.convoyGuard) {
       guardDefeated(this, e);
@@ -1735,6 +1750,8 @@ export class Battle {
     for (let i = this.breakables.length - 1; i >= 0; i--) {
       const b = this.breakables[i];
       if ((b.x - x) ** 2 + (b.y - 6 - y) ** 2 > (b.r + r) ** 2) continue;
+      // 天机签的树：要砍好几下，每下掉一点金币，倒下时爆一堆
+      if (b.kind === 'tree') { if (tianjiTreeHit(this, b)) this.breakables.splice(i, 1); continue; }
       this.breakables.splice(i, 1);
       this.fx.push({ kind: 'puff', x: b.x, y: b.y - 6, t: 0, dur: 0.3 });
       const roll = Math.random();
@@ -1749,6 +1766,7 @@ export class Battle {
     const p = this.player;
     for (let i = this.breakables.length - 1; i >= 0; i--) {
       const b = this.breakables[i];
+      if (b.kind === 'tree') { b.hitCd = Math.max(0, (b.hitCd || 0) - dt); b.shake = Math.max(0, (b.shake || 0) - dt); b.flash = Math.max(0, b.flash - dt); }
       // 太远就移除
       if (Math.abs(b.x - p.x) > this.viewW * 1.5 || Math.abs(b.y - p.y) > this.viewH * 1.5) this.breakables.splice(i, 1);
     }
@@ -1799,22 +1817,29 @@ export class Battle {
     return this.rage >= RAGE_MAX;
   }
 
-  castUlt(): boolean {
-    if (!this.rageFull || this.ult || this.dead || this.won) return false;
-    this.rage = 0;
-    this.rageLock = 18;
-    this.ultCasts++;
+  /** borrow：天机签「借将」直接借用某位武将的大招（不耗怒气）；无名剑客自己的大招每次随机借一位 */
+  castUlt(borrow: HeroDef | null = null): boolean {
+    if (this.ult || this.dead || this.won) return false;
+    if (!borrow && !this.rageFull) return false;
+    if (!borrow) {
+      this.rage = 0;
+      this.rageLock = 18;
+      this.ultCasts++;
+    }
     if (this.stratSet.has('guohe')) this.ultBuffT = this.t + 17;
-    const kind = this.hero.ult;
+    const uh = borrow || ((this.hero.id as string) === 'wuming' ? HEROES[(Math.random() * HEROES.length) | 0] : this.hero);
+    this.ultHero = uh === this.hero ? null : uh;
+    this.ultSprite = this.ultHero ? 'hero_' + uh.id + '_awk' : '';
+    const kind = uh.ult;
     // 有立绘切入时不再弹横幅
-    if (!this.hooks.ultCast) this.hooks.banner(this.hero.ultName.replace('·', ' · '), this.hero.color);
+    if (!this.hooks.ultCast) this.hooks.banner(uh.ultName.replace('·', ' · '), uh.color);
     this.hooks.sfx('evolve');
     this.hooks.vibrate(true);
     const p = this.player;
     const st: UltState = { kind, slow: 1, tickT: 0, rings: [], spawned: 0, idx: -1, t: 0, dur: 0, x0: p.x, y0: p.y, x1: 0, y1: 0, finale: 0 };
     this.ult = st;
     // 起手：武将本色的冲击波 + 放射光 + 粒子
-    const col = this.hero.color;
+    const col = uh.color;
     this.fx.push({ kind: 'shock', x: p.x, y: p.y - 8, t: 0, dur: 0.55, r: 120, w: 14, color: col, real: true });
     this.fx.push({ kind: 'rays', x: p.x, y: p.y - 8, t: 0, dur: 0.75, r: 140, a: rand(TAU), color: col, real: true });
     this.burst(p.x, p.y - 8, 28, [col, '#ffffff', '#fee761'], 170, 0.7);
@@ -2184,7 +2209,7 @@ export class Battle {
   }
 
   /** 大招特效：一圈向外飞散的发光粒子（特效太多时不再加） */
-  private burst(x: number, y: number, n: number, colors: string[], speed = 80, life = 0.6, g = 0) {
+  burst(x: number, y: number, n: number, colors: string[], speed = 80, life = 0.6, g = 0) {
     if (this.fx.length > 420) return;
     for (let i = 0; i < n; i++) {
       const a = rand(TAU), s = speed * rand(0.35, 1);

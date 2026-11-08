@@ -12,7 +12,7 @@ import { sprite, scaled, Sprite } from '../gfx/atlas';
 import { THEMES, GroundTheme } from '../gfx/art/env';
 import { hash2, TAU } from '../core/math';
 import type { Battle } from './battle';
-import type { Enemy } from './entities';
+import type { Enemy, Breakable } from './entities';
 import { levelData } from './weapons';
 
 // 世界渲染：先在低分辨率画布上按 1:1 像素绘制，再整数倍放大到屏幕，保证像素风清晰
@@ -333,9 +333,13 @@ export class WorldRenderer {
 
     // 可破坏物
     for (const br of b.breakables) {
+      if (br.kind === 'tree') { this.list.push({ y: br.y, draw: () => this.drawTree(br, b) }); continue; }
       const s = br.kind === 'lantern' ? sprite('lantern' + (Math.floor(b.t * 2 + br.x) % 2)) : sprite('cart');
       this.list.push({ y: br.y, draw: () => { this.blit(sprite('shadow_m'), br.x, br.y); this.blit(s, br.x, br.y); } });
     }
+
+    // 天机签：倒下的树（先倒地，之后留树桩慢慢淡出）
+    if (b.tj) for (const f of b.tj.falls) this.list.push({ y: f.y - (f.t < 0.7 ? 0 : 30), draw: () => this.drawFallen(f) });
 
     // 敌人
     const wagon = b.convoy;
@@ -555,7 +559,14 @@ export class WorldRenderer {
     const flash = p.hurtFlash > 0 && Math.floor(p.hurtFlash * 30) % 2 === 0;
     this.blit(sprite('shadow_l'), p.x, p.y + 1);
     if (p.iframe > 0.5) g.globalAlpha = 0.5 + 0.5 * Math.sin(b.t * 30);
-    this.blit(sprite(`${b.heroSprite}_${frame}${p.left ? '_L' : ''}${flash ? (p.left ? 'W' : '_W') : ''}`), p.x, p.y);
+    const ps = sprite(`${b.heroSprite}_${frame}${p.left ? '_L' : ''}${flash ? (p.left ? 'W' : '_W') : ''}`);
+    if (b.playerScale !== 1) {
+      // 天机签「巨人化」：以脚底为原点放大
+      const k = b.playerScale, x0 = Math.round(p.x - this.camX), y0 = Math.round(p.y - this.camY);
+      g.save(); g.translate(x0, y0); g.scale(k, k);
+      g.drawImage(ps.canvas, ps.x, ps.y, ps.w, ps.h, -ps.ax, -ps.ay, ps.w, ps.h);
+      g.restore();
+    } else this.blit(ps, p.x, p.y);
     g.globalAlpha = 1;
     // 血条
     const w = 22;
@@ -567,6 +578,48 @@ export class WorldRenderer {
     const ratio = Math.max(0, p.hp / p.maxHp);
     g.fillStyle = ratio < 0.3 ? '#e43b44' : '#63c74d';
     g.fillRect(x, y, Math.round(w * ratio), 2);
+  }
+
+  /** 天机签的树：受击时左右摇晃、闪一下，掉血后脚下显示血条 */
+  private drawTree(br: Breakable, b: Battle) {
+    const g = this.ctx;
+    const s = sprite('tj_tree' + (br.v || 0));
+    const sh = br.shake || 0;
+    const off = sh > 0 ? Math.sin(sh * 60) * 2.2 * (sh / 0.3) : Math.sin(b.t * 1.3 + br.x * 0.05) * 0.4;
+    this.blit(sprite('shadow_l'), br.x, br.y + 1);
+    const x0 = Math.round(br.x - this.camX), y0 = Math.round(br.y - this.camY);
+    g.save();
+    g.translate(x0, y0);
+    // 摇晃：以树根为轴微微倾斜
+    g.rotate(off * 0.03);
+    g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.ax, -s.ay, s.w, s.h);
+    if (br.flash > 0) { g.globalAlpha = 0.45; g.globalCompositeOperation = 'lighter'; g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.ax, -s.ay, s.w, s.h); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; }
+    g.restore();
+    if (br.maxHp && br.hp < br.maxHp) {
+      const w = 16, x = x0 - w / 2, y = y0 + 4;
+      g.fillStyle = '#181425'; g.fillRect(x - 1, y - 1, w + 2, 4);
+      g.fillStyle = '#feae34'; g.fillRect(x, y, Math.round(w * br.hp / br.maxHp), 2);
+    }
+  }
+
+  /** 倒下的树：0.7 秒内绕树根倒向一侧（加速），之后换成树桩，7 秒内淡出 */
+  private drawFallen(f: { x: number; y: number; v: number; t: number; dir: number }) {
+    const g = this.ctx;
+    const x0 = Math.round(f.x - this.camX), y0 = Math.round(f.y - this.camY);
+    const stump = sprite('tj_stump');
+    g.globalAlpha = f.t > 6 ? Math.max(0, 7 - f.t) : 1;
+    g.drawImage(stump.canvas, stump.x, stump.y, stump.w, stump.h, x0 - stump.ax, y0 - stump.ay, stump.w, stump.h);
+    if (f.t < 1.1) {
+      const k = Math.min(1, f.t / 0.7);
+      const s = sprite('tj_tree' + f.v);
+      g.save();
+      g.translate(x0, y0 - 2);
+      g.rotate(f.dir * k * k * Math.PI * 0.48);
+      g.globalAlpha = f.t > 0.7 ? Math.max(0, 1 - (f.t - 0.7) / 0.4) : 1;
+      g.drawImage(s.canvas, s.x, s.y, s.w, s.h, -s.ax, -s.ay, s.w, s.h);
+      g.restore();
+    }
+    g.globalAlpha = 1;
   }
 
   private drawFx(f: Battle['fx'][number], b: Battle) {

@@ -158,6 +158,23 @@ if (G()) {
     const dlg = G().dialogs.map((d) => d.constructor.name).join(',');
     return { scene: scene(), tapped: ok, ten: !!S().daily.chestTenAd?.wood, dlg };
   });
+  // 天机签：从第四个页签入局 → 摇一签收下 → 打一分钟（检查小游戏画布下抽签动画、树、HUD 不报错）
+  await step('tianji', async () => {
+    if (goHome() !== 'HomeScene') return { scene: scene(), note: '未能回到主界面' };
+    tapId('nav_battle'); runFrames(5);
+    S().homeMode = 'tianji'; runFrames(5);
+    tapId('tj_start'); runFrames(20);
+    if (scene() !== 'BattleScene' || !G().scene.battle.tj) return { scene: scene() };
+    const b = G().scene.battle;
+    G().dialogs.length = 0;
+    G().scene.pressDraw(); runFrames(90);
+    const dlg = G().dialogs.map((d) => d.constructor.name).join(',');
+    if (!tapId('tj_ok')) G().dialogs.length = 0;
+    runFrames(10);
+    b.player.maxHp = b.player.hp = 1e9;
+    for (let i = 0; i < 60 * 30; i++) { G().dialogs.length = 0; runFrames(1, 33); }
+    return { dlg, draws: b.tj.history.length, t: Math.round(b.t), trees: b.breakables.filter((k) => k.kind === 'tree').length, coins: b.coins };
+  });
   console.log(log.join('\n'));
 }
 hideCbs.forEach((f) => f());

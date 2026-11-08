@@ -86,6 +86,8 @@ export interface RunResult {
   /** 长局实际打过的波次给基础军饷和玄铁带来的倍率。 */
   materialMultiplier?: number;
   convoyLoot?: { count: number; gold: number; yuanbao: number };
+  /** 天机签：本局是否在每日奖励次数内、今天还剩几次 */
+  tianji?: { rewarded: boolean; left: number };
 }
 
 /** 三星评价：通关 / 不复活 / 限时击败最终敌将 */
@@ -289,6 +291,38 @@ export function settleEndless(t: number, coins: number, kills: number, bossKills
   getPlatform().submitScore('endless', save.endlessBest);
   markDirty();
   return { win: false, firstClear: false, gold, iron, yuanbao, items, newBest, shardReward, endless: true, best: save.endlessBest };
+}
+
+/** 天机签每天前几局有元宝 / 碎片奖励 */
+export const TIANJI_DAILY = 3;
+
+/** 天机签结算：不耗体力；每天前 3 局给元宝和碎片（按存活时间，活满十分钟另加），之后只给少量金币 */
+export function settleTianji(win: boolean, t: number, kills: number, bossKills: number, history: number[]): RunResult {
+  const st = save.tianji;
+  const used = save.daily.tianjiRuns || 0;
+  const rewarded = used < TIANJI_DAILY;
+  save.daily.tianjiRuns = used + 1;
+  const m = Math.min(10, t / 60);
+  const gold = Math.round(60 * m + kills * 0.2);
+  let yuanbao = 0;
+  let shardReward: { hero: string; n: number } | undefined;
+  if (rewarded) {
+    yuanbao = Math.round(5 * m) + (win ? 20 : 0);
+    const n = Math.floor(m / 3) + (win ? 2 : 0);
+    if (n > 0) { shardReward = { hero: randomShardHero(true), n }; grantShards(shardReward.hero, n); }
+  }
+  save.gold += gold;
+  save.yuanbao += yuanbao;
+  st.runs++;
+  if (win) st.wins++;
+  const newBest = Math.floor(t) > st.best;
+  if (newBest) st.best = Math.floor(t);
+  st.bestTop = Math.max(st.bestTop, history.filter((x) => x === 0).length);
+  progressTask('battle', 1);
+  progressTask('kill', kills);
+  if (bossKills) progressTask('boss', bossKills);
+  markDirty();
+  return { win, firstClear: win && st.wins === 1, gold, iron: 0, yuanbao, items: [], newBest, shardReward, best: st.best, tianji: { rewarded, left: Math.max(0, TIANJI_DAILY - used - 1) } };
 }
 
 /** 排行分数：最高进度（难度×10+章节）×10000 + 该关坚守秒数 */

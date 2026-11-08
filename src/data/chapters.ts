@@ -36,6 +36,8 @@ export interface ChapterEvent {
 }
 
 export interface ChapterDef {
+  /** 天机签模式：无名剑客、抽签、十分钟生存 */
+  tianji?: boolean;
   id: number;
   name: string;
   subtitle: string;
@@ -275,6 +277,12 @@ export const ENDLESS: ChapterDef = {
   story: '敌军源源不断，没有尽头。坚持得越久，奖励越丰厚。',
   duration: 1e9, hpMul: 2, dmgMul: 1.6, growth: 0.55, goldBase: 0, power: 0, endless: true,
   waves: [], events: [], midBoss: '', boss: '',
+};
+
+/** 天机签：只有一关，生存十分钟。刷怪沿用无尽的节奏（有限时长时成长较缓），敌人强度固定、不随账号进度变化。 */
+export const TIANJI: ChapterDef = {
+  ...ENDLESS, id: -4, name: '天机签', subtitle: '一签一天命', story: '无名剑客独闯乱世，十分钟内生死全凭签运。',
+  duration: 600, tianji: true, hpMul: 1.0, dmgMul: 1.0, growth: 0.35,
 };
 
 /** 无尽模式的敌人池：随时间解锁更强兵种 */

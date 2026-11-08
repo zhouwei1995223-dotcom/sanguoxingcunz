@@ -108,6 +108,19 @@ export const HEROES: HeroDef[] = [
 export const HERO_BY_ID: Record<string, HeroDef> = {};
 HEROES.forEach((h) => (HERO_BY_ID[h.id] = h));
 
+/**
+ * 天机签模式的主角：不在武将列表里（不能培养、不能出战其他模式），只登记到 HERO_BY_ID 供战斗读取。
+ * 大招「百家剑意」：每次随机借用一位名将的绝技（battle.castUlt 里处理）。
+ */
+export const WUMING: HeroDef = {
+  id: 'wuming' as HeroId, name: '无名剑客', title: '天涯孤剑', quote: '一剑一签，天命由我。', role: '随机应变',
+  passive: '百家剑意：大招每次随机借用一位名将的绝技',
+  baseAtk: 22, baseHp: 130, atkPerLv: 0, hpPerLv: 0, moveSpeed: 80, pickup: 44,
+  weapon: 'sword', ult: 'dragon', ultName: '百家剑意', ultDesc: '随机借用一位名将的绝技',
+  unlockText: '天机签模式', unlockShards: 0, color: '#e43b44',
+};
+HERO_BY_ID[WUMING.id] = WUMING;
+
 /** 升星所需碎片（1→2, 2→3, 3→4, 4→5） */
 export const STAR_COST = [20, 40, 80, 120];
 export const MAX_STAR = 5;

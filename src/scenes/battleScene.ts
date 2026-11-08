@@ -4,7 +4,9 @@ import type { TouchKind, TouchPoint } from '../platform/types';
 import { Battle, Choice } from '../battle/battle';
 import { WorldRenderer } from '../battle/render';
 import { resetSpawner } from '../battle/spawner';
-import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL } from '../data/chapters';
+import { campaignChapter, CHAPTERS, ChapterDef, DIFFICULTIES, DifficultyDef, ENDLESS, TUTORIAL, TIANJI } from '../data/chapters';
+import { createTianji, tianjiStats, levelTickets } from '../battle/tianji';
+import { TianjiDrawDialog, TianjiAdDialog, drawTianjiHud, drawTianjiFog } from './tianjiDialogs';
 import { THEMES } from '../gfx/art/env';
 import { endlessHpMul, endlessDmgMul, legacyChapterPower, convoyReward } from '../meta/run';
 import { currentWeekly, recordCodex, heroSpriteName, heroIdleFrame } from '../meta/goals';
@@ -103,10 +105,13 @@ export class BattleScene implements Scene {
   private speedAcc = 0;
   videoPath: Promise<string | null> | null = null;
 
-  /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼，-3 为守城模式 */
+  /** chapterId：0 为无尽模式，-1 为每周挑战，-2 为新手试炼，-3 为守城模式，-4 为天机签 */
   constructor(chapterId: number, diff = 0, minutes: 5 | 10 = 5) {
     const themes = Object.keys(THEMES);
-    if (chapterId === -3) {
+    if (chapterId === -4) {
+      this.chapter = { ...TIANJI, theme: themes[(Math.random() * themes.length) | 0] };
+      diff = 0;
+    } else if (chapterId === -3) {
       // 守城：第二个参数是关卡（1~10），没有难度
       this.chapter = defenseChapter(diff || 1);
       diff = 0;
@@ -126,7 +131,8 @@ export class BattleScene implements Scene {
     const p = getPlatform();
     resetSpawner();
     this.renderer = new WorldRenderer(p.width, p.height, this.chapter.theme);
-    const stats = computeStats();
+    // 天机签：无名剑客，固定属性，不吃局外养成
+    const stats = this.chapter.tianji ? tianjiStats() : computeStats();
     if (this.weekly?.playerHp) stats.hp = Math.max(1, Math.round(stats.hp * this.weekly.playerHp));
     this.battle = new Battle(this.chapter, stats, this.renderer.w, this.renderer.h);
     infoHero = this.battle.hero.id;
@@ -143,7 +149,8 @@ export class BattleScene implements Scene {
       }
       this.battle.recalc();
     }
-    this.battle.heroSpriteName = heroSpriteName(save.hero);
+    this.battle.heroSpriteName = this.chapter.tianji ? 'hero_wuming_awk' : heroSpriteName(save.hero);
+    if (this.chapter.tianji) { this.battle.tj = createTianji(); this.battle.weapon('sword')!.lv = 2; this.battle.recalc(); }
     // 抖音录屏：整局录制，精彩时刻打点剪辑
     getPlatform().recorderStart();
     if (save.stats.runs === 0) funnel('b1_start');
@@ -154,7 +161,7 @@ export class BattleScene implements Scene {
     this.battle.enemyHpMul *= this.diff.hp;
     this.battle.enemyDmgMul *= this.diff.dmg;
     // 无尽模式的敌人强度跟随玩家的章节进度
-    if (this.chapter.endless) { this.battle.enemyHpMul *= endlessHpMul(); this.battle.enemyDmgMul *= endlessDmgMul(); }
+    if (this.chapter.endless && !this.chapter.tianji) { this.battle.enemyHpMul *= endlessHpMul(); this.battle.enemyDmgMul *= endlessDmgMul(); }
     // 守城：城池、粮草、可召唤的武将（强度按各自的等级 / 星级 / 巅峰等级）
     if (this.chapter.defense) {
       const heroes: Record<string, HeroInfo> = {};
@@ -167,7 +174,7 @@ export class BattleScene implements Scene {
       this.renderer.clearCenter = true;
     }
     this.battle.showDamage = save.settings.dmgNum;
-    if (WEB_RULES && !this.chapter.tutorial) {
+    if (WEB_RULES && !this.chapter.tutorial && !this.chapter.tianji) {
       const b = this.battle, plan = activePreparationFor(b.hero.id);
       this.unavailablePreparedNames = this.fitRunPreparation(plan.skills);
       if (plan.core) {
@@ -197,8 +204,10 @@ export class BattleScene implements Scene {
     };
     playBgm('bgm_battle');
     this.banners.push({ text: this.label, color: this.chapter.endless ? '#ff8a80' : this.diff.color, t: 0 });
-    // 开局奇遇（新手试炼没有）
-    if (!this.chapter.tutorial) game.openDialog(new QiyuDialog(this));
+    // 开局奇遇（新手试炼、天机签没有：天机签本身就是一路抽签）
+    if (this.chapter.tianji) {
+      this.tip('tj_intro', '砍树打怪攒金币，点右下角签筒抽签！', true);
+    } else if (!this.chapter.tutorial) game.openDialog(new QiyuDialog(this));
   }
 
   /** 切到后台时自动暂停 */
@@ -227,6 +236,8 @@ export class BattleScene implements Scene {
         if (ub && Math.hypot(t.x - ub.x, t.y - ub.y) < ub.r * 1.1) this.pressUlt();
         const pb = this.potionBtn;
         if (pb && Math.hypot(t.x - pb.x, t.y - pb.y) < pb.r * 1.15) this.pressPotion();
+        const tb = this.tjBtn;
+        if (tb && Math.hypot(t.x - tb.x, t.y - tb.y) < tb.r * 1.1) this.pressDraw();
         return;
       }
       if (game.ui.touchBlocked(t.x, t.y)) return;
@@ -298,6 +309,14 @@ export class BattleScene implements Scene {
       this.checkTips(dt);
     }
 
+    // 天机签：升级不弹三选一，每升一级得一支签
+    if (b.tj && b.pendingLevelUps > 0) {
+      const n = levelTickets(b.level - b.pendingLevelUps, b.level);
+      b.pendingLevelUps = 0;
+      b.tj.tickets += n;
+      playSfx('levelup');
+      this.floatLines([{ text: n ? `Lv.${b.level} · 获得 ${n} 支签` : `Lv.${b.level} · 再升一级得签`, color: n ? '#fee761' : '#fff4d6' }]);
+    }
     // 待处理事件：升级 / 宝箱 / 死亡 / 胜利
     if (!game.dialogs.length && !this.speedAdPending) {
       if (b.won) {
@@ -341,7 +360,9 @@ export class BattleScene implements Scene {
     this.drawWorldTexts();
     this.drawVignette();
     if (DEBUG.noHud) return;
+    drawTianjiFog(this, game.ui);
     this.drawHud(dt);
+    if (b.tj && !b.dead && !b.won) this.tjBtn = drawTianjiHud(this, game.ui, blocked);
     if (!blocked) this.drawJoystick();
   }
 
@@ -411,6 +432,7 @@ export class BattleScene implements Scene {
   }
 
   get label(): string {
+    if (this.chapter.tianji) return '天机签 · 无名剑客';
     if (this.weekly) return `每周挑战 · ${this.weekly.name}`;
     if (this.chapter.endless) return '无尽战场';
     if (this.chapter.tutorial) return '新手试炼';
@@ -498,7 +520,7 @@ export class BattleScene implements Scene {
 
   /** 结算 */
   get modeName(): string {
-    return this.weekly ? 'weekly' : this.chapter.endless ? 'endless' : this.chapter.defense ? 'defense' : 'chapter';
+    return this.chapter.tianji ? 'tianji' : this.weekly ? 'weekly' : this.chapter.endless ? 'endless' : this.chapter.defense ? 'defense' : 'chapter';
   }
 
   finish(win: boolean) {
@@ -543,7 +565,12 @@ export class BattleScene implements Scene {
     ui.bar(16 * u, top, bw, 30 * u, b.exp / b.expNeed, '#2ce8f5', '#1a2236');
     ui.text('Lv.' + b.level, 30 * u, top + 15 * u, 22, '#fff', 'left');
     // 计时
-    if (this.weekly) {
+    if (b.tj) {
+      // 天机签：倒计时 + 已抽几签
+      const left = Math.max(0, this.chapter.duration - b.t);
+      ui.text(fmtTime(left), clockX, top + 70 * u, 40, left < 60 ? '#fee761' : '#fff');
+      ui.text(`天机签 · 已抽 ${b.tj.history.length} 签`, clockX, top + 108 * u, 20, '#ffd08a');
+    } else if (this.weekly) {
       ui.text(fmtTime(Math.max(0, this.chapter.duration - b.t)), ui.W / 2, top + 70 * u, 40, '#fff');
       ui.text(`每周挑战 · ${this.weekly.name} · 最佳 ${save.weekly.best}`, ui.W / 2, top + 108 * u, 20, '#dc9be9');
     } else if (this.chapter.endless) {
@@ -782,7 +809,8 @@ export class BattleScene implements Scene {
     const u = ui.u;
     const g = ui.ctx;
     const b = this.battle;
-    const hero = b.hero;
+    // 无名剑客随机借将 / 天机签借将：切入画面换成被借的那位
+    const hero = b.ultHero || b.hero;
     const inK = Math.min(1, t / 0.18), outK = t > 0.9 ? (t - 0.9) / 0.2 : 0;
     const ease = 1 - (1 - inK) * (1 - inK);
     const cy = ui.H * 0.27, bh = 230 * u * (1 - outK * 0.8), skew = 60 * u;
@@ -823,7 +851,7 @@ export class BattleScene implements Scene {
     g.fillRect(hx - 200 * u, hy - 240 * u, 400 * u, 400 * u);
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1 - outK;
-    ui.icon(heroIdleFrame(b.heroSprite, ui.time), hx, hy - 40 * u, 330 * u);
+    ui.icon(heroIdleFrame(b.ultSprite || b.heroSprite, ui.time), hx, hy - 40 * u, 330 * u);
     // 大招名：从右边滑入
     const [pre, main] = hero.ultName.includes('·') ? hero.ultName.split('·') : ['', hero.ultName];
     const tx = ui.W + 300 * u - (ui.W * 0.35 + 300 * u) * ease;
@@ -835,6 +863,19 @@ export class BattleScene implements Scene {
   }
 
   private ultBtn: { x: number; y: number; r: number } | null = null;
+  private tjBtn: { x: number; y: number; r: number } | null = null;
+
+  /** 天机签：点签筒。有签 / 金币够就摇签，不够就问要不要看视频抽 */
+  pressDraw() {
+    const b = this.battle;
+    if (!b.tj || b.dead || b.won || game.dialogs.length || this.speedAdPending) return;
+    this.joyId = null;
+    if (!TianjiDrawDialog.open(this)) game.openDialog(new TianjiAdDialog(this));
+  }
+
+  worldToScreen(x: number, y: number): [number, number] {
+    return this.renderer.worldToScreen(x, y);
+  }
   private potionBtn: { x: number; y: number; r: number } | null = null;
 
   private pressPotion() {

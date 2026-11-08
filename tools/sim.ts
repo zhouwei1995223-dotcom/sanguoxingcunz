@@ -1,7 +1,8 @@
 // 无界面战斗模拟：自动走位 + 自动选技能，用于检验数值平衡与稳定性
 // 用法：npm run sim -- [章节] [攻击] [生命] [次数]
 import { Battle } from '../src/battle/battle';
-import { CHAPTERS, DIFFICULTIES, ENDLESS, campaignChapter } from '../src/data/chapters';
+import { CHAPTERS, DIFFICULTIES, ENDLESS, TIANJI, campaignChapter } from '../src/data/chapters';
+import { createTianji, tianjiStats, drawSign, canDraw, levelTickets } from '../src/battle/tianji';
 import { resetSpawner } from '../src/battle/spawner';
 import { combatPower, type HeroStats } from '../src/meta/ops';
 import { weaponLink } from '../src/data/skills';
@@ -15,7 +16,9 @@ const atk = args[1] || 20;
 const hp = args[2] || 120;
 const runs = args[3] || 3;
 const target = Number(process.env.TARGET_POWER);
-const chapter = chId === 0 ? ENDLESS : IS_WEB ? campaignChapter(chId, process.env.MINUTES === '10' ? 10 : 5) : CHAPTERS[chId - 1];
+// 第 -4 章 = 天机签（无名剑客固定属性，自动抽签）
+const TJ = chId === -4;
+const chapter = TJ ? TIANJI : chId === 0 ? ENDLESS : IS_WEB ? campaignChapter(chId, process.env.MINUTES === '10' ? 10 : 5) : CHAPTERS[chId - 1];
 if (target && (!IS_WEB || chId === 0)) throw new Error('TARGET_POWER 用于 --campaign-sim 构建的征战章节');
 const profile = target ? campaignProfile(process.env.HERO || 'zhaoyun', target, Number(process.env.UNLOCK ?? 10)) : null;
 
@@ -43,14 +46,17 @@ for (let r = 0; r < runs; r++) {
   }
   let mk = 0, mo = 0, md = 0;
   resetSpawner();
-  const b = new Battle(chapter, profile || stats(), Number(process.env.VW || 308), Number(process.env.VH || 667));
+  const b = new Battle(chapter, TJ ? tianjiStats() : profile || stats(), Number(process.env.VW || 308), Number(process.env.VH || 667));
   const D = DIFFICULTIES[Number(process.env.DIFF || 0)];
   b.enemyHpMul *= D.hp; b.enemyDmgMul *= D.dmg;
-  if (chId === 0) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
+  if (chId === 0 && !TJ) { const c = Number(process.env.CLEARED || 3); b.enemyHpMul *= Math.pow(1.45, c); b.enemyDmgMul *= Math.pow(1.22, c); }
   if (process.env.EASY) { b.enemyHpMul = 0.75; b.enemyDmgMul = 0.6; }
   if (chId > 0) b.powerRatio = Number(process.env.POWER) || 1;
   // 开局奇遇：QIYU=none 不选，QIYU=<id> 指定，默认随机三选一里随便拿一个
-  if (process.env.QIYU !== 'none') b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
+  const tierN = [0, 0, 0, 0, 0];
+  let coinsEarned = 0;
+  if (TJ) { b.tj = createTianji(); b.weapon('sword')!.lv = 2; b.recalc(); b.revives = Number(process.env.REV ?? 1); }
+  if (process.env.QIYU !== 'none' && !TJ) b.applyQiyu((process.env.QIYU as any) || b.rollQiyu(1)[0]);
   const dt = 1 / 30;
   let ang = 0;
   const log: string[] = [];
@@ -58,6 +64,7 @@ for (let r = 0; r < runs; r++) {
   let lateNear = 0, lateScreen = 0, lateN = 0;
   const t0 = Date.now();
   while (!b.dead && !b.won && b.t < (chId === 0 ? 3600 : 720)) {
+    const coinsBefore = b.coins;
     // 走位：危险时躲避，安全时去捡经验、贴近敌人输出
     let fx = 0, fy = 0, danger = 0;
     let nearest = 1e9, nx = 0, ny = 0;
@@ -82,6 +89,7 @@ for (let r = 0; r < runs; r++) {
     const l = Math.hypot(fx, fy) || 1;
     b.moveX = fx / l; b.moveY = fy / l;
     b.update(dt);
+    if (b.coins > coinsBefore) coinsEarned += b.coins - coinsBefore;
     // 后期压力：6~10 分钟里，玩家周围 100 像素内平均有多少敌人
     if (b.t > 360 && b.t < 600) {
       let near = 0, onScreen = 0;
@@ -96,6 +104,20 @@ for (let r = 0; r < runs; r++) {
     // 金疮药：血量低于 40% 时喝（NOPOTION=1 模拟不会用药的玩家）
     if (!process.env.NOPOTION && b.player.hp < b.player.maxHp * 0.4) b.usePotion();
     maxEnemies = Math.max(maxEnemies, b.enemies.length);
+    if (TJ) {
+      // 天机签：升级换签，能抽就抽（选择签总选第一项）
+      b.tj!.tickets += levelTickets(b.level - b.pendingLevelUps, b.level); b.pendingLevelUps = 0;
+      let guard = 0;
+      while (canDraw(b) && !b.ult && guard++ < 6 && !b.dead) {
+        const c0 = b.coins;
+        const r = drawSign(b);
+        if (!r) break;
+        tierN[r.tier]++;
+        if (r.options) r.options[0].act(); else if (r.apply) r.apply();
+        if (b.coins > c0) coinsEarned += b.coins - c0;
+        if (process.env.LOGDRAW) log.push(`${b.t.toFixed(0)}s ${r.tier}:${r.id}`);
+      }
+    }
     while (b.pendingLevelUps > 0) {
       b.pendingLevelUps--;
       const ch = b.rollChoices();
@@ -135,6 +157,7 @@ for (let r = 0; r < runs; r++) {
   }
   console.log(`--- 第${chId}章 run ${r + 1}: ${b.won ? '胜利' : b.dead ? '阵亡' : '超时'} t=${b.t.toFixed(0)} lv=${b.level} kills=${b.kills} coins=${b.coins} maxEnemies=${maxEnemies} boss=${b.finalBoss ? Math.round(b.finalBoss.hp) + '/' + b.finalBoss.maxHp : '-'} 后期身边/同屏=${lateN ? (lateNear / lateN).toFixed(0) + '/' + (lateScreen / lateN).toFixed(0) : '-'} 动态血量=${b.director.toFixed(2)} 击杀耗时=${b.killAge.toFixed(1)}s 破盾/狂暴=${b.statShield.join("/")} 敌将战=${b.statBossSec.toFixed(0)}s 受伤=${Math.round(b.statDmgTaken)} 耗时${Date.now() - t0}ms`);
   if (profile) console.log('CAL', JSON.stringify({ chapter: chId, diff: D.id, minutes: chapter.duration / 60, hero: b.hero.id, target, power: combatPower(profile), win: b.won, bossSec: b.finalBossSec, timeout: b.bossTimedOut }));
+  if (TJ) console.log(`   签：上上${tierN[0]} 上${tierN[1]} 中${tierN[2]} 下${tierN[3]} 怪${tierN[4]} 共${b.tj!.history.length}  金币收入${coinsEarned} 花费${b.tj!.coinsSpent} 复活${b.reviveCount}`);
   console.log('   武器:', b.weapons.map((w) => w.id + (w.evo ? '★' : w.lv)).join(' '), ' 被动:', b.passives.map((p) => p.id + p.lv).join(' '));
   console.log('   ' + log.join(' | '));
 }
