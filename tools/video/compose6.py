@@ -1,5 +1,5 @@
 # 竖版推广视频（2026-11-09）：三条 1080×1920 MP4（20~30 秒，H.264 + AAC 配乐）+ 三张封面（1080×1920 JPG < 500KB）。
-# 按投放要求：视频只有实机画面，不加文字、不加特效、没有界面和弹窗；封面 = 实机画面 + 名将步战造型 + 游戏名 logo。
+# 按投放要求：视频只有实机画面（含真实战斗界面和滑动摇杆操作），不加文字、不加特效；封面 = 实机画面 + 名将步战造型 + 游戏名 logo。
 # 用法：npm run build && node tools/video/record6.mjs && python3 tools/video/compose6.py <思源宋体 NotoSerifCJK-Black.ttc>
 #（封面的名将像素图来自 tools/shots/promo2.mjs 导出的 dist/promo2/sprites/）
 import json, os, shutil, subprocess, sys
@@ -25,8 +25,8 @@ VIDEOS = [
     ('3_敌将对决', 'bgm_boss', ['v3_cross', 'v3_rain', 'v3_shield', 'v3_kill'], ('v3_cross', 100), 'machao_4', '名将拦路 · 单骑斩将',
      [('sfx_boss', 0.1), ('sfx_explode', 1.3), ('sfx_explode', 4.4), ('sfx_explode', 7.4), ('sfx_explode', 10.4), ('sfx_boss', 12.1), ('sfx_explode', 15.0), ('sfx_victory', 19.5)]),
 ]
-# 竖屏战斗缩放 4 倍时名将偏小：以画面中心（镜头跟着名将）裁 864×1536 再最近邻放大 1.25 倍 = 每个像素正好 5×5，不糊
-CW, CH = 864, 1536
+# 第二版视频带真实界面和摇杆：整帧 1080×1920 原样输出，不再裁切放大（否则界面边缘被裁掉）
+CW, CH = W, H
 def frame_path(seg, i): return D + 'frames/%05d.jpg' % (SEG[seg]['start'] + i)
 
 def cover(seg, idx, hero, sub):
@@ -93,5 +93,6 @@ for vname, bgm, segs, (cseg, cidx), hero, sub, cues in VIDEOS:
                     '-vf', f'crop={CW}:{CH},scale={W}:{H}:flags=neighbor', '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
                     '-crf', '19', '-maxrate', '10M', '-bufsize', '16M', '-preset', 'slow',
                     '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', '-shortest', dst], check=True)
+    if os.environ.get('VIDEO_ONLY'): print(vname, round(total, 1), 's', os.path.getsize(dst) // 1024 // 1024, 'MB'); continue
     q, kb = save_jpeg(cover(cseg, cidx, hero, sub), OUT + f'竖版视频封面{vname}_1080x1920.jpg', 495)
     print(vname, round(total, 1), 's', os.path.getsize(dst) // 1024 // 1024, 'MB；封面', kb, 'KB q', q)

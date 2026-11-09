@@ -1,5 +1,6 @@
-// 竖版推广视频（2026-11-09）：1080×1920 实机画面，无界面、无弹窗、不加文字。基于 record5（横版运营素材）。
-// 用 ?nohud=1 打开网页版：画面按横屏铺满、不画血条按钮等界面；逐帧录制（每帧推进 1/30 秒）。
+// 竖版推广视频（2026-11-09 第二版）：1080×1920 实机画面，带真实战斗界面（血条、等级、计时、大招按钮等）和真实的滑动摇杆操作。
+// 移动全部用鼠标按住拖动（游戏把鼠标当作手指，画出摇杆）；升级 / 宝箱 / 锦囊弹窗仍每帧清掉，画面只留战斗。基于 record5。
+// 逐帧录制（每帧推进 1/30 秒）。
 // 用法：npm run build && node tools/video/record5.mjs → dist/video6/frames/*.jpg + segments.json；再 python3 tools/video/compose6.py <字体>
 import { createRequire } from 'node:module';
 import http from 'node:http';
@@ -28,7 +29,7 @@ await page.addInitScript(() => {
 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-const URL = `http://localhost:${server.address().port}/index.html?skip=1&heroes=1&ch=6&nohud=1`;
+const URL = `http://localhost:${server.address().port}/index.html?skip=1&heroes=1&ch=6`;
 const FPS = 30;
 let n = 0;
 const segments = [];
@@ -51,14 +52,34 @@ async function record(name, frames, each) {
   segments.push({ name, start, end: n });
   console.log(name, start, n);
 }
-const KEYS4 = ['d', 's', 'a', 'w'];
-let keys = KEYS4;
-let held = null;
-const release = async () => { if (held) { await page.keyboard.up(held); held = null; } };
-const steer = async (i, period = 30) => {
-  const k = keys[Math.floor(i / period) % keys.length];
-  if (k !== held) { if (held) await page.keyboard.up(held); await page.keyboard.down(k); held = k; }
+// —— 滑动摇杆：鼠标在屏幕下半部按住拖动，方向平滑变化，像真人拇指在推摇杆 ——
+const JOY = { x: 270, y: 760 };   // CSS 坐标，屏幕下方中间偏下（拇指常放的位置）
+let joyDown = false;
+let mode = 'circle';
+const R = 42;
+function joyDir(i) {
+  if (mode === 'dodge') {
+    // 敌将战：左右来回小步躲闪，每 20 帧换向，换向时方向平滑过渡
+    const ph = Math.floor(i / 20) % 2, f = (i % 20) / 20;
+    const a = ph ? Math.PI : 0, b = ph ? 0 : Math.PI;
+    const k = Math.min(1, f * 4);
+    return [(1 - k) * Math.cos(b) + k * Math.cos(a), 0.25 * Math.sin(i / 13)];
+  }
+  // 割草：绕着敌群兜圈，方向慢慢转，偶尔带点抖动
+  const th = i / 55 + 0.35 * Math.sin(i / 17);
+  return [Math.cos(th), Math.sin(th)];
+}
+const steer = async (i) => {
+  // 保证每帧都有血、不至于阵亡，血条在 55%~100% 之间真实波动
+  await page.evaluate(() => { const p = window.__game.scene.battle.player; if (p.hp < p.maxHp * 0.55) p.hp = p.maxHp * (0.8 + Math.random() * 0.15); });
+  const [dx, dy] = joyDir(i);
+  const l = Math.hypot(dx, dy) || 1;
+  // 弹窗开着时按下会被游戏忽略：先清弹窗；摇杆没按上（joyId 为空）就松开重按
+  if (joyDown && (await page.evaluate(() => window.__game.scene.joyId === null))) { await page.mouse.up(); joyDown = false; }
+  if (!joyDown) { await clear(); await page.mouse.move(JOY.x, JOY.y); await page.mouse.down(); joyDown = true; }
+  await page.mouse.move(JOY.x + dx / l * R, JOY.y + dy / l * R);
 };
+const release = async () => { if (joyDown) { await page.mouse.up(); joyDown = false; } };
 // 敌人铺在画面周围的椭圆里
 const crowd = (cnt, hpMul = 5) => page.evaluate(([cnt, hpMul]) => {
   const b = window.__game.scene.battle; const p = b.player;
@@ -80,10 +101,11 @@ async function enterBattle(hero, weapons) {
   await page.evaluate((ws) => {
     const g = window.__game; const b = g.scene.battle;
     g.scene.banners.length = 0;
-    b.showDamage = false;
+    b.showDamage = true;
+    b.level = 24; b.kills = 1260;
     // 不要运粮车事件：它的飘字（「粮车已截获 · 通关可领」）算界面文字
     b.convoyTimes = []; b.convoy = null;
-    b.base.atk = 45; b.player.maxHp = b.player.hp = 99999; b.base.hp = 99999;
+    b.base.atk = 45; b.player.maxHp = b.player.hp = 2860; b.base.hp = 2860;
     ws.forEach((id) => { if (!b.weapon(id)) b.addWeapon(id); });
     b.weapons.forEach((w) => (w.lv = 5));
     ['tiger', 'flag', 'horseshoe'].forEach((id) => b.passives.push({ id, lv: 3 }));
@@ -91,25 +113,27 @@ async function enterBattle(hero, weapons) {
     b.t = 130; b.eventIdx = b.chapter.events.findIndex((e) => e.t >= 125);
   }, weapons);
 }
+// 大招：先让怒气满（界面上大招按钮亮起），再按下
 const ult = () => page.evaluate(() => { const b = window.__game.scene.battle; b.rage = 100; b.rageLock = 0; window.__game.scene.pressUlt(); });
+const fullRage = () => page.evaluate(() => { const b = window.__game.scene.battle; b.rage = 100; });
 
 // ① 一骑当千（赵云）：满屏割草 → 大招清屏 → 再割 → 再放大招
 await enterBattle('zhaoyun', ['sword', 'horse', 'fire', 'crossbow']);
 await crowd(260);
 await record('v1_crowd', 270, async (i) => { await steer(i); if (i === 90 || i === 180) await crowd(160); });
 await crowd(200);
-await record('v1_ult', 150, async (i) => { await steer(i + 270); if (i === 6) await ult(); });
+await record('v1_ult', 150, async (i) => { await steer(i + 270); if (i === 0) await fullRage(); if (i === 25) await ult(); });
 await crowd(240);
 await record('v1_crowd2', 150, async (i) => { await steer(i + 420); if (i === 70) await crowd(140); });
 await crowd(200);
-await record('v1_ult2', 150, async (i) => { await steer(i + 570); if (i === 10) await ult(); });
+await record('v1_ult2', 150, async (i) => { await steer(i + 570); if (i === 0) await fullRage(); if (i === 25) await ult(); });
 await release();
 
 // ② 名将大招：关羽 / 吕布 / 孙尚香 / 诸葛亮
 for (const [hero, ws] of [['guanyu', ['sword', 'fire']], ['lvbu', ['knife', 'fire']], ['sunshangxiang', ['crossbow', 'fire']], ['zhuge', ['fire', 'crossbow']]]) {
   await enterBattle(hero, ws);
   await crowd(320, 4);
-  await record('v2_' + hero, 180, async (i) => { await steer(i, 40); if (i === 20) await ult(); if (i === 70 || i === 120) await crowd(170, 4); });
+  await record('v2_' + hero, 180, async (i) => { await steer(i); if (i === 0) await fullRage(); if (i === 25) await ult(); if (i === 70 || i === 120) await crowd(170, 4); });
   await release();
 }
 
@@ -119,23 +143,24 @@ await page.evaluate(() => {
   const b = window.__game.scene.battle;
   for (const e of b.enemies) e.dead = true;
   window.__boss = b.spawnBoss('wenchou', b.player.x + 60, b.player.y - 90, true);
-  window.__boss.maxHp = window.__boss.hp = 1e9;
+  window.__boss.maxHp = 1e6; window.__boss.hp = 9.2e5;
   Object.defineProperty(window.__boss, 'flash', { get() { return 0; }, set() {} });
 });
 await clear();
-keys = ['a', 'd'];
+mode = 'dodge';
 const cast = (s) => page.evaluate((s) => { const e = window.__boss; e.bskills = [s]; e.skillIdx = 0; e.state = 'move'; e.stateT = 0; }, s);
 await cast('cross');
-await record('v3_cross', 180, async (i) => { await steer(i, 20); if (i === 90) await cast('fan'); });
+const keepHp = (v) => page.evaluate((v) => { const e = window.__boss; if (e.hp < v) e.hp = v; }, v);
+await record('v3_cross', 180, async (i) => { await steer(i); await keepHp(8.6e5); if (i === 90) await cast('fan'); });
 await cast('rain');
-await record('v3_rain', 180, async (i) => { await steer(i, 20); if (i === 90) await cast('nova'); });
+await record('v3_rain', 180, async (i) => { await steer(i); await keepHp(7.4e5); if (i === 90) await cast('nova'); });
 await page.evaluate(() => { const e = window.__boss; e.bskills = ['charge']; e.maxHp = 1e6; e.hp = 6.9e5; e.minTime = 0; e.state = 'rest'; e.stateT = 1; });
 await record('v3_shield', 180, async (i) => {
-  await steer(i, 20);
+  await steer(i);
   if (i === 80) await page.evaluate(() => { const e = window.__boss; if (e.shield > 0) e.shield = 1; });
 });
 await page.evaluate(() => { const e = window.__boss; e.shield = 0; e.shieldDone = true; e.hp = Math.min(e.hp, 9000); });
-await record('v3_kill', 150, async (i) => { await steer(i, 20); if (i === 75) await crowd(200, 2); });
+await record('v3_kill', 150, async (i) => { await steer(i); if (i === 75) await crowd(200, 2); });
 await release();
 
 fs.writeFileSync('dist/video6/segments.json', JSON.stringify({ fps: FPS, segments }, null, 1));
