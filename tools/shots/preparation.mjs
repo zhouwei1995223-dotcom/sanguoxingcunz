@@ -94,7 +94,7 @@ export default async function ({ page, wait, shot }) {
   assert.ok((await pool()).weapons.includes('knife'));
   await click('prep_slot_0'); await click('prep_save');
   assert.deepEqual(await presets(), { ...savedPlan, active: 0 }, '恢复旧预设时其他槽位应保留');
-  await click('mode_defense'); await click('side_prepare');
+  await click('nav_arena'); await click('arena_defense'); await click('side_prepare');
   assert.deepEqual(await pool(), { weapons: ['spear', 'sword', 'horse'], passives: [] });
   assert.ok(!await page.evaluate(() => window.__game.ui.prevRegions.some(r => r.id === 'prep_passives')));
   await click('prep_evo');
@@ -117,7 +117,7 @@ export default async function ({ page, wait, shot }) {
   }
   assert.equal(defense.boss.length, 3); assert.match(defense.status, /下一箱进化/);
   await page.reload(); await gameReady(); await wait(300); await page.evaluate(() => window.__game.closeAll()); await wait(180);
-  await click('mode_chapter'); await click('start_battle'); await click('duration_5');
+  await click('nav_battle'); await click('mode_chapter'); await click('start_battle'); await click('duration_5');
   await page.waitForFunction(() => window.__game.dialogs.at(-1)?.constructor.name === 'QiyuDialog');
   const campaign = await page.evaluate(() => {
     const b = window.__game.scene.battle;

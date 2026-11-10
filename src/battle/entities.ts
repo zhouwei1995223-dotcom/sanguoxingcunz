@@ -145,6 +145,10 @@ export interface Projectile {
   scale: number;
   /** 霹雳炮：落地后二次爆裂 */
   second: boolean;
+  /** 爆裂箭：命中后炸开的半径 */
+  splash?: number;
+  /** 药囊：落地留下的药雾颜色（不填是火海） */
+  color?: string;
 }
 
 export interface FirePool {
@@ -159,6 +163,8 @@ export interface FirePool {
   life: number;
   maxLife: number;
   slow: number;
+  /** 药雾等非火焰的地面效果：填了颜色就画成一片雾，不画火苗 */
+  color?: string;
 }
 
 export interface EnemyShot {

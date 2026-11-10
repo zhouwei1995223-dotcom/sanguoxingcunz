@@ -5,8 +5,8 @@ import { save } from '../meta/save';
 import { heroSpriteName } from '../meta/goals';
 import { HEROES } from '../data/heroes';
 import { NEW_UI } from '../data/platformConfig';
-import { drawXuanTexture } from '../ui/xuanPaper';
 import { cachedLayer } from '../ui/layerCache';
+import { paintHomeScene, cloudWisp } from './homeArt';
 
 // 主界面「营地」：和战斗一样的俯视像素视角，放大一档。
 // 中间是帅帐和篝火，出战武将站在篝火旁待命，其他已解锁的武将在营地里闲逛；白天、沙地。
@@ -52,7 +52,8 @@ export class HomeCamp {
 
   private syncRoster() {
     // 已解锁的其他武将 + 三名巡营的士兵（武将少的时候营地也不冷清）
-    const ids: string[] = HEROES.filter((h) => save.heroes[h.id]?.owned && h.id !== save.hero).map((h) => h.id as string).concat(['u_shu_spear', 'u_shu_archer', 'u_shu_shield']);
+    // 武将多了以后营地站不下：最多八位在营里走动
+    const ids: string[] = HEROES.filter((h) => save.heroes[h.id]?.owned && h.id !== save.hero).map((h) => h.id as string).slice(0, 8).concat(['u_shu_spear', 'u_shu_archer', 'u_shu_shield']);
     const key = save.hero + '|' + ids.join(',');
     if (key === this.roster) return;
     this.roster = key;
@@ -131,23 +132,33 @@ export class HomeCamp {
         g.fillRect(X(Math.cos(a) * 92 * r), Y(-6 + Math.sin(a) * 40 * r), 2 * S, S);
       }
     } else {
-      // —— 新版水墨山河宣纸长卷背景 ——
-      const bg = cachedLayer('camp_bg', `${ox},${oy},${S}`, W, H, (cg) => paintInkBg(cg, W, H, ox, oy, S));
+      // —— 青绿山水长卷（静态部分整屏缓存） ——
+      const u = W / 750;
+      const bg = cachedLayer('camp_bg', `${ox},${oy},${S}`, W, H, (cg) => paintHomeScene(cg, W, H, ox, oy, S, u));
       g.drawImage(bg, 0, 0);
-      // 远空水墨飞雁
-      g.strokeStyle = 'rgba(48,40,34,0.42)';
-      g.lineWidth = Math.max(1.2, S * 0.45);
-      for (let i = 0; i < 4; i++) {
-        const bx = ((W * 0.25 + i * 18 * S + t * 5 * S) % (W * 0.7)) + W * 0.15;
-        const by = Y(-138 + (i % 2) * 8 - i * 3) + Math.sin(t * 3 + i) * 2 * S;
-        const flap = Math.sin(t * 7 + i * 1.4) * 1.8 * S;
+      // 山间流云：三朵薄云慢慢横移
+      const wisp = cloudWisp(u);
+      for (let i = 0; i < 3; i++) {
+        const span = W + wisp.width;
+        const cx = ((t * (5 + i * 3) * u + i * span * 0.37) % span) - wisp.width;
+        g.globalAlpha = 0.55 + 0.2 * Math.sin(t * 0.3 + i * 2);
+        g.drawImage(wisp, Math.round(cx), Math.round(Y(-112 + i * 17) - wisp.height / 2));
+      }
+      g.globalAlpha = 1;
+      // 远空一行归雁
+      g.strokeStyle = 'rgba(40,34,30,0.55)';
+      g.lineWidth = Math.max(1.2, S * 0.42);
+      g.lineCap = 'round';
+      for (let i = 0; i < 5; i++) {
+        const bx = ((W * 0.2 + t * 6 * S) % (W * 1.2)) - W * 0.1 + (i - 2) * 9 * S;
+        const by = Y(-150 + Math.abs(i - 2) * 5) + Math.sin(t * 2 + i) * 1.5 * S;
+        const flap = Math.sin(t * 6 + i * 1.4) * 1.6 * S;
         g.beginPath();
-        g.moveTo(bx - 3.5 * S, by + flap);
-        g.quadraticCurveTo(bx - 1.5 * S, by - 1.5 * S, bx, by);
-        g.quadraticCurveTo(bx + 1.5 * S, by - 1.5 * S, bx + 3.5 * S, by + flap);
+        g.moveTo(bx - 3.2 * S, by + flap);
+        g.quadraticCurveTo(bx - 1.4 * S, by - 1.4 * S, bx, by);
+        g.quadraticCurveTo(bx + 1.4 * S, by - 1.4 * S, bx + 3.2 * S, by + flap);
         g.stroke();
       }
-
     }
     // 要排序绘制的物体
     const list: { y: number; draw: () => void }[] = [];
@@ -163,12 +174,22 @@ export class HomeCamp {
     // 兵器架、粮草、旗子
     list.push({ y: -26, draw: () => blit(sprite('camp_rack'), -58, -26) });
     list.push({ y: -24, draw: () => blit(sprite('camp_supplies'), 58, -24) });
-    for (const [fx, col] of [[-82, '#e43b44'], [82, '#3e8948']] as [number, string][]) {
+    for (const [fx, col, dark] of [[-82, '#d8392f', '#a3231c'], [82, '#3f9460', '#2a6b44']] as [number, string, string][]) {
       list.push({ y: -18, draw: () => {
-        g.fillStyle = '#733e39'; g.fillRect(X(fx), Y(-44), S, 26 * S);
-        const wave = Math.round(Math.sin(t * 3 + fx) * 1);
-        g.fillStyle = col; g.fillRect(X(fx + 1), Y(-43 + wave * 0.3), 9 * S, 6 * S);
-        g.fillStyle = '#fee761'; g.fillRect(X(fx + 4), Y(-41), 3 * S, 2 * S);
+        g.fillStyle = 'rgba(70,46,22,0.22)'; g.fillRect(X(fx - 3), Y(-18), 7 * S, S);
+        g.fillStyle = '#5a3526'; g.fillRect(X(fx), Y(-50), S, 32 * S);
+        g.fillStyle = '#f2c14e'; g.fillRect(X(fx - 1), Y(-51), 3 * S, S);
+        // 旗面一列一列画，按正弦错开：像素风的飘动
+        for (let i = 0; i < 12; i++) {
+          const wv = Math.round(Math.sin(t * 4 - i * 0.7 + fx) * (i / 12) * 1.6);
+          const hh = 9 - (i > 9 ? i - 9 : 0);
+          g.fillStyle = i % 4 === 3 ? dark : col;
+          g.fillRect(X(fx + 1 + i), Y(-49 + wv), S, hh * S);
+          g.fillStyle = '#f2c14e';
+          g.fillRect(X(fx + 1 + i), Y(-49 + wv), S, S);
+          g.fillRect(X(fx + 1 + i), Y(-49 + wv + hh - 1), S, S);
+          if (i >= 4 && i <= 6) { g.fillStyle = '#fff1c4'; g.fillRect(X(fx + 1 + i), Y(-46 + wv), S, (i === 5 ? 3 : 1) * S + (i === 5 ? 0 : 0)); }
+        }
       } });
     }
     // 两支火把
@@ -191,12 +212,16 @@ export class HomeCamp {
       g.strokeStyle = '#fee761'; g.lineWidth = S;
       g.save(); g.translate(X(HERO_POS[0]), Y(HERO_POS[1])); g.scale(1, 0.4); g.beginPath(); g.arc(0, 0, 15 * S, 0, TAU); g.restore(); g.stroke();
       g.globalAlpha = 1;
+      g.fillStyle = 'rgba(70,46,22,0.22)'; g.fillRect(X(HERO_POS[0] - 8), Y(HERO_POS[1]), 16 * S, S); g.fillRect(X(HERO_POS[0] - 6), Y(HERO_POS[1] - 1), 12 * S, 3 * S);
       blit(hs, HERO_POS[0], HERO_POS[1]);
-      const ty = Y(HERO_POS[1] - hs.ay - 4 + Math.sin(t * 3) * 1.2);
-      g.fillStyle = '#a22633'; g.fillRect(X(HERO_POS[0]) - 9 * S, ty - 5 * S, 18 * S, 7 * S);
-      g.fillStyle = '#fee761'; g.fillRect(X(HERO_POS[0]) - 9 * S, ty + 2 * S, 18 * S, S);
-      g.fillStyle = '#fff4d6'; g.font = `bold ${5 * S}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('出战', X(HERO_POS[0]), ty - 1.5 * S);
+      const ty = Y(HERO_POS[1] - hs.ay - 5 + Math.sin(t * 3) * 1.2);
+      const hx = X(HERO_POS[0]);
+      g.fillStyle = '#3a1410'; g.fillRect(hx - 10 * S, ty - 6 * S, 20 * S, 9 * S);
+      g.fillStyle = '#f2c14e'; g.fillRect(hx - 10 * S + 1, ty - 6 * S + 1, 20 * S - 2, 9 * S - 2);
+      g.fillStyle = '#b72d23'; g.fillRect(hx - 9 * S, ty - 5 * S, 18 * S, 7 * S);
+      g.fillStyle = '#3a1410'; g.fillRect(hx - S, ty + 3 * S, 2 * S, S);
+      g.fillStyle = '#fff4d6'; g.font = `bold ${5 * S}px "PingFang SC","Microsoft YaHei",sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('出战', hx, ty - 1.3 * S);
     } });
     this.heroBox = [X(HERO_POS[0]) - 16 * S, Y(HERO_POS[1]) - 34 * S, 32 * S, 36 * S];
     // 闲逛的武将
@@ -209,7 +234,7 @@ export class HomeCamp {
       const s = sprite(`${nm}_${f}${w.left ? '_L' : ''}`);
       const wx = w.x, wy = w.y;
       list.push({ y: wy, draw: () => {
-        g.fillStyle = 'rgba(24,20,37,0.3)'; g.fillRect(X(wx - 7), Y(wy), 14 * S, S);
+        g.fillStyle = 'rgba(70,46,22,0.2)'; g.fillRect(X(wx - 7), Y(wy), 14 * S, S); g.fillRect(X(wx - 5), Y(wy - 1), 10 * S, 3 * S);
         blit(s, wx, wy);
       } });
       if (!soldier) this.heroRects.push({ id: w.id, r: [X(wx) - 14 * S, Y(wy) - 30 * S, 28 * S, 32 * S] });
@@ -240,6 +265,25 @@ export class HomeCamp {
     }
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
+    if (NEW_UI) {
+      // 桃花瓣：从左上往右下慢慢飘
+      for (let i = 0; i < 9; i++) {
+        const k = (t * (0.035 + hash2(i, 2, 61) * 0.03) + hash2(i, 1, 61)) % 1;
+        const px = (hash2(i, 3, 61) * 1.3 - 0.2 + k * 0.42) * W + Math.sin(t * 1.3 + i * 2.1) * 10 * S;
+        const py = Y(-150) + k * (Y(60) - Y(-150));
+        const rot = t * (0.8 + hash2(i, 4, 61)) + i;
+        const sz = (1.6 + hash2(i, 5, 61) * 1.4) * S;
+        g.globalAlpha = Math.min(1, k * 6, (1 - k) * 4) * 0.85;
+        g.fillStyle = i % 3 ? '#f6c4c0' : '#fbe4dc';
+        g.save();
+        g.translate(px, py);
+        g.rotate(rot);
+        g.scale(1, 0.55 + 0.35 * Math.sin(rot * 1.7));
+        g.beginPath(); g.arc(0, 0, sz, 0, TAU); g.fill();
+        g.restore();
+      }
+      g.globalAlpha = 1;
+    }
     g.restore();
   }
 
@@ -257,126 +301,3 @@ export class HomeCamp {
   }
 }
 
-/** 新版营地的静态背景（宣纸、远山、点苔、校场），缓存后每帧 1:1 贴图。 */
-function paintInkBg(g: CanvasRenderingContext2D, W: number, H: number, ox: number, oy: number, S: number) {
-  const X = (x: number) => Math.round(ox + x * S), Y = (y: number) => Math.round(oy + y * S);
-  const ell = (cx: number, cy: number, rx: number, ry: number) => { g.save(); g.translate(cx, cy); g.scale(1, ry / rx); g.beginPath(); g.arc(0, 0, rx, 0, TAU); g.restore(); g.fill(); };
-  const bgGrad = g.createLinearGradient(0, 0, 0, H);
-  bgGrad.addColorStop(0, '#f1e9d8');
-  bgGrad.addColorStop(0.36, '#e7dac2');
-  bgGrad.addColorStop(0.7, '#dbcaa9');
-  bgGrad.addColorStop(1, '#cbb793');
-  g.fillStyle = bgGrad;
-  g.fillRect(0, 0, W, H);
-  drawXuanTexture(g, 0, 0, W, H, W / 750, { alpha: 0.96, patina: true, patinaStrength: 1.2, stains: true });
-
-  // 宣纸横帘细纹
-  g.fillStyle = 'rgba(92,72,50,0.032)';
-  const stepY = Math.max(4, Math.round(3 * S));
-  for (let py = 0; py < H; py += stepY) {
-    g.fillRect(0, py, W, 1);
-  }
-
-  // 远空淡朱砂日轮（古画朱印落日意境）
-  const sunX = W * 0.78, sunY = Math.max(90 * S * 0.4, Y(-148));
-  const sunGlow = g.createRadialGradient(sunX, sunY, 4 * S, sunX, sunY, 34 * S);
-  sunGlow.addColorStop(0, 'rgba(196,56,42,0.20)');
-  sunGlow.addColorStop(0.55, 'rgba(196,56,42,0.08)');
-  sunGlow.addColorStop(1, 'rgba(196,56,42,0)');
-  g.fillStyle = sunGlow;
-  g.beginPath();
-  g.arc(sunX, sunY, 34 * S, 0, TAU);
-  g.fill();
-  g.fillStyle = 'rgba(186,48,36,0.22)';
-  g.beginPath();
-  g.arc(sunX, sunY, 13 * S, 0, TAU);
-  g.fill();
-
-  // 三层水墨远山叠嶂（位于营地栅栏上方 Y(-64) 处，随时间微移云雾）
-  const horizonY = Y(-58);
-  const drawInkMountain = (pts: [number, number][], topY: number, cTop: string, cBot: string) => {
-    const mGrad = g.createLinearGradient(0, topY, 0, horizonY);
-    mGrad.addColorStop(0, cTop);
-    mGrad.addColorStop(1, cBot);
-    g.fillStyle = mGrad;
-    g.beginPath();
-    g.moveTo(0, horizonY);
-    g.lineTo(0, pts[0][1]);
-    for (let i = 0; i < pts.length - 1; i++) {
-      const xc = (pts[i][0] + pts[i + 1][0]) / 2;
-      const yc = (pts[i][1] + pts[i + 1][1]) / 2;
-      g.quadraticCurveTo(pts[i][0], pts[i][1], xc, yc);
-    }
-    const last = pts[pts.length - 1];
-    g.lineTo(last[0], last[1]);
-    g.lineTo(W, horizonY);
-    g.closePath();
-    g.fill();
-  };
-
-  // 第一层：远岫淡墨
-  drawInkMountain([
-    [0, Y(-118)], [W * 0.18, Y(-156)], [W * 0.36, Y(-114)],
-    [W * 0.58, Y(-148)], [W * 0.82, Y(-164)], [W, Y(-122)],
-  ], Y(-166), 'rgba(72,68,62,0.18)', 'rgba(232,220,198,0.02)');
-
-  // 第二层：中景苍墨
-  drawInkMountain([
-    [0, Y(-106)], [W * 0.12, Y(-132)], [W * 0.31, Y(-96)],
-    [W * 0.50, Y(-126)], [W * 0.72, Y(-98)], [W * 0.90, Y(-134)], [W, Y(-104)],
-  ], Y(-136), 'rgba(54,48,42,0.24)', 'rgba(230,216,192,0.04)');
-
-  // 第三层：近岭浓墨
-  drawInkMountain([
-    [0, Y(-92)], [W * 0.22, Y(-112)], [W * 0.44, Y(-82)],
-    [W * 0.66, Y(-108)], [W * 0.86, Y(-86)], [W, Y(-98)],
-  ], Y(-114), 'rgba(40,34,28,0.28)', 'rgba(226,212,188,0.06)');
-
-  // 山脚宣纸流云留白（柔化远山与营地栅栏的交界）
-  const mistGrad = g.createLinearGradient(0, Y(-96), 0, Y(-44));
-  mistGrad.addColorStop(0, 'rgba(244,236,220,0)');
-  mistGrad.addColorStop(0.5, 'rgba(244,236,220,0.68)');
-  mistGrad.addColorStop(1, 'rgba(232,218,194,0)');
-  g.fillStyle = mistGrad;
-  g.fillRect(0, Y(-96), W, 52 * S);
-
-  // 郊野水墨点苔与草石肌理
-  const cell = 18;
-  const x0 = Math.floor(-ox / S / cell) - 1, x1 = Math.ceil((W - ox) / S / cell) + 1;
-  const y0 = Math.floor(-oy / S / cell) - 1, y1 = Math.ceil((H - oy) / S / cell) + 1;
-  for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) {
-    const h = hash2(gx, gy, 3);
-    const wx = gx * cell + hash2(gx, gy, 5) * cell, wy = gy * cell + hash2(gx, gy, 7) * cell;
-    if (wy < -58) continue; // 远山云雾区不画沙石
-    if (Math.abs(wx) < 102 && wy > -60 && wy < 52) continue;
-    g.fillStyle = h > 0.5 ? 'rgba(248,240,224,0.42)' : 'rgba(130,108,82,0.28)';
-    g.fillRect(X(wx), Y(wy), 3 * S, S);
-    if (h < 0.05) {
-      g.fillStyle = 'rgba(90,82,72,0.45)';
-      g.fillRect(X(wx + 4), Y(wy + 2), 2 * S, S);
-    } else if (h < 0.09) {
-      g.fillStyle = 'rgba(84,96,68,0.42)';
-      g.fillRect(X(wx + 2), Y(wy - 2), S, 2 * S);
-      g.fillRect(X(wx + 4), Y(wy - 3), S, 3 * S);
-    }
-  }
-
-  // 营地校场：水墨太极/八阵校场圆坛
-  g.fillStyle = 'rgba(120,98,72,0.18)';
-  ell(X(0), Y(-6), 106 * S, 50 * S);
-  g.fillStyle = 'rgba(245,237,221,0.58)';
-  ell(X(0), Y(-6), 96 * S, 44 * S);
-  g.save();
-  g.translate(X(0), Y(-6));
-  g.scale(1, 44 / 96);
-  g.strokeStyle = 'rgba(82,66,48,0.22)';
-  g.lineWidth = Math.max(1, S * 0.6);
-  g.beginPath();
-  g.arc(0, 0, 92 * S, 0, TAU);
-  g.stroke();
-  g.strokeStyle = 'rgba(168,38,29,0.14)';
-  g.beginPath();
-  g.arc(0, 0, 62 * S, 0, TAU);
-  g.stroke();
-  g.restore();
-}

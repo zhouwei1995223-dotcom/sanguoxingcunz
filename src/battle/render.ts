@@ -14,6 +14,7 @@ import { hash2, TAU } from '../core/math';
 import type { Battle } from './battle';
 import type { Enemy, Breakable } from './entities';
 import { levelData } from './weapons';
+import { WEAPONS } from '../data/skills';
 
 // 世界渲染：先在低分辨率画布上按 1:1 像素绘制，再整数倍放大到屏幕，保证像素风清晰
 
@@ -213,6 +214,22 @@ export class WorldRenderer {
         g.globalAlpha = 1;
         continue;
       }
+      if (f.color) {
+        // 药雾：一片半透明的雾 + 几颗往上冒的泡
+        g.globalAlpha = 0.3 * a;
+        g.fillStyle = f.color;
+        this.ellipse(f.x, f.y, f.r, f.r * 0.7);
+        g.globalAlpha = 0.55 * a;
+        const n = Math.max(3, Math.round(f.r / 9));
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * TAU + hash2(i, 3, f.x | 0) * 3;
+          const rr = f.r * (0.2 + 0.7 * hash2(i, 5, f.y | 0));
+          const k = (b.t * 0.9 + hash2(i, 7, f.x | 0)) % 1;
+          g.fillRect(Math.round(f.x + Math.cos(ang) * rr - this.camX), Math.round(f.y + Math.sin(ang) * rr * 0.7 - k * 10 - this.camY), 2, 2);
+        }
+        g.globalAlpha = 1;
+        continue;
+      }
       g.globalAlpha = 0.35 * a;
       g.fillStyle = '#f77622';
       this.ellipse(f.x, f.y, f.r, f.r * 0.7);
@@ -395,7 +412,7 @@ export class WorldRenderer {
         g.globalAlpha = 1;
         this.blitRot(sprite(pr.sprite), pr.x, pr.y, pr.rot, pr.scale);
       }
-      else if (pr.kind === 'knife') this.blitRot(sprite('icon_w_knife'), pr.x, pr.y, pr.rot);
+      else if (pr.kind === 'knife') this.blitRot(sprite(pr.sprite !== 'bolt' ? pr.sprite : 'icon_w_knife'), pr.x, pr.y, pr.rot);
       else if (pr.kind === 'rock') {
         if (pr.scale === 0) continue;
         const k = Math.min(1, pr.t / pr.dur);
@@ -432,6 +449,26 @@ export class WorldRenderer {
         this.blitRot(sprite('fsword'), p.x + Math.cos(ta) * R, p.y - 8 + Math.sin(ta) * R * 0.85, ta + Math.PI / 2);
         g.globalAlpha = 1;
         this.blitRot(sprite('fsword'), sx, sy, a + Math.PI / 2);
+      }
+    }
+    // 新武将的环身兵器（双股剑、连营火符）
+    for (const ow of b.weapons) {
+      const st = WEAPONS[ow.id].style;
+      if (!st || st.mode !== 'orbit' || ow.active <= 0) continue;
+      const L = levelData(ow);
+      const R = L.area * b.areaMul;
+      const flame = (st.sprite || '').startsWith('flame');
+      for (let i = 0; i < L.count; i++) {
+        const a = ow.angle + (i * TAU) / L.count;
+        const sx = p.x + Math.cos(a) * R, sy = p.y - 8 + Math.sin(a) * R * 0.85;
+        if (flame) this.blitRot(sprite('flame' + ((Math.floor(b.t * 10) + i) % 3)), sx, sy + 4, 0);
+        else {
+          g.globalAlpha = 0.35;
+          const ta = a - 0.25;
+          this.blitRot(sprite(st.sprite || 'fsword'), p.x + Math.cos(ta) * R, p.y - 8 + Math.sin(ta) * R * 0.85, ta + Math.PI / 2);
+          g.globalAlpha = 1;
+          this.blitRot(sprite(st.sprite || 'fsword'), sx, sy, a + Math.PI / 2);
+        }
       }
     }
     // 风刃与火焰龙卷

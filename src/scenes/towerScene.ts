@@ -96,13 +96,15 @@ export class CommanderDialog implements Dialog {
   t?: number;
   draw(ui: UI) {
     const heroes = HEROES.filter(h => save.heroes[h.id]?.owned), u = ui.u;
-    const f = dialogFrame(ui, 666 * u, (178 + Math.ceil(heroes.length / 2) * 86) * u, '选择将令', this.t, 'td_hero_close');
+    // 武将多了以后排三列，弹窗不会比屏幕还高
+    const cols = heroes.length > 12 ? 3 : 2, bw = (608 - (cols - 1) * 10) / cols;
+    const f = dialogFrame(ui, 666 * u, (178 + Math.ceil(heroes.length / cols) * 86) * u, '选择将令', this.t, 'td_hero_close');
     if (f.close) return false;
     ui.text('提升攻击塔伤害与战鼓助速，最高 15%', ui.W / 2, f.y + 73 * u, 22, C.textDim);
     heroes.forEach((h, i) => {
       const hero = save.heroes[h.id], pct = Math.round(commandBonus(hero.lv, hero.star, hero.peak || 0) * 100);
-      if (ui.button('td_hero_' + h.id, f.x + (29 + i % 2 * 308) * u, f.y + (110 + Math.floor(i / 2) * 86) * u, 298 * u, 78 * u, h.name,
-        towerCommander() === h.id ? C.btnRed : C.btnGray, { icon: 'hero_' + h.id + '_0', size: 25, sub: `全塔加成 +${pct}%` })) {
+      if (ui.button('td_hero_' + h.id, f.x + (29 + i % cols * (bw + 10)) * u, f.y + (110 + Math.floor(i / cols) * 86) * u, bw * u, 78 * u, h.name,
+        towerCommander() === h.id ? C.btnRed : C.btnGray, { icon: 'hero_' + h.id + '_0', size: cols === 3 ? 21 : 25, sub: cols === 3 ? `加成 +${pct}%` : `全塔加成 +${pct}%` })) {
         save.tower.commander = h.id;
         markDirty();
         flushSave(true);

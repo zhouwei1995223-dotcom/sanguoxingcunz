@@ -6,7 +6,9 @@ import { prewarmPaper } from '../ui/xuanPaper';
 import { loadSave, save, flushSave } from '../meta/save';
 import { onLogin } from '../meta/ops';
 import { cloudPull } from '../meta/cloud';
-import { GAME_INFO } from '../data/platformConfig';
+import { GAME_INFO, NEW_UI } from '../data/platformConfig';
+import { cachedLayer } from '../ui/layerCache';
+import { paintSplash } from './homeArt';
 import { HomeScene } from './homeScene';
 import { BattleScene } from './battleScene';
 import { reportDailyLogin } from '../meta/telemetry';
@@ -80,20 +82,48 @@ export class LoadingScene implements Scene {
     }
 
     const g = ui.ctx;
-    g.fillStyle = '#120d14';
-    g.fillRect(0, 0, ui.W, ui.H);
-    ui.text(GAME_INFO.shortName, ui.W / 2, ui.H * 0.32, 110, '#fee761', 'center', '#7a1c24');
-    ui.text('乱世幸存者', ui.W / 2, ui.H * 0.32 + 100 * u, 40, '#fff4d6');
-    // 进度条按真实加载进度平滑前进；第一帧先把启动页画出来，再开始干重活
     const target = this.total ? this.finished / this.total : 1;
     this.shown = Math.min(target, this.shown + dt * 2.5);
     const loaded = this.tasks.length === 0 && !this.cloudWait;
-    ui.bar(ui.W * 0.15, ui.H * 0.62, ui.W * 0.7, 26 * u, this.shown, C.gold);
-    ui.text(loaded ? '即将进入…' : '整军备战中…', ui.W / 2, ui.H * 0.62 + 60 * u, 24, C.textDim);
-    const lines = ['抵制不良游戏，拒绝盗版游戏。注意自我保护，谨防受骗上当。', '适度游戏益脑，沉迷游戏伤身。合理安排时间，享受健康生活。'];
-    lines.forEach((l, i) => ui.text(l, ui.W / 2, ui.H - 190 * u - ui.safeBottom + i * 40 * u, 20, '#a89a86', 'center', null, false));
-    ui.text(`适龄提示 ${GAME_INFO.ageRating}+`, ui.W / 2, ui.H - 100 * u - ui.safeBottom, 20, '#a89a86', 'center', null, false);
-    if (this.restored) ui.text('已从云端恢复进度', ui.W / 2, ui.H * 0.62 + 100 * u, 22, '#9be37a');
+    if (!NEW_UI) {
+      g.fillStyle = '#120d14';
+      g.fillRect(0, 0, ui.W, ui.H);
+      ui.text(GAME_INFO.shortName, ui.W / 2, ui.H * 0.32, 110, '#fee761', 'center', '#7a1c24');
+      ui.text('乱世幸存者', ui.W / 2, ui.H * 0.32 + 100 * u, 40, '#fff4d6');
+      ui.bar(ui.W * 0.15, ui.H * 0.62, ui.W * 0.7, 26 * u, this.shown, C.gold);
+      ui.text(loaded ? '即将进入…' : '整军备战中…', ui.W / 2, ui.H * 0.62 + 60 * u, 24, C.textDim);
+      const lines = ['抵制不良游戏，拒绝盗版游戏。注意自我保护，谨防受骗上当。', '适度游戏益脑，沉迷游戏伤身。合理安排时间，享受健康生活。'];
+      lines.forEach((l, i) => ui.text(l, ui.W / 2, ui.H - 190 * u - ui.safeBottom + i * 40 * u, 20, '#a89a86', 'center', null, false));
+      ui.text(`适龄提示 ${GAME_INFO.ageRating}+`, ui.W / 2, ui.H - 100 * u - ui.safeBottom, 20, '#a89a86', 'center', null, false);
+      if (this.restored) ui.text('已从云端恢复进度', ui.W / 2, ui.H * 0.62 + 100 * u, 22, '#9be37a');
+    } else {
+      // 山水启动页：绢色天空、朱砂落日、三重远山（静态，整屏缓存），标题和主界面一个写法
+      const ty = ui.H * 0.27, cx = ui.W / 2, name = GAME_INFO.shortName;
+      g.drawImage(cachedLayer('splash', `${u}`, ui.W, ui.H, (cg) => {
+        paintSplash(cg, ui.W, ui.H, u);
+        cg.font = ui.font(100, true);
+        cg.textAlign = 'center';
+        cg.textBaseline = 'middle';
+        cg.lineJoin = 'round';
+        cg.fillStyle = 'rgba(70,40,14,0.26)';
+        cg.fillText(name, cx + 4 * u, ty + 8 * u);
+        cg.lineWidth = 18 * u; cg.strokeStyle = '#fdf6e4'; cg.strokeText(name, cx, ty);
+        cg.lineWidth = 8 * u; cg.strokeStyle = '#e0bf7a'; cg.strokeText(name, cx, ty);
+        cg.lineWidth = 4 * u; cg.strokeStyle = '#6a4a1c'; cg.strokeText(name, cx, ty);
+        const tg = cg.createLinearGradient(0, ty - 52 * u, 0, ty + 50 * u);
+        tg.addColorStop(0, '#4a3a2e'); tg.addColorStop(0.4, '#1e1612'); tg.addColorStop(1, '#0a0705');
+        cg.fillStyle = tg;
+        cg.fillText(name, cx, ty);
+      }), 0, 0);
+      ui.text('乱 世 幸 存 者', cx, ty + 92 * u, 30, '#a3241a', 'center', 'rgba(253,246,228,0.95)');
+      const by = ui.H * 0.8;
+      ui.bar(ui.W * 0.16, by, ui.W * 0.68, 24 * u, this.shown, '#b02c22', '#3a2a1c');
+      ui.text(loaded ? '即将进入…' : '整军备战中…', cx, by + 54 * u, 23, '#3a2c20', 'center', 'rgba(250,242,224,0.9)');
+      if (this.restored) ui.text('已从云端恢复进度', cx, by + 90 * u, 21, '#2d7848', 'center', 'rgba(250,242,224,0.9)');
+      const lines = ['抵制不良游戏，拒绝盗版游戏。注意自我保护，谨防受骗上当。', '适度游戏益脑，沉迷游戏伤身。合理安排时间，享受健康生活。'];
+      lines.forEach((l, i) => ui.text(l, cx, ui.H - 150 * u - ui.safeBottom + i * 36 * u, 19, '#4a3c30', 'center', null, false));
+      ui.text(`适龄提示 ${GAME_INFO.ageRating}+`, cx, ui.H - 70 * u - ui.safeBottom, 19, '#4a3c30', 'center', null, false);
+    }
 
     // 每帧做一个加载任务（读档要等平台就绪）
     if (this.t > 0.05 && this.tasks.length && this.platformReady) {

@@ -3,7 +3,7 @@ import { dayKey } from '../core/math';
 import { DEBUG } from '../debug';
 import { NEW_PLAYER, STAMINA, SLOTS, Slot } from '../data/meta';
 import { SkillId, WeaponId, skillPoolFor, fitPreparation } from '../data/skills';
-import { HERO_BY_ID } from '../data/heroes';
+import { HERO_BY_ID, HEROES } from '../data/heroes';
 import { WEB_RULES } from '../data/platformConfig';
 
 // 存档：本地 JSON，带版本号便于后续迁移。
@@ -126,6 +126,8 @@ export interface SaveData {
   redeemed: Record<string, boolean>;
   subscribed: boolean;
   xhsFollowClaimed?: boolean;
+  /** 心愿武将：随机碎片有四成五落在他身上（不填时自动选离解锁最近的） */
+  wishHero?: string;
   /** 小红书：天机签结算发笔记领 3000 元宝，每人一次 */
   xhsTianjiNote?: boolean;
   videoShareDay: string;
@@ -146,7 +148,8 @@ function freshDaily(): DailyState {
 
 function freshHeroes(): Record<string, HeroState> {
   const h: Record<string, HeroState> = {};
-  for (const id of ['zhaoyun', 'guanyu', 'zhangfei', 'zhuge', 'lvbu', 'huangzhong', 'machao', 'sunshangxiang', 'dianwei', 'jiangwei']) h[id] = { owned: id === 'zhaoyun', lv: 1, star: id === 'zhaoyun' ? 1 : 0, shards: 0 };
+  // 按武将表生成：以后加武将，老存档读档时（Object.assign(freshHeroes(), 存档)）自动补上新武将的空档
+  for (const { id } of HEROES) h[id] = { owned: id === 'zhaoyun', lv: 1, star: id === 'zhaoyun' ? 1 : 0, shards: 0 };;
   return h;
 }
 

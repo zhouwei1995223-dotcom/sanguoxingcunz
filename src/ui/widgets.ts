@@ -4,6 +4,7 @@ import type { EquipItem } from '../meta/save';
 import { fmtNum, easeOutBack } from '../core/math';
 import { HERO_BY_ID } from '../data/heroes';
 import { NO_ADS } from '../data/platformConfig';
+import { drawSkin, paintInkPill, paintMedal, LACQUER, goldGrad } from './skin';
 
 // 通用界面组件
 
@@ -91,19 +92,20 @@ export function dialogFrame(ui: UI, w: number, h: number, title: string, t = 1, 
       ui.pixRect(cx + 4 * u, cy + 4 * u, cs - 8 * u, cs - 8 * u, '#a22633');
       ui.text('✕', cx + cs / 2, cy + cs / 2, 30, '#fff', 'center', null);
     } else {
-      // 轻巧朱文小方印关闭按钮
+      // 朱漆描金圆钮
       const pressed = ui.isPressed(closeId);
-      const off = pressed ? 2 * u : 0;
-      const p = Math.max(2, Math.round(u * 2.5));
-      const b = Math.max(1.5, Math.round(u * 1.8));
-      ui.pixRect(cx, cy + b * 1.2, cs, cs, 'rgba(28,20,14,0.2)', p);
-      ui.pixRect(cx, cy + off, cs, cs, '#362a20', p);
-      ui.pixRect(cx + b, cy + b + off, cs - b * 2, cs - b * 2, '#f5ecda', p);
-      ui.pixRect(cx + b * 2.2, cy + b * 2.2 + off, cs - b * 4.4, cs - b * 4.4, '#a8231c', Math.max(1, p - 1));
-      ui.ctx.strokeStyle = 'rgba(247,239,224,0.65)';
-      ui.ctx.lineWidth = Math.max(1, u * 1.2);
-      ui.ctx.strokeRect(cx + b * 3.4, cy + b * 3.4 + off, cs - b * 6.8, cs - b * 6.8);
-      ui.text('✕', cx + cs / 2, cy + cs / 2 + off, 26, ui.preserveTextColors ? '#fff' : '#fbf4e4', 'center', null);
+      ui.markDark(cx, cy, cs, cs);
+      drawSkin(ui.ctx, 'close' + (pressed ? 'P' : ''), cx, cy, cs, cs, 12 * u, (g, s0) => {
+        paintMedal(g, s0, u, pressed, 'ink');
+        const c = s0 / 2, ri = s0 / 2 - Math.max(2.5, 4.2 * u);
+        const rg = g.createRadialGradient(c, c - ri * 0.4, ri * 0.1, c, c, ri);
+        rg.addColorStop(0, LACQUER.red.top); rg.addColorStop(0.6, LACQUER.red.mid); rg.addColorStop(1, LACQUER.red.bot);
+        g.beginPath(); g.arc(c, c, ri, 0, Math.PI * 2); g.fillStyle = rg; g.fill();
+        if (pressed) { g.fillStyle = 'rgba(0,0,0,0.18)'; g.fill(); }
+        g.strokeStyle = '#fff3d8'; g.lineWidth = Math.max(2, 4 * u); g.lineCap = 'round';
+        const k = ri * 0.42;
+        g.beginPath(); g.moveTo(c - k, c - k); g.lineTo(c + k, c + k); g.moveTo(c + k, c - k); g.lineTo(c - k, c + k); g.stroke();
+      });
     }
   }
   return { x: ui.W / 2 - w / 2, y: ui.H / 2 - h / 2, close };
@@ -133,39 +135,26 @@ export function currencyBar(ui: UI, x: number, y: number, w: number, icon: strin
     return false;
   }
 
-  // 新版轻盈宣纸乌丝货币笺条
-  const p = Math.max(2, Math.round(u * 2.5));
-  const b = Math.max(1.5, Math.round(u * 1.6));
+  // 墨漆描金货币牌：图标探出左端，数值用暖白字
   const ctx = ui.ctx;
-  ui.pixRect(x, y + b, w, h, 'rgba(28,20,14,0.14)', p);
-  ui.pixRect(x, y, w, h, '#3d3025', p);
-  const slotGrad = ctx.createLinearGradient(x, y + b, x, y + h - b);
-  slotGrad.addColorStop(0, '#f7f0e0');
-  slotGrad.addColorStop(1, '#e6d7bc');
-  ui.pixRect(x + b, y + b, w - b * 2, h - b * 2, slotGrad as unknown as string, Math.max(1, p - 1));
-  ui.paperTexture(x + b, y + b, w - b * 2, h - b * 2, { alpha: 0.9, patina: true });
-  ctx.strokeStyle = 'rgba(130,108,82,0.42)';
-  ctx.lineWidth = Math.max(1, u);
-  ctx.strokeRect(x + b * 2, y + b * 2, w - b * 4, h - b * 4);
-  // 左侧图标淡墨圆底座
-  ctx.fillStyle = 'rgba(72,56,42,0.10)';
-  ctx.beginPath();
-  ctx.arc(x + 27 * u, y + h / 2, 16 * u, 0, Math.PI * 2);
-  ctx.fill();
-  ui.icon(icon, x + 27 * u, y + h / 2, 36 * u);
-  ui.text(value, x + 52 * u, y + h / 2 + 1 * u, 23, '#1e1814', 'left', null);
+  const ph = 44 * u, py = y + (h - ph) / 2;
+  ui.markDark(x, py, w, ph);
+  drawSkin(ctx, 'cur', x + 8 * u, py, w - 8 * u, ph, 10 * u, (g, pw, ph0) => paintInkPill(g, pw, ph0, u, 0.88));
+  ui.icon(icon, x + 24 * u, y + h / 2, 44 * u);
+  ui.text(value, x + 54 * u, y + h / 2 + 1 * u, 23, '#fbf4e4', 'left', null);
   if (plusId) {
     const ps = 34 * u;
-    const px = x + w - ps - 8 * u, py = y + (h - ps) / 2;
+    const px = x + w - ps - 5 * u, py2 = y + (h - ps) / 2;
     const pressed = ui.isPressed(plusId);
-    const off = pressed ? 1.5 * u : 0;
-    // 轻巧朱砂小印加号按钮
-    ui.pixRect(px, py + off, ps, ps, '#8c2219', Math.max(1, p - 1));
-    ui.pixRect(px + b * 0.8, py + b * 0.8 + off, ps - b * 1.6, ps - b * 1.6, '#b82e23', Math.max(1, p - 1));
-    ctx.strokeStyle = 'rgba(247,239,224,0.55)';
-    ctx.lineWidth = Math.max(1, u);
-    ctx.strokeRect(px + b * 1.6, py + b * 1.6 + off, ps - b * 3.2, ps - b * 3.2);
-    ui.text('+', px + ps / 2, py + ps / 2 + off, 25, '#fbf4e4', 'center', null);
+    drawSkin(ctx, 'plus' + (pressed ? 'P' : ''), px, py2, ps, ps, 4 * u, (g, s0) => {
+      g.beginPath(); g.arc(s0 / 2, s0 / 2, s0 / 2, 0, Math.PI * 2);
+      g.fillStyle = goldGrad(g, 0, s0); g.fill();
+      if (pressed) { g.fillStyle = 'rgba(60,30,0,0.25)'; g.fill(); }
+      g.strokeStyle = 'rgba(90,56,14,0.6)'; g.lineWidth = Math.max(1, u); g.stroke();
+      g.strokeStyle = '#4a2c0a'; g.lineWidth = Math.max(2, 3.4 * u); g.lineCap = 'round';
+      const k = s0 * 0.22, c = s0 / 2;
+      g.beginPath(); g.moveTo(c - k, c); g.lineTo(c + k, c); g.moveTo(c, c - k); g.lineTo(c, c + k); g.stroke();
+    });
     return ui.clicked(plusId, x, y, w, h);
   }
   return false;

@@ -87,7 +87,7 @@ export default async function ({ page, wait }) {
   assert.equal((await manualWin('start_battle', 40, 1)).stars, 1);
   await manualWin('start_battle', 40);
   await buyStamina();
-  await click('mode_defense');
+  await click('nav_arena'); await click('arena_defense');
   const defense = await sweep('sweep_defense');
   assert.deepEqual([defense.firstClear, defense.stars, defense.yuanbao], [true, 7, 188]);
   await checkRepeatCycle('sweep_defense');
@@ -95,7 +95,7 @@ export default async function ({ page, wait }) {
 
   // 单独模拟两个老关卡的一星通关存档，验证首次补星与第二次碾压。
   await buyStamina();
-  await click('mode_chapter');
+  await click('nav_battle'); await click('mode_chapter');
   await page.evaluate(() => {
     const s = window.__saveMod.save;
     s.stars['0-2'] = 1;
@@ -105,7 +105,7 @@ export default async function ({ page, wait }) {
   assert.deepEqual([improved.firstClear, improved.stars, improved.starBonus, improved.yuanbao], [false, 7, 90, 130]);
   assert.equal((await sweep('sweep_battle')).yuanbao, 0);
   await buyStamina();
-  await click('mode_defense');
+  await click('nav_arena'); await click('arena_defense');
   const improvedDefense = await sweep('sweep_defense');
   assert.deepEqual([improvedDefense.firstClear, improvedDefense.stars, improvedDefense.yuanbao], [false, 7, 28]);
   assert.equal((await sweep('sweep_defense')).yuanbao, 0);

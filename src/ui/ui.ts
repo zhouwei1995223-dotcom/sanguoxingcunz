@@ -5,6 +5,7 @@ import { playSfx } from '../audio/sound';
 import { NEW_UI } from '../data/platformConfig';
 import { drawXuanTexture, XuanTextureOpts } from './xuanPaper';
 import { TextCache } from './textCache';
+import { drawSkin, skinFrame, paintPanel, paintLacquerButton, paintSlipButton, paintRibbon, paintSlot, paintInkPill, paintBarTrack, LACQUER, Lacquer, rr, mix } from './skin';
 
 // 立即模式 UI：每帧重新绘制并登记可点击区域；点击判定使用上一帧的区域表，天然支持弹窗遮挡。
 
@@ -55,6 +56,22 @@ export const C = {
   btnBlue: ['#2b8fd6', '#174f8a', '#7cc8ff'],
   btnGray: ['#8b9bb4', '#5a6988', '#c0cbdc'],
   btnPurple: ['#a659b8', '#5f2f73', '#dc9be9'],
+};
+
+/** 题签 / 标题条的底色 → 漆面配色 */
+function ribbonLacquer(color: string): Lacquer {
+  const c = color.toLowerCase();
+  if (c === '#a22633') return LACQUER.red;
+  if (c === '#3e8948' || c === '#1d6b4a' || c === '#2f7a3a') return LACQUER.green;
+  if (c === '#124e89') return LACQUER.blue;
+  if (c === '#7a2a78') return LACQUER.purple;
+  if (c === '#a2611a') return { top: '#e0a04a', mid: '#b87422', bot: '#8a5212', lip: '#5a340a', ink: '#42260a' };
+  return { top: mix(color, '#ffffff', 0.22), mid: color, bot: mix(color, '#120c08', 0.38), lip: mix(color, '#120c08', 0.62), ink: mix(color, '#120c08', 0.7) };
+}
+
+/** 品质格的边色：旧调色板里偏暗 / 偏灰的几种换成在宣纸上更耐看的颜色 */
+const SLOT_COLOR: Record<string, string> = {
+  '#3a3040': '#8d8272', '#8b9bb4': '#8a97a8', '#5a6988': '#6f86a4', '#feae34': '#d99a2a', '#fee761': '#e2b93a', '#f5c45e': '#d99a2a', '#b86818': '#c98a2a',
 };
 
 export class UI {
@@ -185,6 +202,7 @@ export class UI {
 
   begin(dt: number) {
     this.time += dt;
+    skinFrame();
     this.regions = [];
     this.taps = {};
     this.paperZones = [];
@@ -280,6 +298,11 @@ export class UI {
 
   markPaper(x: number, y: number, w: number, h: number) {
     this.paperZones.push({ x, y, w, h, layer: this.layer });
+  }
+
+  /** 登记一块深色底（墨漆牌、导航栏……）：上面的浅色字保持原样，不按宣纸换成墨色 */
+  markDark(x: number, y: number, w: number, h: number) {
+    this.darkZones.push({ x, y, w, h, layer: this.layer });
   }
 
   private isOnPaper(x: number, y: number): boolean {
@@ -491,117 +514,15 @@ export class UI {
       return;
     }
 
-    // —— 新版三国水墨宣纸 / 丹青古卷面板（轻盈化） ——
+    // —— 鎏金水墨面板：外观在 skin.ts，按尺寸缓存后贴图 ——
+    this.paperZones.push({ x, y, w, h, layer: this.layer });
+    const u = this.u;
     if (style === 'dark') {
-      this.paperZones.push({ x, y, w, h, layer: this.layer });
-      const b = Math.max(1.5, Math.round(this.u * 2));
-      const c = Math.max(2, Math.round(this.u * 3));
-      // 柔和淡墨投影
-      this.pixRect(x, y + b * 1.2, w, h, 'rgba(28,22,16,0.16)', c);
-      // 纤细外墨线
-      this.pixRect(x, y, w, h, '#3d3126', c);
-      const iGrad = ctx.createLinearGradient(x, y + b, x, y + h - b);
-      if (w < 130 * this.u && h < 130 * this.u) {
-        // 侧边栏小方笺：通透熟宣 + 淡墨圆晕
-        iGrad.addColorStop(0, '#f6efe0');
-        iGrad.addColorStop(1, '#e4d4b7');
-        this.pixRect(x + b, y + b, w - b * 2, h - b * 2, iGrad as unknown as string, Math.max(1, c - 1));
-        this.paperTexture(x + b, y + b, w - b * 2, h - b * 2, { alpha: 0.9, patina: true });
-        ctx.strokeStyle = 'rgba(120,98,74,0.42)';
-        ctx.lineWidth = Math.max(1, this.u);
-        ctx.strokeRect(x + b * 2.2, y + b * 2.2, w - b * 4.4, h - b * 4.4);
-        ctx.fillStyle = 'rgba(72,56,42,0.08)';
-        ctx.beginPath();
-        ctx.arc(x + w / 2, y + h * 0.44, Math.min(w, h) * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // 背包/未解锁内页副面板：温润暮色旧宣纸
-        iGrad.addColorStop(0, '#e3d5bb');
-        iGrad.addColorStop(1, '#cfbe9f');
-        this.pixRect(x + b, y + b, w - b * 2, h - b * 2, iGrad as unknown as string, Math.max(1, c - 1));
-        this.paperTexture(x + b, y + b, w - b * 2, h - b * 2, { alpha: 0.94, patina: true, stains: true });
-        ctx.strokeStyle = 'rgba(76,60,45,0.35)';
-        ctx.lineWidth = Math.max(1, this.u * 1.2);
-        ctx.strokeRect(x + b * 2.5, y + b * 2.5, w - b * 5, h - b * 5);
-      }
+      const tile = w < 130 * u && h < 130 * u;
+      drawSkin(ctx, tile ? 'pn_tile' : 'pn_inset', x, y, w, h, tile ? 12 * u : 2, (g, pw, ph) => paintPanel(g, pw, ph, u, tile ? 'tile' : 'inset'));
       return;
     }
-
-    // 'wood' & 'paper'：水墨乌丝栏古籍宣纸卷轴（轻盈细框版）
-    this.paperZones.push({ x, y, w, h, layer: this.layer });
-    const b = Math.max(1.5, Math.round(this.u * 2.2));
-    this.pixRect(x, y + b * 1.8, w, h, 'rgba(28,20,14,0.22)', p);
-    // 纤巧外墨线
-    this.pixRect(x, y, w, h, '#30261e', p);
-    // 宣纸留白衬边
-    this.pixRect(x + b, y + b, w - b * 2, h - b * 2, '#9e8b70', p);
-    // 温润熟宣纸面渐变
-    const paperGrad = ctx.createLinearGradient(x, y + b * 2, x, y + h - b * 2);
-    paperGrad.addColorStop(0, '#f6efe0');
-    paperGrad.addColorStop(0.5, '#efe2ca');
-    paperGrad.addColorStop(1, '#e0ceae');
-    this.pixRect(x + b * 1.8, y + b * 1.8, w - b * 3.6, h - b * 3.6, paperGrad as unknown as string, Math.max(2, p - 1));
-    this.paperTexture(x + b * 1.8, y + b * 1.8, w - b * 3.6, h - b * 3.6, { alpha: 0.95, patina: true, stains: true });
-
-    // 水墨远山淡影（大面板底部隐约浮现远山墨韵）
-    if (w >= 260 * this.u && h >= 180 * this.u) {
-      ctx.save();
-      ctx.beginPath();
-      const ix = x + p * 2.5, iy = y + p * 2.5, iw = w - p * 5, ih = h - p * 5;
-      ctx.rect(ix, iy, iw, ih);
-      ctx.clip();
-      ctx.fillStyle = 'rgba(45,38,32,0.048)';
-      ctx.beginPath();
-      ctx.moveTo(ix, iy + ih);
-      ctx.lineTo(ix, iy + ih - 45 * this.u);
-      ctx.quadraticCurveTo(ix + iw * 0.25, iy + ih - 95 * this.u, ix + iw * 0.52, iy + ih - 38 * this.u);
-      ctx.quadraticCurveTo(ix + iw * 0.78, iy + ih - 82 * this.u, ix + iw, iy + ih - 28 * this.u);
-      ctx.lineTo(ix + iw, iy + ih);
-      ctx.closePath();
-      ctx.fill();
-      // 右下角朱砂闲章淡水印
-      const sealS = 38 * this.u;
-      const sx = ix + iw - sealS - 14 * this.u, sy = iy + ih - sealS - 12 * this.u;
-      ctx.strokeStyle = 'rgba(184,40,32,0.14)';
-      ctx.lineWidth = 1.8 * this.u;
-      ctx.strokeRect(sx, sy, sealS, sealS);
-      ctx.fillStyle = 'rgba(184,40,32,0.12)';
-      ctx.font = this.font(20, true);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('三国', sx + sealS / 2, sy + sealS / 2);
-      ctx.restore();
-    }
-
-    // 古籍乌丝栏内框细线
-    const inPad = p * 2.6;
-    if (w > inPad * 2 + 20 && h > inPad * 2 + 20) {
-      ctx.strokeStyle = 'rgba(72,56,42,0.36)';
-      ctx.lineWidth = Math.max(1, Math.round(this.u * 1.2));
-      ctx.strokeRect(x + inPad, y + inPad, w - inPad * 2, h - inPad * 2);
-    }
-
-    // 四角古籍折角细墨线与朱砂小点
-    if (w >= 140 * this.u && h >= 90 * this.u) {
-      const arm = Math.min(20 * this.u, Math.min(w, h) * 0.14);
-      const thick = Math.max(2, Math.round(this.u * 2.4));
-      const off = p * 2.5;
-      const corners: [number, number, number, number][] = [
-        [x + off, y + off, 1, 1],
-        [x + w - off, y + off, -1, 1],
-        [x + off, y + h - off, 1, -1],
-        [x + w - off, y + h - off, -1, -1],
-      ];
-      for (const [cx, cy, dx, dy] of corners) {
-        ctx.fillStyle = '#4a3b2e';
-        ctx.fillRect(dx > 0 ? cx : cx - arm, dy > 0 ? cy : cy - thick, arm, thick);
-        ctx.fillRect(dx > 0 ? cx : cx - thick, dy > 0 ? cy : cy - arm, thick, arm);
-        const rx = dx > 0 ? cx + p * 1.4 : cx - p * 2.2;
-        const ry = dy > 0 ? cy + p * 1.4 : cy - p * 2.2;
-        ctx.fillStyle = '#b52b22';
-        ctx.fillRect(rx, ry, p * 0.8, p * 0.8);
-      }
-    }
+    drawSkin(ctx, 'pn_card', x, y, w, h, 20 * u, (g, pw, ph) => paintPanel(g, pw, ph, u, 'card'));
   }
 
   /** 标题条（轻盈古籍卷首题签样式） */
@@ -620,55 +541,25 @@ export class UI {
       return;
     }
 
-    const ctx = this.ctx;
-    const wingW = p * 3.8;
-    this.darkZones.push({ x: x - wingW, y, w: w + wingW * 2, h, layer: this.layer });
-    // 左右两端纤巧卷轴折耳
-    this.pixRect(x - wingW, y + p * 1.8, w + wingW * 2, h - p * 3, 'rgba(28,20,14,0.22)', p);
-    this.pixRect(x - wingW, y + p * 1.2, w + wingW * 2, h - p * 2.4, '#362b22', p);
-    this.pixRect(x - wingW + p * 0.7, y + p * 1.9, w + (wingW - p * 0.7) * 2, h - p * 3.8, '#e8dac0', p);
-    // 左右两侧玉轴杆
-    const rodW = p * 1.8;
-    ctx.fillStyle = '#2e241c';
-    ctx.fillRect(x - p * 0.9, y - p * 0.5, rodW, h + p);
-    ctx.fillRect(x + w - rodW + p * 0.9, y - p * 0.5, rodW, h + p);
-
-    // 主卷首题签：纤细墨框 + 宣纸白边 + 雅致朱砂面
-    this.pixRect(x, y + p * 0.8, w, h, 'rgba(28,20,14,0.22)', p);
-    this.pixRect(x, y, w, h, '#2e241c', p);
-    this.pixRect(x + p * 0.7, y + p * 0.7, w - p * 1.4, h - p * 1.4, '#f5ecda', p);
-    const faceGrad = ctx.createLinearGradient(x, y + p * 1.5, x, y + h - p * 1.5);
-    if (color === '#a22633') {
-      faceGrad.addColorStop(0, '#b83227');
-      faceGrad.addColorStop(1, '#8f1e16');
-    } else {
-      faceGrad.addColorStop(0, color);
-      faceGrad.addColorStop(1, '#241816');
-    }
-    this.pixRect(x + p * 1.5, y + p * 1.5, w - p * 3, h - p * 3, faceGrad as unknown as string, Math.max(2, p - 1));
-    ctx.strokeStyle = 'rgba(248,240,224,0.45)';
-    ctx.lineWidth = Math.max(1, this.u);
-    ctx.strokeRect(x + p * 2.3, y + p * 2.3, w - p * 4.6, h - p * 4.6);
-
-    // 标题两侧对称宣纸白菱形印记
+    const ctx = this.ctx, u = this.u;
+    this.darkZones.push({ x: x - 24 * u, y, w: w + 48 * u, h, layer: this.layer });
+    const lac = ribbonLacquer(color);
+    drawSkin(ctx, 'rb_' + color, x, y, w, h, 26 * u, (g, pw, ph) => paintRibbon(g, pw, ph, u, lac));
+    // 标题两侧的小金菱
     const tw = this.measure(label, 31);
-    const ornOffset = Math.min(w / 2 - p * 5, tw / 2 + 22 * this.u);
-    if (ornOffset > tw / 2 + 10 * this.u) {
-      const d = 4 * this.u;
+    const ornOffset = Math.min(w / 2 - 22 * u, tw / 2 + 24 * u);
+    if (ornOffset > tw / 2 + 12 * u) {
+      const d = 4.5 * u;
+      ctx.fillStyle = '#f6dc9a';
       for (const dir of [-1, 1]) {
         const ox = cx + dir * ornOffset;
-        ctx.fillStyle = '#f5ebd6';
         ctx.beginPath();
-        ctx.moveTo(ox, cy - d);
-        ctx.lineTo(ox + d, cy);
-        ctx.lineTo(ox, cy + d);
-        ctx.lineTo(ox - d, cy);
+        ctx.moveTo(ox, cy - d); ctx.lineTo(ox + d, cy); ctx.lineTo(ox, cy + d); ctx.lineTo(ox - d, cy);
         ctx.closePath();
         ctx.fill();
       }
     }
-
-    this.text(label, cx, cy + 1 * this.u, 31, this.preserveTextColors ? C.text : '#fbf4e4', 'center', '#450e09');
+    this.text(label, cx, cy + 1 * u, 31, this.preserveTextColors ? C.text : '#fff6e0', 'center', lac.ink);
   }
 
   /** 按钮：colors = [主色, 暗色, 高光] */
@@ -702,128 +593,50 @@ export class UI {
       return this.clicked(id, x, y, w, h);
     }
 
-    const ctx = this.ctx;
-    const isPrimarySeal = !opts.disabled && (cols === C.btnRed || cols === C.btnGreen) && w >= 180 * this.u;
-    const b = Math.max(1.5, Math.round(this.u * 1.8));
-    const faceH = h - b * 2;
-
-    if (isPrimarySeal) {
-      // 主行动按钮（出征 / 守城 / 双倍签到）：朱砂/松石篆印风格（外镶宣纸边 + 雅致印泥内芯，无厚黑框）
+    const ctx = this.ctx, u = this.u;
+    const solid = !opts.disabled && (cols === C.btnRed || cols === C.btnGreen) && w >= 180 * u;
+    const size = opts.size || 30;
+    const lip = Math.max(2, Math.round((solid ? 5 : 4) * u));
+    const faceH = h - lip;
+    const dy = pressed ? lip - 1 : opts.disabled ? lip * 0.5 : 0;
+    let tx = x + w / 2;
+    const ty = y + faceH / 2 + dy + (opts.sub ? -size * u * 0.34 : 0);
+    if (solid) {
+      // 主行动按钮（出征 / 守城 / 入局 / 双倍领取）：鎏金边朱漆 / 松石漆面
       this.darkZones.push({ x, y, w, h, layer: this.layer });
-      this.pixRect(x, y + b * 1.8, w, h, 'rgba(28,20,14,0.2)', p);
-      this.pixRect(x, y + off, w, faceH, '#362a20', p);
-      // 温润宣纸宽镶边
-      this.pixRect(x + b, y + b + off, w - b * 2, faceH - b * 2, '#f5ecda', p);
-      const sealGrad = ctx.createLinearGradient(x, y + b * 2.4 + off, x, y + faceH - b * 2.4 + off);
-      const isRed = cols === C.btnRed;
-      if (isRed) {
-        sealGrad.addColorStop(0, '#bf3428');
-        sealGrad.addColorStop(1, '#962016');
-      } else {
-        sealGrad.addColorStop(0, '#3b8050');
-        sealGrad.addColorStop(1, '#265c36');
-      }
-      this.pixRect(x + b * 2.4, y + b * 2.4 + off, w - b * 4.8, faceH - b * 4.8, sealGrad as unknown as string, Math.max(2, p - 1));
-      this.paperTexture(x + b * 2.4, y + b * 2.4 + off, w - b * 4.8, faceH - b * 4.8, { alpha: 0.42, patina: false, stains: false });
-      // 篆印内细线框与四角刻线
-      const inX = x + b * 3.8, inY = y + b * 3.8 + off, inW = w - b * 7.6, inH = faceH - b * 7.6;
-      ctx.strokeStyle = 'rgba(250,242,226,0.58)';
-      ctx.lineWidth = Math.max(1, this.u * 1.2);
-      ctx.strokeRect(inX, inY, inW, inH);
-      const tick = Math.min(10 * this.u, inH * 0.22);
-      for (const [cx0, cy0, dx, dy] of [
-        [inX, inY, 1, 1], [inX + inW, inY, -1, 1],
-        [inX, inY + inH, 1, -1], [inX + inW, inY + inH, -1, -1],
-      ] as [number, number, number, number][]) {
-        ctx.strokeRect(dx > 0 ? cx0 : cx0 - tick, dy > 0 ? cy0 : cy0 - tick, tick, tick);
-      }
-
-      const size = opts.size || 30;
-      let tx = x + w / 2;
-      const ty = y + faceH / 2 + off + (opts.sub ? -size * this.u * 0.34 : 0);
+      const lac = cols === C.btnRed ? LACQUER.red : LACQUER.green;
+      drawSkin(ctx, (cols === C.btnRed ? 'bt_red' : 'bt_green') + (pressed ? 'P' : ''), x, y, w, h, 16 * u, (g, bw, bh) => paintLacquerButton(g, bw, bh, u, lac, pressed));
       if (opts.icon) {
-        const isz = size * 1.3 * this.u;
+        const isz = size * 1.3 * u;
         const tw = this.measure(label, size);
-        const total = isz + 8 * this.u + tw;
+        const total = isz + 8 * u + tw;
         this.icon(opts.icon, x + w / 2 - total / 2 + isz / 2, ty, isz);
-        tx = x + w / 2 - total / 2 + isz + 8 * this.u + tw / 2;
+        tx = x + w / 2 - total / 2 + isz + 8 * u + tw / 2;
       }
-      // 阴文篆刻白字（去掉粗描边，仅保留轻微刻痕阴影，视觉更轻盈）
-      this.text(label, tx, ty + 1.5 * this.u, size, 'rgba(30,8,6,0.32)', 'center', null);
-      this.text(label, tx, ty, size, this.preserveTextColors ? C.text : '#fbf4e4', 'center', null);
-      if (opts.sub) {
-        const subY = ty + size * this.u * 0.92;
-        const subSize = size * 0.54;
-        this.text(`— ${opts.sub} —`, x + w / 2, subY, subSize, this.preserveTextColors ? '#fff' : '#f5ead4', 'center', null);
-      }
+      this.text(label, tx, ty, size, this.preserveTextColors ? C.text : '#fff6e0', 'center', lac.ink);
+      if (opts.sub) this.text(opts.sub, x + w / 2, ty + size * u * 0.94, Math.max(17, size * 0.52), this.preserveTextColors ? '#fff' : '#ffe9c0', 'center', null);
     } else {
-      // 次级与常规按钮（无尽 / 章节 / 签到 / 升级 / 箭头等）：轻盈「宣纸乌丝题签」样式
+      // 次级按钮：象牙纸笺，边框 / 底色 / 小字带功能色
       this.paperZones.push({ x, y, w, h, layer: this.layer });
-      let accent = '#8a765c';
-      let subColor = '#5c4d3e';
-      if (opts.disabled || cols === C.btnGray) {
-        accent = '#8a7c6a'; subColor = '#6e6050';
-      } else if (cols === C.btnPurple) {
-        accent = '#733a7d'; subColor = '#6b2d75';
-      } else if (cols === C.btnBlue) {
-        accent = '#2b5e7a'; subColor = '#1f4e69';
-      } else if (cols === C.btnGold) {
-        accent = '#b86818'; subColor = '#9e4f10';
-      } else if (cols === C.btnRed) {
-        accent = '#a8261d'; subColor = '#9e1e18';
-      } else if (cols === C.btnGreen) {
-        accent = '#2d6e40'; subColor = '#205930';
-      }
-
-      this.pixRect(x, y + b * 1.4, w, h, 'rgba(28,20,14,0.14)', p);
-      // 纤细外墨线
-      this.pixRect(x, y + off, w, faceH, '#3b2f24', p);
-      // 温润宣纸笺面
-      const slipGrad = ctx.createLinearGradient(x, y + b + off, x, y + faceH - b + off);
-      if (opts.disabled) {
-        slipGrad.addColorStop(0, '#e3d8c4');
-        slipGrad.addColorStop(1, '#cfc2aa');
-      } else if (cols === C.btnGold) {
-        slipGrad.addColorStop(0, '#fbf3e1');
-        slipGrad.addColorStop(1, '#edd9b4');
-      } else {
-        slipGrad.addColorStop(0, '#f7f0e0');
-        slipGrad.addColorStop(1, '#e4d4b7');
-      }
-      this.pixRect(x + b, y + b + off, w - b * 2, faceH - b * 2, slipGrad as unknown as string, Math.max(1, p - 1));
-      this.paperTexture(x + b, y + b + off, w - b * 2, faceH - b * 2, { alpha: 0.92, patina: true });
-
-      // 乌丝栏彩色细内框 + 顶部书签色条
-      if (w >= 64 * this.u && h >= 44 * this.u) {
-        const pad = b * 2.2;
-        ctx.strokeStyle = accent;
-        ctx.globalAlpha = opts.disabled ? 0.38 : 0.68;
-        ctx.lineWidth = Math.max(1, this.u * 1.2);
-        ctx.strokeRect(x + pad, y + pad + off, w - pad * 2, faceH - pad * 2);
-        if (!opts.disabled && w >= 110 * this.u) {
-          ctx.fillStyle = accent;
-          ctx.fillRect(x + pad + 8 * this.u, y + pad + off, w - (pad + 8 * this.u) * 2, Math.max(2, this.u * 2.6));
-        }
-        ctx.globalAlpha = 1;
-      }
-
-      const size = opts.size || 30;
-      let tx = x + w / 2;
-      const ty = y + faceH / 2 + off + (opts.sub ? -size * this.u * 0.34 : 0);
+      let accent = '#8a6a40', tag = 'n';
+      if (opts.disabled || cols === C.btnGray) { accent = '#857868'; tag = 'y'; }
+      else if (cols === C.btnPurple) { accent = '#6d3f8a'; tag = 'p'; }
+      else if (cols === C.btnBlue) { accent = '#2f6488'; tag = 'b'; }
+      else if (cols === C.btnGold) { accent = '#c0801c'; tag = 'g'; }
+      else if (cols === C.btnRed) { accent = '#b02c22'; tag = 'r'; }
+      else if (cols === C.btnGreen) { accent = '#2d7848'; tag = 'e'; }
+      const dis = !!opts.disabled;
+      drawSkin(ctx, 'bs_' + tag + (pressed ? 'P' : '') + (dis ? 'D' : ''), x, y, w, h, 12 * u, (g, bw, bh) => paintSlipButton(g, bw, bh, u, accent, pressed, dis));
       if (opts.icon) {
-        const isz = size * 1.3 * this.u;
+        const isz = size * 1.3 * u;
         const tw = this.measure(label, size);
-        const total = isz + 8 * this.u + tw;
+        const total = isz + 8 * u + tw;
         this.icon(opts.icon, x + w / 2 - total / 2 + isz / 2, ty, isz);
-        tx = x + w / 2 - total / 2 + isz + 8 * this.u + tw / 2;
+        tx = x + w / 2 - total / 2 + isz + 8 * u + tw / 2;
       }
-      const labelColor = this.preserveTextColors ? (opts.disabled ? '#e0e0e0' : C.text) : (opts.disabled ? '#786b5c' : '#1e1814');
+      const labelColor = this.preserveTextColors ? (dis ? '#e0e0e0' : C.text) : (dis ? '#7d7062' : '#221a13');
       this.text(label, tx, ty, size, labelColor, 'center', null);
-      if (opts.sub) {
-        const subY = ty + size * this.u * 0.92;
-        const subSize = size * 0.58;
-        this.text(opts.sub, x + w / 2, subY, subSize, this.preserveTextColors ? '#fff' : subColor, 'center', null);
-      }
+      if (opts.sub) this.text(opts.sub, x + w / 2, ty + size * u * 0.92, size * 0.58, this.preserveTextColors ? '#fff' : dis ? '#7d7062' : mix(accent, '#2a1c10', 0.25), 'center', null);
     }
 
     if (opts.redDot) this.redDot(x + w - 6 * this.u, y + 6 * this.u);
@@ -911,37 +724,23 @@ export class UI {
    */
   private inkBar(x: number, y: number, w: number, h: number, ratio: number, color: string, back: string) {
     const ctx = this.ctx, u = this.u;
-    const b = Math.max(1, Math.round(u * 1.6));
+    const b = Math.max(1, 1.4 * u);
     const darkBack = back !== '#1a1210';
     const pigment = INK_PIGMENT[color.toLowerCase()] || color;
-    ctx.fillStyle = 'rgba(28,22,16,0.18)';
-    ctx.fillRect(x, y + b, w, h);
-    ctx.fillStyle = '#3d3126';
-    ctx.fillRect(x, y, w, h);
-    const ix = x + b, iy = y + b, iw = w - b * 2, ih = h - b * 2;
-    if (darkBack) {
-      ctx.fillStyle = back;
-      ctx.fillRect(ix, iy, iw, ih);
-    } else {
-      const grad = ctx.createLinearGradient(0, iy, 0, iy + ih);
-      grad.addColorStop(0, '#d9cbac');
-      grad.addColorStop(1, '#eadfc6');
-      ctx.fillStyle = grad;
-      ctx.fillRect(ix, iy, iw, ih);
-      this.markPaper(ix, iy, iw, ih);
-    }
+    drawSkin(ctx, 'bar_' + (darkBack ? back : 'p'), x, y, w, h, 1, (g, bw, bh) => paintBarTrack(g, bw, bh, u, darkBack ? back : null));
+    const ix = Math.round(x) + b, iy = Math.round(y) + b, iw = Math.round(w) - b * 2, ih = Math.round(h) - b * 2;
+    if (!darkBack) this.markPaper(ix, iy, iw, ih);
     const fw = Math.max(0, iw * Math.min(1, ratio));
-    if (fw > 0) {
+    if (fw > 1) {
+      const r = Math.min(ih / 2, 6 * u, fw / 2);
+      rr(ctx, ix, iy, fw, ih, r);
       ctx.fillStyle = pigment;
-      ctx.fillRect(ix, iy, fw, ih);
-      ctx.fillStyle = 'rgba(255,248,226,0.26)';
-      ctx.fillRect(ix, iy, fw, Math.max(1, ih * 0.34));
-      ctx.fillStyle = 'rgba(20,14,10,0.22)';
-      ctx.fillRect(ix, iy + ih - Math.max(1, ih * 0.22), fw, Math.max(1, ih * 0.22));
-      if (fw < iw) {
-        ctx.fillStyle = 'rgba(30,22,16,0.55)';
-        ctx.fillRect(ix + fw - Math.max(1, u), iy, Math.max(1, u * 1.5), ih);
-      }
+      ctx.fill();
+      // 上沿高光、下沿压暗（不用渐变，进度条每帧都在变，直接画两条）
+      ctx.fillStyle = 'rgba(255,250,228,0.34)';
+      ctx.fillRect(ix + r * 0.6, iy + Math.max(1, ih * 0.12), Math.max(0, fw - r * 1.2), Math.max(1, ih * 0.24));
+      ctx.fillStyle = 'rgba(24,14,8,0.2)';
+      ctx.fillRect(ix + r * 0.6, iy + ih - Math.max(1, ih * 0.26), Math.max(0, fw - r * 1.2), Math.max(1, ih * 0.18));
     }
   }
 
@@ -960,29 +759,11 @@ export class UI {
       return;
     }
 
-    // 宣纸册页方格（轻盈水墨底 + 矿物色内丝框）
+    // 品质格：品质色描边 + 淡染纸面，缓存贴图
     this.paperZones.push({ x, y, w: size, h: size, layer: this.layer });
-    const g = this.ctx;
-    const b = Math.max(1.5, Math.round(this.u * 1.8));
-    const c = Math.max(2, Math.round(this.u * 2.5));
-    this.pixRect(x, y + b, size, size, 'rgba(28,20,14,0.14)', c);
-    this.pixRect(x, y, size, size, '#3b2f24', c);
-    const bgGrad = g.createLinearGradient(x, y + b, x, y + size - b);
-    bgGrad.addColorStop(0, '#f4ecda');
-    bgGrad.addColorStop(1, '#dfd0b4');
-    this.pixRect(x + b, y + b, size - b * 2, size - b * 2, bgGrad as unknown as string, Math.max(1, c - 1));
-    this.paperTexture(x + b, y + b, size - b * 2, size - b * 2, { alpha: 0.9, patina: true });
-    // 底部品质丹青淡晕染
-    g.save();
-    g.fillStyle = color;
-    g.globalAlpha = 0.18;
-    g.fillRect(x + b * 2, y + size * 0.52, size - b * 4, size * 0.48 - b * 2);
-    // 品质色乌丝内框
-    g.strokeStyle = color === '#feae34' || color === '#f5c45e' ? '#b8281e' : color;
-    g.globalAlpha = 0.78;
-    g.lineWidth = Math.max(1.2, this.u * 1.6);
-    g.strokeRect(x + b * 2, y + b * 2, size - b * 4, size - b * 4);
-    g.restore();
+    const u = this.u;
+    const col = SLOT_COLOR[color.toLowerCase()] || color;
+    drawSkin(this.ctx, 'qf_' + col, x, y, size, size, 10 * u, (g, s) => paintSlot(g, s, u, col));
   }
 
   dim(alpha = 0.6) {
@@ -1011,36 +792,22 @@ export class UI {
         this.pixRect(this.W / 2 - w / 2, y - 30 * u, w, 60 * u, 'rgba(12,8,10,0.85)');
         this.text(t.text, this.W / 2, y, 28, '#fff4d6', 'center', null);
       } else {
-        // 新版水墨宣纸朱批提示笺：高对比亮宣纸底 + 双层朱墨细框 + 浓墨宋体字，彻底解决深色遮罩看不清问题
+        // 墨漆描金提示条：压在任何底色上都看得清
         const tw = this.measure(t.text, 26);
-        const w = Math.min(this.W - 40 * u, tw + 88 * u);
-        const h = 62 * u;
-        const x = this.W / 2 - w / 2, ty0 = y - h / 2;
-        const p = Math.max(2, Math.round(u * 2.5));
-        const b = Math.max(1.5, Math.round(u * 2));
-        this.pixRect(x, ty0 + b * 1.6, w, h, 'rgba(20,14,10,0.34)', p);
-        this.pixRect(x, ty0, w, h, '#2b2119', p);
-        const g = ctx.createLinearGradient(x, ty0 + b, x, ty0 + h - b);
-        g.addColorStop(0, '#fdf8ec');
-        g.addColorStop(1, '#efe1c6');
-        this.pixRect(x + b, ty0 + b, w - b * 2, h - b * 2, g as unknown as string, Math.max(1, p - 1));
-        this.paperTexture(x + b, ty0 + b, w - b * 2, h - b * 2, { alpha: 0.9, patina: true });
-        ctx.strokeStyle = '#b5281f';
-        ctx.lineWidth = Math.max(1.2, u * 1.4);
-        ctx.strokeRect(x + b * 2.2, ty0 + b * 2.2, w - b * 4.4, h - b * 4.4);
-        // 左右两侧朱砂小菱印
+        const w = Math.min(this.W - 40 * u, tw + 96 * u);
+        const h = 64 * u;
+        const x = this.W / 2 - w / 2, ty0 = y - h / 2 + (1 - Math.min(1, t.t / 0.15)) * 12 * u;
+        this.markDark(x, ty0, w, h);
+        drawSkin(ctx, 'toast', x, ty0, w, h, 12 * u, (g, pw, ph) => paintInkPill(g, pw, ph, u, 0.94));
+        ctx.fillStyle = '#f0cf86';
         for (const dir of [-1, 1]) {
-          const dx = this.W / 2 + dir * (w / 2 - 20 * u);
-          ctx.fillStyle = '#b5281f';
+          const dx = this.W / 2 + dir * (w / 2 - 24 * u), cy = ty0 + h / 2, d = 4 * u;
           ctx.beginPath();
-          ctx.moveTo(dx, y - 4 * u);
-          ctx.lineTo(dx + 4 * u, y);
-          ctx.lineTo(dx, y + 4 * u);
-          ctx.lineTo(dx - 4 * u, y);
+          ctx.moveTo(dx, cy - d); ctx.lineTo(dx + d, cy); ctx.lineTo(dx, cy + d); ctx.lineTo(dx - d, cy);
           ctx.closePath();
           ctx.fill();
         }
-        this.text(t.text, this.W / 2, y + 0.5 * u, 26, this.preserveTextColors ? C.text : '#1e1814', 'center', this.preserveTextColors ? '#443328' : null);
+        this.text(t.text, this.W / 2, ty0 + h / 2 + 0.5 * u, 26, '#fbf4e4', 'center', null);
       }
       ctx.restore();
       y += 70 * u;

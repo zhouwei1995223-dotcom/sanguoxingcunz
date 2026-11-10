@@ -24,7 +24,7 @@ export default async function({ page }) {
   await page.waitForFunction(() => window.__game?.scene?.constructor.name === 'HomeScene');
   await page.waitForTimeout(350);
   await page.evaluate(() => window.__game.closeAll());
-  await button('mode_tower');
+  await button('nav_arena'); await button('arena_tower');
   await page.waitForFunction(() => window.__saveMod.save.homeMode === 'tower');
   await button('td_list');
   await page.waitForTimeout(400);

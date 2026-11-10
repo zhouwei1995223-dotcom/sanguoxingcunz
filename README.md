@@ -1,6 +1,6 @@
 # 长坂单骑传（原名：一骑当千）
 
-类吸血鬼幸存者（Vampire Survivors / 弹壳特攻队）的三国题材竖屏小游戏，可同时发布到**微信小游戏**与**抖音小游戏**。共 10 名武将：赵云、关羽、张飞、诸葛亮、吕布，以及 1.0.3 新增的黄忠、马超、孙尚香、典韦、姜维。
+类吸血鬼幸存者（Vampire Survivors / 弹壳特攻队）的三国题材竖屏小游戏，可同时发布到**微信小游戏**与**抖音小游戏**。共 30 名武将，分蜀、魏、吴、群四个阵营：最初的赵云、关羽、张飞、诸葛亮、吕布，1.0.3 新增的黄忠、马超、孙尚香、典韦、姜维，以及 1.1.0 新增的刘备、魏延、曹操、夏侯惇、张辽、许褚、司马懿、夏侯渊、甄姬、孙策、周瑜、甘宁、太史慈、陆逊、小乔、貂蝉、董卓、张角、华佗、左慈。
 
 - 像素风美术、音效、背景音乐全部由代码生成，没有外部素材版权问题
 - TypeScript + 自研 Canvas 引擎，一套代码构建网页版、微信、抖音、小红书和 TapTap。
@@ -242,7 +242,7 @@ HERO=sunshangxiang DIFF=1 MINUTES=5 TARGET_POWER=102000 SEED=1740 node dist/sim/
 node tools/preview.mjs hero 8          # 导出像素图预览 dist/preview.png
 node tools/shot.mjs play               # 自动试玩并截图（需要 Playwright），另有 home / boss / newbie / perf 场景
 node tools/mock-minigame.mjs wechat    # 在模拟的微信 / 抖音环境中运行打包产物，检查小游戏代码路径
-tools/balfull.sh "3 6" 0.85 16         # 胜率矩阵：十名武将在指定章节、按推荐战力比例各跑 N 局（HEROES="a b" 只测部分；QIYU=none 不选奇遇）
+tools/balfull.sh "3 6" 0.85 16         # 胜率矩阵：全部武将（现在三十名，建议用 HEROES="a b" 分批）在指定章节、按推荐战力比例各跑 N 局（HEROES="a b" 只测部分；QIYU=none 不选奇遇）
 tools/stratpower.sh 6 0.75 6           # 单条计策强度：开局 2 分钟强制获得某计策，对比胜率
 ```
 

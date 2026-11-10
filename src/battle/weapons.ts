@@ -2,6 +2,7 @@ import { WEAPONS, WeaponId, WeaponLevel } from '../data/skills';
 import { rand, TAU } from '../core/math';
 import type { Battle } from './battle';
 import { Enemy, WeaponState, newProjectile } from './entities';
+import { updateExWeapon } from './weaponsEx';
 
 // 各武器的行为逻辑
 
@@ -21,6 +22,7 @@ const near: Enemy[] = [];
 export function updateWeapons(b: Battle, dt: number) {
   for (const w of b.weapons) {
     const L = withBonus(b, w);
+    if (updateExWeapon(b, w, L, dt)) continue;
     switch (w.id) {
       case 'spear': spear(b, w, L, dt); break;
       case 'sword': sword(b, w, L, dt); break;
@@ -298,7 +300,7 @@ function aura(b: Battle, w: WeaponState, L: WeaponLevel, dt: number) {
 }
 
 /** 扇形 / 圆形范围内伤害，返回命中数 */
-function sweep(b: Battle, source: WeaponId, cx: number, cy: number, R: number, dir: number, arc: number, dmg: number, knock: number, stun = 0): number {
+export function sweep(b: Battle, source: WeaponId, cx: number, cy: number, R: number, dir: number, arc: number, dmg: number, knock: number, stun = 0): number {
   let hits = 0;
   b.grid.query(cx, cy, R + 16, near);
   for (const e of near) {

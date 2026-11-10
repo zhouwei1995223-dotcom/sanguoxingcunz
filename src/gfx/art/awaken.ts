@@ -5,9 +5,9 @@ import type { HeroId } from './heroes';
 // 全部由参数拼出来：同一套身体，换头饰、配色、胡须、兵器，就是不同武将。
 // 画布 30×38，8 帧：0~3 走路（迈腿、摆臂、披风飘、缨子晃），4~7 站立待机（呼吸、眨眼、兵器光芒流转）。
 
-type Helm = 'helm' | 'hat' | 'crown' | 'scarf' | 'band' | 'hairpin' | 'lion';
+type Helm = 'helm' | 'hat' | 'crown' | 'scarf' | 'band' | 'hairpin' | 'lion' | 'coronet' | 'topknot';
 type Beard = '' | 'long' | 'bristle' | 'white' | 'full';
-type Weapon = 'spear' | 'blade' | 'fork' | 'fan' | 'halberd' | 'bow' | 'lance' | 'chakram' | 'jis' | 'staff';
+type Weapon = 'spear' | 'blade' | 'fork' | 'fan' | 'halberd' | 'bow' | 'lance' | 'chakram' | 'jis' | 'staff' | 'sword' | 'dual' | 'hammer';
 
 interface AwakenStyle {
   helm: Helm;
@@ -18,7 +18,7 @@ interface AwakenStyle {
   weapon: Weapon; wMetal: string; wGlow: string;
 }
 
-const STYLES: Record<HeroId, AwakenStyle> = {
+const STYLES: Partial<Record<HeroId, AwakenStyle>> = {
   zhaoyun: { helm: 'helm', helmC: 'S', helmD: 's', plume: 'R', skin: 'q', hair: 'k', beard: '', armor: 'S', armorD: 's', robe: 'w', trim: 'y', trimL: 'Y', cape: 'B', capeD: 'b', weapon: 'spear', wMetal: 'w', wGlow: 'c' },
   guanyu: { helm: 'hat', helmC: 'G', helmD: 'd', plume: 'y', skin: 'l', hair: 'k', beard: 'long', armor: 'G', armorD: 'd', robe: 'g', trim: 'y', trimL: 'Y', cape: 'd', capeD: 't', weapon: 'blade', wMetal: 'S', wGlow: 'g' },
   zhangfei: { helm: 'helm', helmC: 'n', helmD: 'K', plume: 'R', skin: 'E', hair: 'k', beard: 'bristle', armor: 'n', armorD: 'K', robe: 'N', trim: 'y', trimL: 'Y', cape: 'r', capeD: 'z', weapon: 'fork', wMetal: 'S', wGlow: 'R' },
@@ -29,6 +29,27 @@ const STYLES: Record<HeroId, AwakenStyle> = {
   sunshangxiang: { helm: 'hairpin', helmC: 'z', helmD: 'k', plume: 'R', skin: 'q', hair: 'z', beard: '', armor: 'f', armorD: 'M', robe: 'f', trim: 'y', trimL: 'Y', cape: 'M', capeD: 'm', weapon: 'chakram', wMetal: 'Y', wGlow: 'f' },
   dianwei: { helm: 'band', helmC: 'R', helmD: 'r', plume: 'R', skin: 'E', hair: 'k', beard: 'full', armor: 'U', armorD: 'z', robe: 'u', trim: 'y', trimL: 'Y', cape: 'z', capeD: 'k', weapon: 'jis', wMetal: 'S', wGlow: 'o' },
   jiangwei: { helm: 'helm', helmC: 'S', helmD: 'B', plume: 'c', skin: 'q', hair: 'k', beard: '', armor: 'B', armorD: 'b', robe: 'S', trim: 'y', trimL: 'Y', cape: 'b', capeD: 't', weapon: 'staff', wMetal: 'c', wGlow: 'c' },
+  // —— 1.1.0 新增二十位 ——
+  liubei: { helm: 'coronet', helmC: 'Y', helmD: 'y', plume: 'R', skin: 'q', hair: 'k', beard: 'long', armor: 'y', armorD: 'o', robe: 'G', trim: 'Y', trimL: 'w', cape: 'G', capeD: 'd', weapon: 'dual', wMetal: 'S', wGlow: 'Y' },
+  weiyan: { helm: 'helm', helmC: 'n', helmD: 'K', plume: 'R', skin: 'l', hair: 'k', beard: 'full', armor: 'N', armorD: 'n', robe: 'r', trim: 'y', trimL: 'Y', cape: 'R', capeD: 'r', weapon: 'blade', wMetal: 'S', wGlow: 'R' },
+  caocao: { helm: 'coronet', helmC: 'Y', helmD: 'o', plume: 'R', skin: 'q', hair: 'k', beard: 'long', armor: 'b', armorD: 'K', robe: 'B', trim: 'y', trimL: 'Y', cape: 'R', capeD: 'r', weapon: 'sword', wMetal: 'w', wGlow: 'B' },
+  xiahoudun: { helm: 'helm', helmC: 'S', helmD: 'N', plume: 'w', skin: 'q', hair: 'k', beard: 'bristle', armor: 'S', armorD: 'N', robe: 'b', trim: 'y', trimL: 'Y', cape: 'b', capeD: 'K', weapon: 'blade', wMetal: 'S', wGlow: 'B' },
+  zhangliao: { helm: 'lion', helmC: 'S', helmD: 's', plume: 'c', skin: 'q', hair: 'k', beard: '', armor: 'S', armorD: 's', robe: 'B', trim: 'y', trimL: 'Y', cape: 'B', capeD: 'b', weapon: 'halberd', wMetal: 'S', wGlow: 'c' },
+  xuchu: { helm: 'topknot', helmC: 'R', helmD: 'r', plume: 'R', skin: 'E', hair: 'k', beard: 'full', armor: 'u', armorD: 'U', robe: 'o', trim: 'y', trimL: 'Y', cape: 'o', capeD: 'U', weapon: 'hammer', wMetal: 'N', wGlow: 'y' },
+  simayi: { helm: 'hat', helmC: 'K', helmD: 'k', plume: 'M', skin: 'q', hair: 'k', beard: 'long', armor: 'm', armorD: 'z', robe: 'm', trim: 'M', trimL: 'f', cape: 'K', capeD: 'k', weapon: 'fan', wMetal: 'M', wGlow: 'M' },
+  xiahouyuan: { helm: 'helm', helmC: 'G', helmD: 'd', plume: 'Y', skin: 'q', hair: 'k', beard: '', armor: 'G', armorD: 'd', robe: 'g', trim: 'y', trimL: 'Y', cape: 'y', capeD: 'U', weapon: 'bow', wMetal: 'Y', wGlow: 'g' },
+  zhenji: { helm: 'hairpin', helmC: 'z', helmD: 'k', plume: 'c', skin: 'e', hair: 'z', beard: '', armor: 'B', armorD: 'b', robe: 'w', trim: 'c', trimL: 'w', cape: 'c', capeD: 'B', weapon: 'chakram', wMetal: 'c', wGlow: 'w' },
+  sunce: { helm: 'band', helmC: 'Y', helmD: 'y', plume: 'Y', skin: 'q', hair: 'k', beard: '', armor: 'R', armorD: 'r', robe: 'f', trim: 'y', trimL: 'Y', cape: 'y', capeD: 'U', weapon: 'spear', wMetal: 'w', wGlow: 'R' },
+  zhouyu: { helm: 'helm', helmC: 'S', helmD: 's', plume: 'R', skin: 'e', hair: 'k', beard: '', armor: 'w', armorD: 'S', robe: 'R', trim: 'y', trimL: 'Y', cape: 'R', capeD: 'r', weapon: 'sword', wMetal: 'w', wGlow: 'o' },
+  ganning: { helm: 'band', helmC: 'B', helmD: 'b', plume: 'w', skin: 'E', hair: 'k', beard: '', armor: 'y', armorD: 'u', robe: 'B', trim: 'Y', trimL: 'w', cape: 'B', capeD: 'K', weapon: 'chakram', wMetal: 'Y', wGlow: 'Y' },
+  taishici: { helm: 'helm', helmC: 'u', helmD: 'U', plume: 'o', skin: 'q', hair: 'k', beard: 'bristle', armor: 'u', armorD: 'U', robe: 'G', trim: 'y', trimL: 'Y', cape: 'G', capeD: 'd', weapon: 'bow', wMetal: 'Y', wGlow: 'o' },
+  luxun: { helm: 'scarf', helmC: 'l', helmD: 'U', plume: 'w', skin: 'e', hair: 'k', beard: '', armor: 'p', armorD: 'e', robe: 'w', trim: 'l', trimL: 'L', cape: 'l', capeD: 'U', weapon: 'sword', wMetal: 'y', wGlow: 'o' },
+  xiaoqiao: { helm: 'hairpin', helmC: 'U', helmD: 'z', plume: 'f', skin: 'e', hair: 'U', beard: '', armor: 'f', armorD: 'M', robe: 'w', trim: 'y', trimL: 'Y', cape: 'f', capeD: 'M', weapon: 'fan', wMetal: 'f', wGlow: 'f' },
+  diaochan: { helm: 'hairpin', helmC: 'k', helmD: 'k', plume: 'R', skin: 'e', hair: 'k', beard: '', armor: 'M', armorD: 'm', robe: 'f', trim: 'y', trimL: 'Y', cape: 'R', capeD: 'r', weapon: 'chakram', wMetal: 'f', wGlow: 'M' },
+  dongzhuo: { helm: 'coronet', helmC: 'Y', helmD: 'o', plume: 'M', skin: 'E', hair: 'k', beard: 'full', armor: 'n', armorD: 'K', robe: 'm', trim: 'y', trimL: 'Y', cape: 'm', capeD: 'z', weapon: 'blade', wMetal: 'Y', wGlow: 'o' },
+  zhangjiao: { helm: 'scarf', helmC: 'Y', helmD: 'y', plume: 'w', skin: 'q', hair: 'k', beard: 'long', armor: 'Y', armorD: 'y', robe: 'w', trim: 'o', trimL: 'Y', cape: 'y', capeD: 'U', weapon: 'staff', wMetal: 'Y', wGlow: 'Y' },
+  huatuo: { helm: 'topknot', helmC: 'G', helmD: 'd', plume: 'g', skin: 'q', hair: 'w', beard: 'white', armor: 'g', armorD: 'G', robe: 'w', trim: 'G', trimL: 'g', cape: 'p', capeD: 'u', weapon: 'staff', wMetal: 'g', wGlow: 'g' },
+  zuoci: { helm: 'scarf', helmC: 't', helmD: 'k', plume: 'c', skin: 'q', hair: 'w', beard: 'white', armor: 't', armorD: 'k', robe: 'c', trim: 'B', trimL: 'c', cape: 't', capeD: 'k', weapon: 'staff', wMetal: 'c', wGlow: 'c' },
 };
 
 const W = 30, H = 38;
@@ -113,6 +134,19 @@ function head(img: PixelImage, s: AwakenStyle, ox: number, oy: number, ps: Pose)
       img.rect(ox + 1, oy + 2, 11, 2, s.helmC); img.rect(ox + 12, oy + 3, 2, 1, s.helmC); img.rect(ox + 13 + (sw > 0 ? 1 : 0), oy + 4, 1, 3, s.helmD);
       img.set(cx, oy + 2, 'y');
       break;
+    case 'coronet':
+      // 束发金冠：发髻上一顶小冠，横贯一支长簪
+      img.rect(ox + 1, oy + 1, 11, 3, s.hair);
+      img.rect(cx - 2, oy - 3, 5, 4, s.helmC); img.rect(cx - 2, oy, 5, 1, s.helmD);
+      img.set(cx, oy - 2, 'R'); img.set(cx, oy - 4, s.helmC);
+      img.rect(cx - 5, oy - 1, 11, 1, s.helmD); img.set(cx + 6 + (sw > 0 ? 1 : 0), oy - 1, s.plume);
+      break;
+    case 'topknot':
+      // 椎髻：头顶一个发髻，束一条发带，带梢随走路晃
+      ellipse(img, cx, oy + 4, 6, 3.5, s.hair, oy + 4);
+      img.disc(cx, oy - 1, 2, s.hair); img.rect(cx - 2, oy + 1, 5, 1, s.helmC);
+      img.rect(cx + 2, oy, 2, 1, s.helmC); img.rect(cx + 3 + sw, oy + 1, 1, 2, s.helmD);
+      break;
     case 'hairpin':
       ellipse(img, cx, oy + 3, 7, 3.5, s.hair, oy + 4);
       img.disc(ox + 1, oy, 2, s.hair); img.disc(ox + 11, oy, 2, s.hair);
@@ -187,6 +221,19 @@ function weapon(img: PixelImage, s: AwakenStyle, hx: number, hy: number, glow: n
       img.ring(7, hy + 5, 2, m);
       spark(hx + 1, hy - 3);
       break;
+    case 'sword': case 'dual':
+      for (const x0 of s.weapon === 'dual' ? [hx, 6] : [hx]) {
+        img.rect(x0, hy - 14, 1, 12, m); img.set(x0, hy - 15, 'w');
+        img.rect(x0 - 1, hy - 2, 3, 1, 'y'); img.rect(x0, hy - 1, 1, 3, 'U'); img.set(x0, hy + 2, s.trimL);
+      }
+      spark(hx, hy - 12);
+      break;
+    case 'hammer':
+      shaft(hy - 12, hy + 10, 'U');
+      img.rect(hx - 3, hy - 18, 7, 6, m); img.rect(hx - 2, hy - 19, 5, 1, m); img.rect(hx - 2, hy - 12, 5, 1, m);
+      img.rect(hx - 3, hy - 16, 7, 1, 'y'); img.rect(hx - 2, hy - 18, 2, 2, 'S'); img.set(hx - 2, hy - 18, 'w');
+      spark(hx, hy - 15);
+      break;
     case 'jis':
       for (const x0 of [hx, 6]) {
         img.rect(x0, hy - 10, 1, 14, 'K');
@@ -246,7 +293,7 @@ function frame(s: AwakenStyle, ps: Pose): PixelImage {
 
 /** 8 帧：0~3 走路，4~7 站立待机 */
 export function awakenFrames(id: HeroId): PixelImage[] {
-  const s = STYLES[id] || STYLES.zhaoyun;
+  const s = STYLES[id] || STYLES.zhaoyun!;
   const walk: Pose[] = [0, 1, 2, 3].map((f) => ({ bob: f % 2, stride: [0, 1, 0, -1][f], arm: [0, -1, 0, 1][f], wave: f * 1.6, sway: [0, 1, 0, -1][f], blink: false, glow: f }));
   const idle: Pose[] = [0, 1, 2, 3].map((f) => ({ bob: f >= 2 ? 1 : 0, stride: 0, arm: 0, wave: f * 0.8, sway: [0, 0, 1, 0][f], blink: f === 3, glow: f }));
   return [...walk, ...idle].map((p) => frame(s, p));

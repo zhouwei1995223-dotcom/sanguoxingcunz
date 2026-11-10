@@ -1,11 +1,15 @@
 // 局内技能：武器（主动）与兵法（被动）。所有数值都在这里调整。
 import { WEB_RULES } from './platformConfig';
 import type { HeroDef } from './heroes';
+import { HERO_WEAPONS_EXT, HERO_LINKS_EXT, ExStyle } from './skills2';
 
 export type WeaponId =
   | 'spear' | 'sword' | 'crossbow' | 'horse' | 'fire' | 'aura' | 'blade' | 'snake' | 'fan' | 'halberd'
   | 'rock' | 'knife' | 'catapult' | 'thunder' | 'caltrop' | 'drum'
-  | 'bow' | 'lance' | 'chakram' | 'ji' | 'meteor' | 'hook' | 'warshield';
+  | 'bow' | 'lance' | 'chakram' | 'ji' | 'meteor' | 'hook' | 'warshield'
+  // 1.1.0 新武将专属
+  | 'shuanggu' | 'kuanggu' | 'yitian' | 'qilin' | 'goulian' | 'huchui' | 'langgu' | 'shenbi' | 'luoshui' | 'bawang'
+  | 'chibi' | 'jinfan' | 'shenting' | 'lianying' | 'zheshan' | 'caidai' | 'xiliang' | 'taiping' | 'qingnang' | 'dunjia';
 export type PassiveId =
   | 'horseshoe' | 'armor' | 'book' | 'flag' | 'tiger' | 'lingzhi' | 'pouch' | 'bowl' | 'seal'
   | 'map' | 'mirror' | 'wine' | 'ration' | 'horn' | 'whetstone' | 'binding' | 'guardmanual';
@@ -45,6 +49,8 @@ export interface WeaponDef {
   countable?: boolean;
   /** 武将专属联动：该武将进化此武器时变为专属形态 */
   links?: WeaponLink[];
+  /** 新武将专属兵器的行为与外观（battle/weaponsEx.ts） */
+  style?: ExStyle;
 }
 
 export interface WeaponLink {
@@ -399,6 +405,13 @@ if (WEB_RULES) Object.assign(WEAPONS, {
     evo: { dmg: 5.2, cd: 1.5, count: 4, area: 94, arc: Math.PI, knock: 135, desc: '环身盾击，每击可挡四枚飞弹' },
   },
 } satisfies Partial<Record<WeaponId, WeaponDef>>);
+
+// 1.1.0：二十位新武将的专属兵器与专属联动
+Object.assign(WEAPONS, HERO_WEAPONS_EXT);
+for (const id of Object.keys(HERO_LINKS_EXT) as WeaponId[]) {
+  if (!WEAPONS[id]) continue; // 飞索、战盾只在新规则里有
+  (WEAPONS[id].links ||= []).push(...HERO_LINKS_EXT[id]!);
+}
 
 // 进化形态整体伤害系数：进化后约为满级的 1.5 倍，避免后期一边倒
 export const EVO_DMG = 0.75;

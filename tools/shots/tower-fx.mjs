@@ -25,7 +25,7 @@ export default async function({ page }) {
     const s = window.__saveMod.save;
     s.tower.cleared = 0; s.tower.selected = 1; s.tower.stars = {};
   });
-  await button('mode_tower');
+  await button('nav_arena'); await button('arena_tower');
   await button('td_list');
   await page.waitForTimeout(300);
   await button('td_map_3');

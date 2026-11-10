@@ -31,6 +31,7 @@ if (p.name === 'web') {
   import('./meta/save').then((m) => { (window as any).__saveMod = m; });
   import('./gfx/atlas').then((m) => { (window as any).__atlas = m; });
   import('./meta/ops').then((m) => { (window as any).__opsMod = m; });
+  import('./ui/skin').then((m) => { (window as any).__skinStats = m.skinStats; });
   import('./data/meta').then((m) => { const w = window as any; w.__equipList = m.EQUIPS; w.__talentList = m.TALENTS; w.__maxQ = m.MAX_EQUIP_QUALITY; w.__maxLv = m.QUALITY_MAX_LV[m.MAX_EQUIP_QUALITY]; });
 }
 // 小游戏模拟环境（tools/mock-minigame.mjs 预先设置 __MOCK_MINIGAME）下也暴露，正式包里不会有这个标志。

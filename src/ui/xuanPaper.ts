@@ -246,3 +246,8 @@ export function drawXuanTexture(
   ctx.globalAlpha = prevAlpha;
   ctx.fillStyle = prevFill;
 }
+
+/** 整张宣纸肌理图（已放大到屏幕分辨率、叠好微颗粒）；皮肤缓存里按需裁取。生成失败返回 null。 */
+export function xuanSheet(u: number): HTMLCanvasElement | null {
+  try { return ensureCombo(u); } catch (e) { return null; }
+}

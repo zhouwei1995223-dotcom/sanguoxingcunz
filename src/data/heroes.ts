@@ -1,10 +1,60 @@
 import type { WeaponId } from './skills';
 import type { HeroId } from '../gfx/art/heroes';
+import { HEROES_EXT } from './heroes2';
 
 // 武将：基础属性、专属武器、大招、天赋、获取方式
 
 export type { HeroId };
-export type UltKind = 'dragon' | 'crescent' | 'roar' | 'tornado' | 'whirl' | 'arrowrain' | 'cavalry' | 'arrowstorm' | 'frenzy' | 'starfall';
+export type UltKind = 'dragon' | 'crescent' | 'roar' | 'tornado' | 'whirl' | 'arrowrain' | 'cavalry' | 'arrowstorm' | 'frenzy' | 'starfall'
+  // 1.1.0 新武将（实现在 battle/ultsEx.ts）
+  | 'oath' | 'bladestorm' | 'warlord' | 'guard' | 'blitz' | 'berserk' | 'execute' | 'raid' | 'frost' | 'quake'
+  | 'firewall' | 'bells' | 'snipe' | 'wildfire' | 'petal' | 'charm' | 'tyrant' | 'thunderrain' | 'panacea' | 'vortex';
+
+export type Camp = 'shu' | 'wei' | 'wu' | 'qun';
+export const CAMPS: { id: Camp; name: string; color: string }[] = [
+  { id: 'shu', name: '蜀', color: '#2d7848' },
+  { id: 'wei', name: '魏', color: '#2f6488' },
+  { id: 'wu', name: '吴', color: '#b02c22' },
+  { id: 'qun', name: '群', color: '#6d3f8a' },
+];
+
+/**
+ * 数据化的武将天赋（新武将用；老十将的天赋仍写在 battle.ts 里）。
+ * 倍率类（hp / taken / cd / exp / pickup / rage / bossDmg / ctrlDmg / fullHpDmg / potionCd）填乘数，其余填加值。
+ */
+export interface HeroTraits {
+  /** 伤害 +N% */
+  dmg?: number;
+  crit?: number;
+  critDmg?: number;
+  cd?: number;
+  area?: number;
+  dur?: number;
+  /** 移动速度 +比例 */
+  speed?: number;
+  hp?: number;
+  taken?: number;
+  pickup?: number;
+  exp?: number;
+  rage?: number;
+  /** 每秒回复最大生命的比例 */
+  regenPct?: number;
+  bossDmg?: number;
+  /** 对精英与敌将 +比例 */
+  eliteDmg?: number;
+  /** 对被控制（减速 / 眩晕）的敌人 */
+  ctrlDmg?: number;
+  /** 对满血敌人 */
+  fullHpDmg?: number;
+  /** 每击败一名敌人回复最大生命的比例（每秒合计不超过 5 次的量） */
+  killHeal?: number;
+  /** 受击反震：对周围敌人造成 N 倍攻击的伤害（1 秒一次） */
+  thorns?: number;
+  /** 生命越低伤害越高：空血时 +比例，线性 */
+  rageHp?: number;
+  /** 金疮药冷却倍率 */
+  potionCd?: number;
+}
 
 export interface HeroDef {
   id: HeroId;
@@ -23,6 +73,10 @@ export interface HeroDef {
   ult: UltKind;
   ultName: string;
   ultDesc: string;
+  /** 阵营（武将页按它筛选） */
+  camp?: Camp;
+  /** 数据化天赋 */
+  traits?: HeroTraits;
   /** 解锁方式说明 */
   unlockText: string;
   /** 用碎片解锁需要的数量 */
@@ -105,8 +159,21 @@ export const HEROES: HeroDef[] = [
   },
 ];
 
+// 老十将的阵营
+const OLD_CAMP: Record<string, Camp> = { lvbu: 'qun', sunshangxiang: 'wu', dianwei: 'wei' };
+HEROES.forEach((h) => { h.camp = OLD_CAMP[h.id] || 'shu'; });
+HEROES.push(...HEROES_EXT);
+
 export const HERO_BY_ID: Record<string, HeroDef> = {};
 HEROES.forEach((h) => (HERO_BY_ID[h.id] = h));
+
+/** 品阶：按解锁所需碎片分三档（良将 / 名将 / 无双），界面用来配色 */
+export function heroRank(h: HeroDef): { id: 0 | 1 | 2; name: string; color: string } {
+  const n = h.unlockShards;
+  if (h.id === 'lvbu' || n >= 100) return { id: 2, name: '无双', color: '#d0432f' };
+  if (n >= 80 || h.id === 'zhaoyun' || h.id === 'guanyu' || h.id === 'zhuge') return { id: 1, name: '名将', color: '#d99a2a' };
+  return { id: 0, name: '良将', color: '#8a5cc0' };
+}
 
 /**
  * 天机签模式的主角：不在武将列表里（不能培养、不能出战其他模式），只登记到 HERO_BY_ID 供战斗读取。

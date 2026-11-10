@@ -16,6 +16,7 @@ import * as I from './art/items';
 import { decorImage, THEMES } from './art/env';
 import { iconImage, ICON_NAMES } from './art/icons';
 import { getFinePixelIcon, FINE_ICON_NAMES } from '../ui/iconsFine';
+import { heroWeaponIcon, HERO_WEAPON_ICON_IDS } from './art/weaponIcons';
 
 // 运行时图集：启动时把所有代码生成的像素图打包进若干张大画布。
 
@@ -230,4 +231,9 @@ export function buildAtlas() {
     const img = getFinePixelIcon(n);
     if (img) addSprite('icon_hd_' + n, img);
   });
+  // 新武将专属兵器图标（普通 / 进化）
+  for (const id of HERO_WEAPON_ICON_IDS) for (const evo of [false, true]) {
+    const img = heroWeaponIcon(id, evo);
+    if (img) { addSprite('icon_w_' + id + (evo ? '_evo' : ''), img); addSprite('icon_hd_w_' + id + (evo ? '_evo' : ''), img); }
+  }
 }

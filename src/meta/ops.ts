@@ -6,7 +6,7 @@ import {
   TALENTS, talentCost, Reward, STAMINA, PATROL, CHESTS, ChestDef, DAILY_TASKS, TaskKind, ACTIVITY_REWARDS, SIGNIN, Slot, SLOTS, QUALITY_NAMES,
 } from '../data/meta';
 import { dayKey, weighted, pick } from '../core/math';
-import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP } from '../data/heroes';
+import { HERO_BY_ID, HEROES, STAR_COST, MAX_STAR, STAR_BONUS, PEAK_MAX, PEAK_BONUS, peakCost, AWAKEN_DMG, AWAKEN_HP, heroRank } from '../data/heroes';
 import { setBonuses, skinOn } from './goals';
 import { SKIN_DMG_BONUS } from '../data/goals';
 import { IS_XHS, NO_ADS } from '../data/platformConfig';
@@ -326,14 +326,55 @@ export function anyHeroRedDot(): boolean {
   return HEROES.some((h) => heroRedDot(h.id));
 }
 
-/** 随机碎片：偏向需要碎片解锁的诸葛亮与吕布 */
-/** 武将碎片的武将分布：名将宝匣 / 其他来源 */
-export const SHARD_WEIGHTS_RARE: Record<string, number> = { zhuge: 25, lvbu: 30, machao: 20, sunshangxiang: 5, dianwei: 5, guanyu: 4, zhangfei: 4, zhaoyun: 3, huangzhong: 2, jiangwei: 2 };
-export const SHARD_WEIGHTS_COMMON: Record<string, number> = { zhuge: 30, sunshangxiang: 18, dianwei: 18, lvbu: 8, machao: 6, guanyu: 6, zhangfei: 6, zhaoyun: 4, huangzhong: 2, jiangwei: 2 };
+/**
+ * 武将碎片的武将分布（1.1.0 起三十位武将，按品阶给权重）：
+ * 名将宝匣偏向无双、名将；军资箱等其他来源偏向良将。靠通关 / 签到送的五位（赵云、关羽、张飞、黄忠、姜维）权重最低。
+ */
+const STORY_HEROES = new Set(['zhaoyun', 'guanyu', 'zhangfei', 'huangzhong', 'jiangwei']);
+function shardWeights(rare: boolean): Record<string, number> {
+  const w: Record<string, number> = {};
+  for (const h of HEROES) {
+    const rank = heroRank(h).id;
+    w[h.id] = STORY_HEROES.has(h.id) ? 2 : rare ? [4, 6, 8][rank] : [8, 4, 2][rank];
+  }
+  return w;
+}
+export const SHARD_WEIGHTS_RARE: Record<string, number> = shardWeights(true);
+export const SHARD_WEIGHTS_COMMON: Record<string, number> = shardWeights(false);
 /** 军资箱附带武将碎片的概率 */
 export const WOOD_SHARD_RATE = 0.4;
+/** 心愿武将：每次随机碎片有这么大概率直接给心愿武将 */
+export const WISH_RATE = 0.45;
+
+/** 碎片还有用（没解锁，或没升满星 / 巅峰） */
+function shardsUseful(id: string): boolean {
+  const st = save.heroes[id];
+  return !!st && (!st.owned || st.star < MAX_STAR || (st.peak || 0) < PEAK_MAX);
+}
+
+/**
+ * 当前的心愿武将。玩家自己选的优先；没选（或选的已经培养到头）时自动定一位：
+ * 还没解锁、要用碎片解锁的武将里，离解锁最近的那位（进度相同取需要碎片少的）。
+ */
+export function wishHero(): { id: string; auto: boolean } | null {
+  if (save.wishHero && HERO_BY_ID[save.wishHero] && shardsUseful(save.wishHero)) return { id: save.wishHero, auto: false };
+  let best: string | null = null, bk = -1;
+  for (const h of HEROES) {
+    const st = save.heroes[h.id];
+    if (st.owned || h.unlockShards <= 0 || STORY_HEROES.has(h.id)) continue;
+    const k = st.shards / h.unlockShards + (120 - h.unlockShards) * 1e-4;
+    if (k > bk) { bk = k; best = h.id; }
+  }
+  if (best) return { id: best, auto: true };
+  // 全都解锁了：自动把出战武将当心愿（升星 / 巅峰）
+  return shardsUseful(save.hero) ? { id: save.hero, auto: true } : null;
+}
+
+export function setWishHero(id: string | undefined) { save.wishHero = id; markDirty(); }
 
 export function randomShardHero(rare: boolean): string {
+  const wish = wishHero();
+  if (wish && Math.random() < WISH_RATE) return wish.id;
   const w = rare ? SHARD_WEIGHTS_RARE : SHARD_WEIGHTS_COMMON;
   return weighted(Object.keys(w), (k) => w[k]);
 }
@@ -520,6 +561,8 @@ export function chestOddsText(): string {
     }
     lines.push('');
   }
+  lines.push(`【心愿武将】武将页可以指定一位心愿武将（不指定时自动选离解锁最近的一位）。每次随机获得武将碎片时，${pct(WISH_RATE, 1)} 概率为心愿武将的碎片，其余 ${pct(1 - WISH_RATE, 1)} 按上面各宝箱的碎片归属概率抽取。`);
+  lines.push('');
   lines.push('装备的具体部位与套装在同品质装备中等概率随机。');
   return lines.join('\n');
 }

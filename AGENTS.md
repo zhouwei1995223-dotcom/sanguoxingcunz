@@ -22,6 +22,28 @@
 
 ## 代码结构要点
 
+### 1.1.0（2026-11-10）：画面翻新、演武页、三十名将
+
+用户原话：「优化游戏美术，像顶尖团队做出来的；主界面四种模式只保留天机签和征战，其他两个放到侧边或新增一个底部页面；有什么不合理的可以直接改」，做到一半又加了「再增加二十个武将，一共三十个，武将页面重新做」。版本号升到 1.1.0（`package.json`、`GAME_INFO.version`），提审文案在 `docs/promo/1.1.0/更新说明.md`。**这一版还没上过真机**，用户测完才能提审。
+
+- **界面皮肤 `src/ui/skin.ts`（「鎏金水墨」）**：面板、按钮、题签、品质格、货币牌、提示条、关闭钮、进度条槽的外观都在这里（圆角、柔和投影、描金、漆面高光、宣纸肌理）。`drawSkin(ctx, key, x, y, w, h, pad, paint)` 按「控件 + 尺寸 + 状态」缓存成离屏小图，之后每帧一次贴图；每帧最多新画 10 张（超出的本帧直接画，下一帧再缓存），最多 150 张 / 750 万像素，淘汰时复用画布（微信离屏画布回收不及时，不能无限新建）。`ui.ts` 的 `panel` / `button` / `ribbon` / `qualityFrame` / `bar` / toast 和 `widgets.ts` 的 `dialogFrame` 关闭钮、`currencyBar` 都改成调它，**接口没变**；旧版（非 `NEW_UI`）分支原样保留。key 必须带上所有影响外观的参数（颜色、按下、禁用）。不用 `shadowBlur`、`roundRect`、`filter`（老内核 / 小游戏画布不一定有），投影用几层半透明圆角矩形叠。深色底上的字要先 `ui.markDark(...)`，否则会被宣纸换色规则改成墨色。网页调试可看 `window.__skinStats`（缓存张数 / 新建 / 淘汰 / 直接绘制次数；主界面静止时 `created` 不应该再涨）。
+- **主城背景 `src/scenes/homeArt.ts`**：`paintHomeScene` 画青绿山水长卷（绢色天空、朱砂落日、三重远山带皴笔、关隘剪影、云带、沙地、夯土校场），整屏缓存（`cachedLayer('camp_bg')`）；`HomeCamp` 每帧只叠会动的：三朵流云（`cloudWisp` 预渲染）、归雁、像素旗帜飘动、桃花瓣。`paintPageBg` 是其他页签的底，`paintSplash` 是启动页（那时图集和宣纸纹理还没生成，只用渐变和远山）。标题整条缓存（`HomeScene.drawTitle`）。
+- **主界面与导航**：底栏六个页签 `商店 / 装备 / 征战 / 演武 / 军略 / 武将`（墨漆描金，选中的是升起的朱漆牌）。征战页只有「征战 / 天机签」两个大页签；左侧圆钮：签到、七日、任务、巡营，右侧：排行、图鉴、设置，平台 / 社交类（关注、游戏圈、推荐、更新提醒、分享、侧边栏）哪边短排哪边。「备战」从侧边挪到出征按钮左边（按钮 id 仍是 `side_prepare`），原来的「无尽」按钮挪进演武页。
+- **演武页（`drawArenaTab`）**：2×2 四块模式牌（守城 / 布阵 / 无尽 / 每周挑战，`paintArenaTile` + 现场摆的像素形象），下面是选中模式的关卡卡片和出发按钮（守城、布阵沿用原来的 `drawDefenseCard` / `drawTowerCard`，无尽是 `drawEndlessCard`，每周挑战直接弹 `WeeklyDialog`）。按钮 id：`nav_arena`、`arena_defense` / `arena_tower` / `arena_endless`、`side_weekly`（每周挑战牌）、`endless`（无尽的出征按钮）。
+- **`save.homeMode` 仍是四个取值**（备战按它判断征战 / 守城）：征战页 ⇔ `chapter` / `tianji`，演武页 ⇔ `defense` / `tower`。`HomeScene.syncMode()` 每帧对一下，别处（布阵打完回来、测试脚本）改了 `homeMode` 会自动把页签带过去；点底栏用 `setMode()`。老脚本里点 `mode_defense` / `mode_tower` 的都改成了先点 `nav_arena` 再点 `arena_*`。
+- **三十名将**：新增二十位（蜀：刘备、魏延；魏：曹操、夏侯惇、张辽、许褚、司马懿、夏侯渊、甄姬；吴：孙策、周瑜、甘宁、太史慈、陆逊、小乔；群：貂蝉、董卓、张角、华佗、左慈），全部靠碎片解锁（50 / 80 / 100）。加一位武将要动的地方：
+  - `src/data/heroes2.ts`（`HEROES_EXT`：基础属性、阵营 `camp`、数据化天赋 `traits`、大招名）；`HeroDef.traits` 的字段见 `heroes.ts` 的 `HeroTraits`，在 `battle.recalc` / `damage` / `cooldownMultiplier` 里统一结算，反震、击杀回血在 `ultsEx.ts` 的 `onHurtEx` / `onKillEx` / `tickEx`。老十将的天赋仍是 `battle.ts` 里按 id 写死的。
+  - `src/data/skills2.ts`：专属兵器 `HERO_WEAPONS_EXT`（`mk(...)` 一行一级；`style.mode` 十二种出手方式：thrust / sweep / spin / orbit / shot / lob / slam / chain / pillar / pulse / bounce / boomerang）和专属联动 `HERO_LINKS_EXT`（每人两条，写在通用兵器上）。`WeaponId` 联合类型在 `skills.ts` 里要加。数值写缩放前的数（`skills.ts` 末尾统一乘 `AREA_SCALE` 等）。
+  - `src/battle/weaponsEx.ts`：十二种出手方式的实现（`updateWeapons` 里先问 `updateExWeapon`）。环身类的贴图在 `render.ts` 里按 `style.sprite` 画；回旋镖用 `pr.sprite`；爆裂箭用 `Projectile.splash`；药雾用 `Projectile.color` / `FirePool.color`。
+  - `src/battle/ultsEx.ts`：二十个大招（`startUltEx` / `updateUltEx`，`UltState.ex` 放自己的状态）和大招留下的限时增益 `battle.exBuff`（曹操 8 秒增伤、夏侯惇减伤光环、小乔花雨、许褚狂战）。大招期间本来就不受伤害，「无敌 N 秒」只要把持续时间设成 N 秒。`UltKind` 在 `heroes.ts` 里加。
+  - 美术：骑乘造型 `gfx/art/heroes.ts` 的 `RIDERS` 表（缨 / 甲 / 披风 / 肤色 / 胡须 / 发色 / 坐骑 / 兵器 / 皮肤换色，一行一位）；觉醒造型 `gfx/art/awaken.ts` 的 `STYLES`（新增头饰 `coronet` / `topknot`，兵器 `sword` / `dual` / `hammer`）；兵器图标 `gfx/art/weaponIcons.ts`（按种类拼，进化图标自动金色 + 闪光，注册成 `icon_w_<id>` 和 `icon_hd_w_<id>`）；皮肤名在 `data/goals.ts` 的 `SKINS`。
+  - 存档：`freshHeroes()` 按 `HEROES` 生成，老存档读档自动补上新武将的空档。
+- **武将页**：名册（`drawHeroList`：阵营筛选、心愿条、四列卡片墙，卡片按品阶描边、阵营淡染）→ 点开详情（`drawHeroDetail`：阵营漆面立绘台、属性条、可滚动的天赋 / 兵器 / 大招 / 联动 / 觉醒 / 皮肤，底部固定升级 / 升星 / 出战）。品阶 `heroRank()`：良将 / 名将 / 无双（按解锁碎片数，赵云、关羽、诸葛算名将，吕布算无双）。别处跳到某位武将用 `openHero(id)`；脚本直接改 `scene.viewHero` 也会进详情。按钮 id：`hero_camp_<all|shu|wei|wu|qun>`、`hero_pick_<id>`、`hero_back`、`hero_prev` / `hero_next`、`hero_wish`，培养按钮沿用原 id。
+- **心愿武将**：三十位武将后随机碎片太分散。`ops.wishHero()`：玩家在详情页点「设为心愿」（`save.wishHero`）；没设时自动选「没解锁、离解锁最近」的一位，全解锁后选出战武将。`randomShardHero` 45%（`WISH_RATE`）直接给心愿武将，其余按权重表；权重表改成按品阶生成（`shardWeights`）。概率公示文案同步加了一段。
+- 其他：成就「拥有 N 名武将」加了 10 / 20 / 30 三档；布阵「选择将令」超过 12 人排三列；营地最多 8 位武将走动；`tools/balfull.sh` 默认测三十位。
+- 测试：`Q='?skip=1' node tools/shot.mjs art-tour`（主界面 / 演武 / 各页签，`ONLY=home,arena`）、`Q='?skip=1&heroes=1' node tools/shot.mjs hero-tour`（名册与详情）、`Q='?skip=1' node tools/shot.mjs newhero-battle`（二十位新武将各进一局：兵器 + 大招，`HEROES="caocao zhenji"`、`EVO=1`、`NOSHOT=1`）。平衡：第 6 章战力 1.0 每人 4 局（`SEED=7`），老十将合计 17/40、新二十将 37/80，近战横扫型（魏延、董卓、夏侯惇）偏弱已各加一成左右，样本很小，上线后再看。
+- 没做 / 待定：战斗内的地面与小兵美术没动（只换了界面皮肤）；新武将没有单独的通关 / 签到获取途径，全靠碎片；抖音 / TapTap 旧界面分支没有演武页的旧版画法（`NEW_UI` 为假时沿用新布局的旧皮肤，没测过）。
+
 ### 布阵（2026-11-07）
 
 - 三关按地图坐标从上到下、同排从左到右排列 10/12/14 个固定塔位。左上首位自带箭塔，常规容量为总数减三。援建增加容量并在首个空位立即部署。普通升级在建筑、援将和阵法混池中按权重不放回抽三张，每张援将权重 0.4，其他牌 1；允许三张同类。

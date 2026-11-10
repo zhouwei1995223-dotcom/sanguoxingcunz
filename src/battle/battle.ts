@@ -5,6 +5,7 @@ import { ChapterDef, FINAL_BOSS_LIMIT_SEC } from '../data/chapters';
 import { WEB_RULES } from '../data/platformConfig';
 import { ENEMIES, BOSSES, BossDef, BASIC_BOSS_SKILLS } from '../data/enemies';
 import { HERO_BY_ID, HEROES, HeroDef, UltKind } from '../data/heroes';
+import { startUltEx, updateUltEx, tickEx, onKillEx, onHurtEx, ExBuff } from './ultsEx';
 import type { WeeklyDef } from '../data/goals';
 import {
   WEAPONS, PASSIVES, WeaponId, PassiveId, SkillPool, skillPoolFor, passiveMax, weaponLink, MAX_WEAPON_LV, WEAPON_SLOTS, PASSIVE_SLOTS, expToNext,
@@ -59,6 +60,8 @@ export interface UltState {
   x1: number;
   y1: number;
   finale: number; // 收尾冲击波计时
+  /** 新武将大招（ultsEx.ts）自己的状态 */
+  ex?: Record<string, any>;
 }
 
 export const ULT_DASHES = 7;
@@ -240,6 +243,10 @@ export class Battle {
   qiyu: QiyuId | null = null;
   /** 典韦大招期间 */
   frenzy = false;
+  /** 新武将：大招留下的限时增益、反震冷却、击杀回血额度（ultsEx.ts） */
+  exBuff: ExBuff | null = null;
+  exThornCd = 0;
+  exHealPool = 0;
   /** 本局复活次数（三星评价用） */
   reviveCount = 0;
   /** 最终敌将从登场到被击败用了多少秒（-1 表示没打下来） */
@@ -385,6 +392,8 @@ export class Battle {
     if (this.hero.id === 'zhuge') factor *= 0.9;
     if (this.hero.id === 'sunshangxiang') factor *= 0.92;
     if (this.frenzy) factor *= 0.5;
+    if (this.hero.traits?.cd) factor *= this.hero.traits.cd;
+    if (this.exBuff?.cd) factor *= this.exBuff.cd;
     if (this.hasStrat('shensu')) factor *= 0.92;
     if (this.hasStrat('wolong')) factor *= 0.85;
     factor = Math.max(WEB_RULES ? 0.30 : 0.58, factor);
@@ -407,32 +416,40 @@ export class Battle {
     if (hid === 'lvbu') this.dmgMul += 0.2;
     if (hid === 'huangzhong') this.critBonus = 0.1;
     if (this.frenzy) this.dmgMul += 0.6;
+    // 数据化天赋（新武将）与大招留下的限时增益
+    const tr = this.hero.traits || {};
+    if (tr.dmg) this.dmgMul += tr.dmg / 100;
+    if (tr.crit) this.critBonus = tr.crit;
+    if (tr.critDmg) this.critDmgBonus = tr.critDmg;
+    if (this.exBuff?.dmg) this.dmgMul += this.exBuff.dmg;
     this.dmgMul += this.reviveDmg;
     const qianli = this.weapon('horse')?.link && hid === 'guanyu';
-    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (hid === 'machao' ? 0.1 : 0) + (qianli ? 0.2 : 0) + this.reviveSpd);
-    this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1);
+    this.speed = this.hero.moveSpeed * (1 + b.speed / 100 + 0.08 * P('horseshoe') + (hid === 'lvbu' ? 0.08 : 0) + (hid === 'machao' ? 0.1 : 0) + (tr.speed || 0) + (qianli ? 0.2 : 0) + this.reviveSpd);
+    this.dmgTakenMul = (1 - Math.min(0.6, b.def / 100)) * (1 - 0.06 * P('armor')) * (auraEvo ? 0.8 : 1) * (hid === 'zhangfei' ? 0.85 : 1) * (tr.taken || 1) * (this.exBuff?.taken || 1);
     const Q = (id: QiyuId) => this.qiyu === id;
     const hpStrat = (this.stratSet.has('shengou') ? 1.15 : 1) * (this.stratSet.has('kurou') ? 0.8 : 1) * (Q('hanzhong') ? 1.25 : 1) * (Q('pofu') ? 0.75 : 1);
-    const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')) * hpStrat * (hid === 'dianwei' ? 1.2 : 1));
+    const newMax = Math.round(b.hp * (1 + 0.1 * P('lingzhi')) * hpStrat * (hid === 'dianwei' ? 1.2 : 1) * (tr.hp || 1));
     if (newMax > this.player.maxHp) this.player.hp += newMax - this.player.maxHp;
     this.player.maxHp = newMax;
     this.player.hp = Math.min(this.player.hp, newMax);
-    this.regen = b.regen + 0.3 * P('lingzhi') + (auraEvo ? newMax * 0.01 : 0);
-    this.pickupR = this.hero.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl')) * (hid === 'sunshangxiang' ? 1.3 : 1);
+    this.regen = b.regen + 0.3 * P('lingzhi') + (auraEvo ? newMax * 0.01 : 0) + newMax * (tr.regenPct || 0);
+    this.pickupR = this.hero.pickup * (1 + b.pickup / 100 + 0.35 * P('bowl')) * (hid === 'sunshangxiang' ? 1.3 : 1) * (tr.pickup || 1);
     if (hid === 'jiangwei') this.areaMul += 0.1;
+    if (tr.area) this.areaMul += tr.area;
+    if (tr.dur) this.durMul += tr.dur;
     // 新手试炼只有一分多钟：经验和怒气加快，升级、大招都能体验到
     const tut = this.chapter.tutorial ? 3 : 1;
     const tutRage = this.chapter.tutorial ? 6 : 1;
     // 1.0.4：章节一局压到 6 分钟，经验 ×1.3 补回来，阵容能在敌将前成型
     const shortRun = !this.chapter.endless && !this.chapter.tutorial ? 1.3 : 1;
-    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut * shortRun * (hid === 'jiangwei' ? 1.15 : 1) * (this.chapter.defense ? DEF_EXP : 1);
+    this.expMul = (1 + b.exp / 100 + 0.08 * P('seal')) * (this.mods?.expMul || 1) * tut * shortRun * (hid === 'jiangwei' ? 1.15 : 1) * (tr.exp || 1) * (this.chapter.defense ? DEF_EXP : 1);
     if (this.mods?.playerDmg) this.dmgMul *= this.mods.playerDmg;
     this.goldMul = 1 + b.gold / 100 + 0.1 * P('bowl');
     this.crit = b.crit / 100 + this.critBonus + 0.04 * P('wine');
     this.critDmg = 1 + b.critDmg / 100 + this.critDmgBonus + 0.15 * P('wine');
     this.countBonus = P('map');
-    this.rageMul = (1 + 0.15 * P('horn')) * tutRage;
-    this.eliteDmg = 0.15 * P('whetstone');
+    this.rageMul = (1 + 0.15 * P('horn')) * tutRage * (tr.rage || 1);
+    this.eliteDmg = 0.15 * P('whetstone') + (tr.eliteDmg || 0);
     this.mirrorCd = P('mirror') ? 14 - 2 * P('mirror') : 0;
     this.shotTakenMul = 1 - 0.06 * P('guardmanual');
     this.controlledDmgMul = 1 + 0.06 * P('binding');
@@ -448,7 +465,7 @@ export class Battle {
     if (S('chuanyang')) { this.crit += 0.08; this.critDmg += 0.2; }
     if (S('tanlu')) { this.speed *= 1.1; this.pickupR *= 1.35; }
     this.potionHeal = this.potionBase.heal + (S('yangjing') ? 0.1 : 0);
-    this.potionCdMax = Math.round(this.potionBase.cd * (S('yangjing') ? 0.6 : 1));
+    this.potionCdMax = Math.round(this.potionBase.cd * (S('yangjing') ? 0.6 : 1) * (tr.potionCd || 1));
     this.potionCd = Math.min(this.potionCd, this.potionCdMax);
     // 开局奇遇
     if (Q('qinggang')) this.dmgMul += 0.15;
@@ -532,7 +549,7 @@ export class Battle {
     this.hooks.sfx('evolve');
   }
 
-  private later(sec: number, fn: () => void) {
+  later(sec: number, fn: () => void) {
     this.delayed.push({ t: sec, fn });
   }
 
@@ -748,6 +765,7 @@ export class Battle {
     if (this.mirrorT > 0) this.mirrorT -= dt;
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
     if (this.regen > 0) p.hp = Math.min(p.maxHp, p.hp + this.regen * dt);
+    tickEx(this, dt);
     if (this.potionCd > 0) this.potionCd = Math.max(0, this.potionCd - dt);
     this.updateStrats(dt);
 
@@ -1203,6 +1221,7 @@ export class Battle {
     if (contact) this.contactIframe = 0.3;
     if (this.hero.id === 'zhangfei' && this.rageLock <= 0) this.rage = Math.min(RAGE_MAX, this.rage + 6 * this.rageMul);
     p.hurtFlash = 0.2;
+    onHurtEx(this);
     this.hooks.sfx('hurt');
     this.hooks.vibrate();
     if (this.showDamage) this.addNum(p.x, p.y - 22, Math.round(v), 'r');
@@ -1245,6 +1264,13 @@ export class Battle {
     if (this.hero.id === 'zhaoyun' && this.player.hp < this.player.maxHp * 0.3) dmg *= 1.3; // 一身是胆
     if (this.hero.id === 'dianwei' && this.player.hp < this.player.maxHp * 0.5) dmg *= 1.25; // 古之恶来
     if (this.hero.id === 'machao' && this.player.moving) dmg *= 1.15; // 神威天将军
+    const tr = this.hero.traits;
+    if (tr) {
+      if (tr.ctrlDmg && e.slowT > 0 && e.slow > 0) dmg *= tr.ctrlDmg;
+      if (tr.fullHpDmg && e.hp >= e.maxHp) dmg *= tr.fullHpDmg;
+      if (tr.rageHp) dmg *= 1 + tr.rageHp * (1 - Math.max(0, this.player.hp) / this.player.maxHp);
+      if (tr.bossDmg && e.boss) dmg *= tr.bossDmg;
+    }
     if (e.boss) dmg *= (1 + this.base.bossDmg / 100) * (this.hero.id === 'zhangfei' ? 1.3 : this.hero.id === 'huangzhong' ? 1.2 : 1);
     if (e.boss || e.elite) dmg *= 1 + this.eliteDmg;
     let crit = false;
@@ -1331,6 +1357,7 @@ export class Battle {
     if (e.dead || (WEB_RULES && (this.dead || this.won))) return;
     e.dead = true;
     this.kills++;
+    onKillEx(this);
     if (this.qiyu === 'kaixuan' && (e.elite || e.boss)) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * 0.08);
     if (this.hasStrat('yizhan') && (this.kills - this.yizhanBase) % 50 === 0) this.potionCd = Math.max(0, this.potionCd - 5);
     this.combo++;
@@ -1459,7 +1486,7 @@ export class Battle {
             if (d < pr.area + e.r) this.damage(e, pr.dmg * 4, dx / d, dy / d, 40, { source: pr.source });
           }
           this.fx.push({ kind: 'explo', x: pr.tx, y: pr.ty + 6, t: 0, dur: 0.35 });
-          this.pools.push({ source: pr.source, x: pr.tx, y: pr.ty, r: pr.area, dmg: pr.dmg, tick: pr.tick, tickT: 0, life: pr.burn, maxLife: pr.burn, slow: pr.slow });
+          this.pools.push({ source: pr.source, x: pr.tx, y: pr.ty, r: pr.area, dmg: pr.dmg, tick: pr.tick, tickT: 0, life: pr.burn, maxLife: pr.burn, slow: pr.slow, color: pr.color });
           this.hooks.sfx('fire');
           this.projs.splice(i, 1);
         }
@@ -1557,6 +1584,12 @@ export class Battle {
         const vl = Math.hypot(pr.vx, pr.vy) || 1;
         this.damage(e, pr.dmg, pr.vx / vl, pr.vy / vl, pr.knock, { source: pr.source });
         if (pr.kind === 'bolt') this.fx.push({ kind: 'spark', x: pr.x, y: pr.y, t: 0, dur: 0.18 });
+        if (pr.splash) {
+          // 爆裂箭：命中后炸开一片
+          this.impact(pr.x, pr.y, pr.splash, pr.dmg * 0.6, 30, 0, pr.source);
+          this.fx.push({ kind: 'explo', x: pr.x, y: pr.y + 4, t: 0, dur: 0.3 });
+          this.fx.push({ kind: 'ring', x: pr.x, y: pr.y, t: 0, dur: 0.25, r: pr.splash, color: '#feae34' });
+        }
         pr.pierce--;
         if (pr.pierce <= 0) { this.projs.splice(i, 1); removed = true; break; }
       }
@@ -1565,7 +1598,7 @@ export class Battle {
   }
 
   /** 落点范围伤害（礌石 / 巨石） */
-  private impact(x: number, y: number, R: number, dmg: number, knock: number, stun: number, source: DamageSource) {
+  impact(x: number, y: number, R: number, dmg: number, knock: number, stun: number, source: DamageSource) {
     const near: Enemy[] = [];
     this.grid.query(x, y, R + 12, near);
     for (const e of near) {
@@ -1879,6 +1912,7 @@ export class Battle {
         this.fx.push({ kind: 'text', x: p.x, y: p.y - 40, t: 0, dur: 0.8, text: '主公快走，典韦在此！', color: '#ff8a80' });
         break;
       case 'starfall': st.slow = 0.5; st.dur = 3; break;
+      default: startUltEx(this, st, uh);
     }
     return true;
   }
@@ -1975,7 +2009,7 @@ export class Battle {
     return this.heroSpriteName || 'hero_' + this.hero.id;
   }
 
-  private ultEnd(u: UltState) {
+  ultEnd(u: UltState) {
     if (this.ult === u) { this.ult = null; this.player.iframe = Math.max(this.player.iframe, 0.8); }
     if (this.frenzy) { this.frenzy = false; this.recalc(); }
   }
@@ -1984,6 +2018,8 @@ export class Battle {
     const p = this.player;
     const atk = this.base.atk;
     u.t += dt;
+    const exScale = updateUltEx(this, u, dt);
+    if (exScale !== null) return exScale;
     switch (u.kind) {
       case 'crescent': {
         // 关羽：三道巨型刀气环向外扩散

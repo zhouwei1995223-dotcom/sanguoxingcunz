@@ -72,7 +72,7 @@ export default async function ({ page, wait, shot }) {
   await click('tj_opt_0'); await wait(500); await shot('tj-sign-swap-done');
   assert.ok(await page.evaluate(() => !window.__game.dialogs.length), 'choice closes right away');
   const s2 = await S();
-  const excl = s2.weapons.filter((w) => /^(spear|blade|snake|fan|halberd|bow|lance|chakram|ji|meteor)/.test(w));
+  const excl = s2.weapons.filter((w) => /^(spear|blade|snake|fan|halberd|bow|lance|chakram|ji|meteor|shuanggu|kuanggu|yitian|qilin|goulian|huchui|langgu|shenbi|luoshui|bawang|chibi|jinfan|shenting|lianying|zheshan|caidai|xiliang|taiping|qingnang|dunjia)/.test(w));
   assert.equal(excl.length, 1, 'only one exclusive weapon: ' + s2.weapons.join(','));
   await force('gamble', 'tj-sign-gamble');
   await click('tj_opt_0'); await wait(500); await shot('tj-sign-gamble-done');
@@ -94,7 +94,7 @@ export default async function ({ page, wait, shot }) {
   await wait(2500); await shot('tj-meteor');
 
   // 砍树：把一棵树挪到剑客身边
-  await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; const t = b.breakables.find((k) => k.kind === 'tree'); if (t) { t.x = b.player.x + 12; t.y = b.player.y + 4; } });
+  await page.evaluate(() => { const b = window.__game.scene.battle; b.tj.timed.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; b.player.iframe = 600; const t = b.breakables.find((k) => k.kind === 'tree'); if (t) { t.x = b.player.x + 12; t.y = b.player.y + 4; } });
   await wait(900); await shot('tj-tree-chop');
   await wait(3500);
   const chop = await page.evaluate(() => { const b = window.__game.scene.battle; return { falls: b.tj.falls.length, trees: b.breakables.filter((k) => k.kind === 'tree').length }; });
@@ -108,7 +108,7 @@ export default async function ({ page, wait, shot }) {
 
   // 自动开签：有签就自己摇，选择签停下来等
   // 前面的五虎上将会排五个大招，自动开签在大招期间会等，这里清掉队列
-  await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.tj.ultQueue.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; b.tj.tickets = 3; b.coins = 0; });
+  await page.evaluate(() => { window.__game.dialogs.length = 0; const b = window.__game.scene.battle; b.tj.timed.length = 0; b.tj.ultQueue.length = 0; b.recalc(); b.player.maxHp = b.player.hp = 1e9; b.player.iframe = 600; b.tj.tickets = 3; b.coins = 0; });
   await click('tj_auto');
   assert.equal(await page.evaluate(() => window.__saveMod.save.settings.tjAuto), true);
   const a0 = await page.evaluate(() => window.__game.scene.battle.tj.history.length);
@@ -125,7 +125,7 @@ export default async function ({ page, wait, shot }) {
   await click('tj_skipanim');
   assert.equal(await page.evaluate(() => window.__saveMod.save.settings.tjSkipAnim), true);
   const h0 = await page.evaluate(() => window.__game.scene.battle.tj.history.length);
-  await page.evaluate(() => { const b = window.__game.scene.battle; window.__game.dialogs.length = 0; b.dead = false; b.player.maxHp = b.player.hp = 1e9; b.tj.tickets = 3; b.tj.force = 'destiny'; });
+  await page.evaluate(() => { const b = window.__game.scene.battle; window.__game.dialogs.length = 0; b.dead = false; b.player.maxHp = b.player.hp = 1e9; b.player.iframe = 600; b.tj.tickets = 3; b.tj.force = 'destiny'; });
   await click('tj_draw');
   await wait(300); await shot('tj-skip-float');
   const sk = await page.evaluate(() => ({ dlg: window.__game.dialogs.length, n: window.__game.scene.battle.tj.history.length, atk: window.__game.scene.battle.tj.perm.atk }));
@@ -138,9 +138,13 @@ export default async function ({ page, wait, shot }) {
   await click('tj_skipanim');
 
   // 天命之主：8:30 登场，血量无限，伤害累计
-  await page.evaluate(() => { const b = window.__game.scene.battle; window.__game.dialogs.length = 0; b.t = 508; });
-  await page.waitForFunction(() => window.__game.scene.battle.tj.final, null, { timeout: 8000 });
-  await page.evaluate(() => { const b = window.__game.scene.battle, e = b.tj.final; e.x = b.player.x + 40; e.y = b.player.y; b.player.maxHp = b.player.hp = 1e9; });
+  await page.evaluate(() => { const b = window.__game.scene.battle; window.__game.dialogs.length = 0; b.dead = false; b.player.iframe = 600; b.t = 508; });
+  await page.waitForFunction(() => window.__game.scene.battle.tj.final, null, { timeout: 8000 }).catch(async (e) => {
+    // 卡住时打印现场：多半是有弹窗把战斗暂停了
+    console.log('final not spawned', JSON.stringify(await page.evaluate(() => { const g = window.__game, b = g.scene.battle; return { t: b.t, dlg: g.dialogs.map((d) => d.constructor.name), dead: b.dead, won: b.won, ult: !!b.ult, pending: b.pendingLevelUps, scene: g.scene.constructor.name }; })));
+    throw e;
+  });
+  await page.evaluate(() => { const b = window.__game.scene.battle, e = b.tj.final; e.x = b.player.x + 40; e.y = b.player.y; b.player.maxHp = b.player.hp = 1e9; b.player.iframe = 600; });
   await wait(3500); await shot('tj-final');
   const fb = await page.evaluate(() => { const b = window.__game.scene.battle; return { dmg: b.tj.finalDmg, hp: b.tj.final.hp, max: b.tj.final.maxHp }; });
   console.log('final', JSON.stringify(fb));

@@ -4,7 +4,7 @@ export default async function ({ page, wait, shot }) {
   await wait(400);
   await page.evaluate(() => { const g = window.__game; g.dialogs.length = 0; });
   await wait(300);
-  await page.evaluate(() => { window.__game.ui.clickedId = 'mode_defense'; });
+  await page.evaluate(() => { window.__saveMod.save.homeMode = 'defense'; });
   await wait(400);
   await shot('defhome_card');
   await page.evaluate(() => { window.__game.ui.clickedId = 'def_list'; });

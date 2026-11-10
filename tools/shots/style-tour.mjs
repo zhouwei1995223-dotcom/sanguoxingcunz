@@ -20,8 +20,11 @@ export default async function({ page }) {
   await page.waitForTimeout(600);
   await page.evaluate(() => window.__game.closeAll());
   await page.waitForTimeout(200);
-  for (const m of ['chapter', 'defense', 'tower']) {
-    await button('mode_' + m);
+  // 主界面只有征战 / 天机签；守城、布阵在「演武」页
+  await button('mode_chapter'); await page.waitForTimeout(300); await capture('home-chapter');
+  await button('nav_arena');
+  for (const m of ['defense', 'tower']) {
+    await button('arena_' + m);
     await page.waitForTimeout(300);
     await capture('home-' + m);
   }

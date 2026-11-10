@@ -141,7 +141,7 @@ if (G()) {
   // 回主界面 → 布阵：1.5 倍速看视频 → 打一段 → 城门失守看视频复活
   await step('tower', async () => {
     if (goHome() !== 'HomeScene') return { scene: scene(), note: '未能回到主界面' };
-    tapId('mode_tower'); runFrames(5); tapId('td_start'); runFrames(10);
+    tapId('nav_arena'); runFrames(5); tapId('arena_tower'); runFrames(5); tapId('td_start'); runFrames(10);
     if (scene() !== 'TowerScene') return { scene: scene() };
     const sc = G().scene, b = sc.battle;
     tapId('td_speed'); await tick(); runFrames(30);
