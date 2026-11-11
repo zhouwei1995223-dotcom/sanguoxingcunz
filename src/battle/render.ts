@@ -1,4 +1,5 @@
 import { CITY_R, ARENA_R, WALL_W, GATE_HALF, BUILD_SLOTS } from '../data/defense';
+import { DEBUG } from '../debug';
 
 /** 角度离最近的出怪口有多远 */
 function gateGap(a: number): number {
@@ -577,7 +578,7 @@ export class WorldRenderer {
       }
     }
     // 精英血条
-    if (e.elite && e.hp < e.maxHp) {
+    if (!DEBUG.noHud && e.elite && e.hp < e.maxHp) {
       const w = 20;
       const x = Math.round(e.x - w / 2 - this.camX), y = Math.round(e.y - s.h * sc - 2 - this.camY);
       g.fillStyle = '#181425';
@@ -605,6 +606,7 @@ export class WorldRenderer {
     } else this.blit(ps, p.x, p.y);
     g.globalAlpha = 1;
     // 血条
+    if (DEBUG.noHud) return;
     const w = 22;
     const x = Math.round(p.x - w / 2 - this.camX), y = Math.round(p.y + 4 - this.camY);
     g.fillStyle = '#181425';
