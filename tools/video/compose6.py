@@ -1,5 +1,5 @@
 # 竖版推广视频（2026-11-09）：三条 1080×1920 MP4（20~30 秒，H.264 + AAC 配乐）+ 三张封面（1080×1920 JPG < 500KB）。
-# 按投放要求：视频只有实机画面（含真实战斗界面和滑动摇杆操作），不加文字、不加特效；封面直接从对应成片截取整帧。
+# 按投放要求：视频保留真实战斗界面和摇杆；封面裁取对应成片的战斗区并叠加游戏字标。
 # 用法：npm run build && node tools/video/record6.mjs && python3 tools/video/compose6.py
 # 封面由 vertical-covers 从最终 MP4 抽帧。
 import json, os, shutil, subprocess, sys
