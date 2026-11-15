@@ -94,7 +94,7 @@ export default async function ({ page, wait, shot }) {
   assert.ok((await pool()).weapons.includes('knife'));
   await click('prep_slot_0'); await click('prep_save');
   assert.deepEqual(await presets(), { ...savedPlan, active: 0 }, '恢复旧预设时其他槽位应保留');
-  await click('nav_arena'); await click('arena_defense'); await click('side_prepare');
+  await click('side_arena'); await click('arena_defense'); await click('side_prepare');
   assert.deepEqual(await pool(), { weapons: ['spear', 'sword', 'horse'], passives: [] });
   assert.ok(!await page.evaluate(() => window.__game.ui.prevRegions.some(r => r.id === 'prep_passives')));
   await click('prep_evo');

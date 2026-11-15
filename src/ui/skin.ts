@@ -134,12 +134,6 @@ export function softShadow(g: G, x: number, y: number, w: number, h: number, r: 
   }
 }
 
-function vgrad(g: G, y0: number, y1: number, stops: [number, string][]): CanvasGradient {
-  const gr = g.createLinearGradient(0, y0, 0, y1);
-  for (const [t, c] of stops) gr.addColorStop(t, c);
-  return gr;
-}
-
 function seedOf(a: number, b: number, c = 0): number {
   return (Math.round(a) * 73 + Math.round(b) * 151 + c * 37) | 0;
 }
@@ -251,37 +245,4 @@ export function paintInkPill(g: G, w: number, h: number, u: number, alpha = .9) 
 export function paintMedal(g: G, s: number, u: number, pressed: boolean, tone: 'paper' | 'ink' | 'red' = 'paper') {
   const color = tone === 'red' ? '#a24336' : tone === 'ink' ? '#414b41' : '#e4e2cb';
   paintXuanPaper(g, s, s, u, color, pressed, 'rgba(75,65,45,.42)', true);
-}
-
-/** 进度条槽 */
-export function paintBarTrack(g: G, w: number, h: number, u: number, dark: string | null) {
-  const r = Math.min(h / 2, 7 * u);
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = '#2a2018';
-  g.fill();
-  const b = Math.max(1, 1.4 * u);
-  rr(g, b, b, w - b * 2, h - b * 2, Math.max(0.5, r - b));
-  g.fillStyle = dark || vgrad(g, 0, h, [[0, '#c9b995'], [1, '#e6dabd']]);
-  g.fill();
-  if (!dark) {
-    g.save();
-    rr(g, b, b, w - b * 2, h - b * 2, Math.max(0.5, r - b));
-    g.clip();
-    g.fillStyle = 'rgba(60,40,20,0.16)';
-    g.fillRect(0, b, w, Math.max(1, h * 0.22));
-    g.restore();
-  }
-}
-
-export function paintBarFill(g: G, w: number, h: number, u: number, color: string) {
-  const r = Math.min(h / 2, 6 * u);
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = vgrad(g, 0, h, [[0, mix(color, '#ffffff', 0.28)], [0.5, color], [1, mix(color, '#1a120c', 0.3)]]);
-  g.fill();
-  g.save();
-  rr(g, 0, 0, w, h, r);
-  g.clip();
-  g.fillStyle = 'rgba(255,250,230,0.32)';
-  g.fillRect(0, 0, w, Math.max(1, h * 0.3));
-  g.restore();
 }

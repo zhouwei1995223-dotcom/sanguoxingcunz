@@ -51,7 +51,7 @@ const TABS: { id: Tab; name: string; icon: string }[] = [
   { id: 'shop', name: '商店', icon: 'chest_gold' },
   { id: 'equip', name: '装备', icon: 'e_armor' },
   { id: 'battle', name: '征战', icon: 'w_spear' },
-  { id: 'arena', name: '演武', icon: 'atk' },
+  ...(!NEW_UI ? [{ id: 'arena' as const, name: '演武', icon: 'atk' }] : []),
   { id: 'talent', name: '军略', icon: 'p_book' },
   { id: 'hero', name: '武将', icon: 'p_flag' },
 ];
@@ -285,13 +285,12 @@ export class HomeScene implements Scene {
       const iy = y + (active ? 36 : 46) * u + (pressed && !active ? 2 * u : 0);
       ui.icon(t.icon, x + tw / 2, iy, isz, active ? 1 : 0.92);
       ui.text(t.name, x + tw / 2, y + h - (active ? 30 : 26) * u, active ? 25 : 22, active ? '#fff6e0' : '#d9c59a', 'center', active ? '#4a0d09' : null);
-      const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && anyHeroRedDot()) || (t.id === 'arena' && this.arenaRedDot());
+      const dot = (t.id === 'shop' && this.shopRedDot()) || (t.id === 'talent' && this.talentRedDot()) || (t.id === 'hero' && anyHeroRedDot());
       if (dot && !active) ui.redDot(x + tw - 20 * u, y + 20 * u);
       if (ui.clicked('nav_' + t.id, x, y, tw, h)) {
         this.tab = t.id;
         if (t.id === 'hero') this.heroDetail = false;
         if (t.id === 'battle' && (save.homeMode === 'defense' || save.homeMode === 'tower')) this.setMode(this.battleMode);
-        if (t.id === 'arena') this.setMode(this.arenaSel === 'tower' ? 'tower' : 'defense');
         if (save.guide === 1 && t.id === 'equip') save.guide = 2;
         if (save.guide === 3 && t.id === 'talent') save.guide = 4;
         if (save.guide === 5 && t.id === 'battle') save.guide = 6;
@@ -373,6 +372,10 @@ export class HomeScene implements Scene {
       { id: 'tasks', icon: 'scroll', label: '任务', dot: tasksRedDot(), on: () => game.openDialog(new TasksDialog()) },
       { id: 'patrol', icon: 'tent', label: '巡营', dot: patrolPending().minutes >= 60, on: () => game.openDialog(new PatrolDialog()) },
     ];
+    if (NEW_UI) side.push({ id: 'arena', icon: 'atk', label: '演武', dot: this.arenaRedDot(), on: () => {
+      this.tab = 'arena';
+      if (this.arenaSel !== 'endless') this.setMode(this.arenaSel);
+    } });
     const sideR: typeof side = [
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
@@ -403,11 +406,12 @@ export class HomeScene implements Scene {
     for (const it of social) (side.length <= sideR.length ? side : sideR).push(it);
     const mh = 76 * u, my = L.cy - mh - 14 * u;
     const bs = 82 * u;
-    const sy = top + 150 * u;
+    const rows = Math.max(side.length, sideR.length);
+    const sy = Math.max(ui.safeTop + 135 * u, Math.min(top + 150 * u, my - (8 + rows * 96) * u));
     const drawSide = (list: typeof side, x0: number, right: boolean) => list.forEach((s, i) => {
       // 按钮多时自动压缩间距、缩小按钮，不压到下面的模式页签
       const step = Math.min(bs + 44 * u, (my - 8 * u - sy) / list.length);
-      const b = Math.min(bs, step - 34 * u);
+      const b = Math.max(1, Math.min(bs, step - 30 * u));
       const x = right ? x0 + bs - b : x0;
       const y = sy + i * step;
       this.sideBtnRect[s.id] = [x, y, b, b];
@@ -422,8 +426,9 @@ export class HomeScene implements Scene {
         ui.text(s.label, x + b / 2, y + b + 14 * u, 19, '#2a2018', 'center', 'rgba(250,242,224,0.92)');
       }
       if (s.dot) ui.redDot(x + b - 8 * u, y + 8 * u);
-      if (s.now) ui.tapNow('side_' + s.id, x, y, b, b, s.on);
-      else if (ui.clicked('side_' + s.id, x, y, b, b)) s.on();
+      const hitHeight = Math.min(step, b + 28 * u);
+      if (s.now) ui.tapNow('side_' + s.id, x, y, b, hitHeight, s.on);
+      else if (ui.clicked('side_' + s.id, x, y, b, hitHeight)) s.on();
     });
     drawSide(side, 20 * u, false);
     drawSide(sideR, ui.W - bs - 20 * u, true);
@@ -925,18 +930,26 @@ export class HomeScene implements Scene {
       ui.ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ui.ctx.fillRect(ui.W / 2 - 150 * u, top + 60 * u, 300 * u, 330 * u);
     } else {
-      // 水墨圆月景窗立绘底座
-      const bx = ui.W / 2 - 150 * u, by0 = top + 68 * u, bw0 = 300 * u, bh0 = 320 * u;
-      ui.pixRect(bx, by0, bw0, bh0, '#8c7a62', Math.max(2, Math.round(u * 3)));
-      ui.pixRect(bx + 3 * u, by0 + 3 * u, bw0 - 6 * u, bh0 - 6 * u, '#ded0b4', Math.max(2, Math.round(u * 2)));
-      ui.ctx.fillStyle = 'rgba(255,250,240,0.55)';
-      ui.ctx.beginPath();
-      ui.ctx.arc(ui.W / 2, by0 + bh0 * 0.48, 112 * u, 0, Math.PI * 2);
-      ui.ctx.fill();
-      ui.ctx.strokeStyle = 'rgba(72,56,42,0.25)';
-      ui.ctx.lineWidth = Math.max(1, 1.5 * u);
-      ui.ctx.stroke();
-      ui.paperTexture(bx + 3 * u, by0 + 3 * u, bw0 - 6 * u, bh0 - 6 * u, { alpha: 0.78, patina: true });
+      // 与外层宣纸融在一起的两笔淡墨，边端自然收尖。
+      const w = 300 * u, h = 320 * u;
+      drawSkin(ui.ctx, 'equipPortraitWash', (ui.W - w) / 2, top + 68 * u, w, h, 0, (g, width, height) => {
+        g.scale(width, height);
+        g.fillStyle = 'rgba(90,117,105,.10)';
+        g.beginPath();
+        g.moveTo(.01,.73);
+        g.bezierCurveTo(.19,.67,.22,.44,.33,.48);
+        g.bezierCurveTo(.47,.54,.49,.29,.61,.33);
+        g.bezierCurveTo(.75,.37,.82,.62,.99,.59);
+        g.bezierCurveTo(.74,.72,.32,.76,.01,.73);
+        g.fill();
+        g.fillStyle = 'rgba(86,106,87,.12)';
+        g.beginPath();
+        g.moveTo(.04,.85);
+        g.bezierCurveTo(.23,.83,.32,.62,.44,.69);
+        g.bezierCurveTo(.62,.8,.72,.59,.96,.7);
+        g.bezierCurveTo(.76,.72,.51,.9,.04,.85);
+        g.fill();
+      });
     }
     ui.icon(heroIdleFrame(heroSpriteName(save.hero), ui.time), ui.W / 2, top + 230 * u, 280 * u);
     ui.text(`${HERO_BY_ID[save.hero].name} · Lv.${save.heroes[save.hero].lv}`, ui.W / 2, top + 50 * u, 28, C.gold);

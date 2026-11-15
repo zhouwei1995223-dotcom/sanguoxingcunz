@@ -5,7 +5,7 @@ import { playSfx } from '../audio/sound';
 import { NEW_UI } from '../data/platformConfig';
 import { drawXuanTexture, XuanTextureOpts } from './xuanPaper';
 import { TextCache } from './textCache';
-import { drawSkin, skinFrame, paintPanel, paintDyedButton, paintSlipButton, paintSlot, paintInkPill, paintBarTrack, LACQUER, Lacquer, rr, mix } from './skin';
+import { drawSkin, skinFrame, paintPanel, paintDyedButton, paintSlipButton, paintSlot, paintInkPill, paintXuanPaper, LACQUER, Lacquer, mix } from './skin';
 
 // 立即模式 UI：每帧重新绘制并登记可点击区域；点击判定使用上一帧的区域表，天然支持弹窗遮挡。
 
@@ -717,28 +717,28 @@ export class UI {
 
   /**
    * 宣纸进度条：细墨线外框，槽为熟宣色（战斗 HUD 等深底处保留深色槽），
-   * 进度用矿物颜料色（石绿 / 赭石 / 石青 / 朱砂），末端一笔浓墨收锋。
+   * 进度用矿物颜料色（石绿 / 赭石 / 石青 / 朱砂），平涂填充。
    */
   private inkBar(x: number, y: number, w: number, h: number, ratio: number, color: string, back: string) {
     const ctx = this.ctx, u = this.u;
-    const b = Math.max(1, 1.4 * u);
+    if (w <= 0 || h <= 0) return;
     const darkBack = back !== '#1a1210';
     const pigment = INK_PIGMENT[color.toLowerCase()] || color;
-    drawSkin(ctx, 'bar_' + (darkBack ? back : 'p'), x, y, w, h, 1, (g, bw, bh) => paintBarTrack(g, bw, bh, u, darkBack ? back : null));
-    const ix = Math.round(x) + b, iy = Math.round(y) + b, iw = Math.round(w) - b * 2, ih = Math.round(h) - b * 2;
-    if (!darkBack) this.markPaper(ix, iy, iw, ih);
-    const fw = Math.max(0, iw * Math.min(1, ratio));
-    if (fw > 1) {
-      const r = Math.min(ih / 2, 6 * u, fw / 2);
-      rr(ctx, ix, iy, fw, ih, r);
-      ctx.fillStyle = pigment;
-      ctx.fill();
-      // 上沿高光、下沿压暗（不用渐变，进度条每帧都在变，直接画两条）
-      ctx.fillStyle = 'rgba(255,250,228,0.34)';
-      ctx.fillRect(ix + r * 0.6, iy + Math.max(1, ih * 0.12), Math.max(0, fw - r * 1.2), Math.max(1, ih * 0.24));
-      ctx.fillStyle = 'rgba(24,14,8,0.2)';
-      ctx.fillRect(ix + r * 0.6, iy + ih - Math.max(1, ih * 0.26), Math.max(0, fw - r * 1.2), Math.max(1, ih * 0.18));
-    }
+    const inset = Math.min(2.8 * u, h * .16, w * .16);
+    const iw = w - 2 * inset, ih = h - 2 * inset;
+    drawSkin(ctx, 'barPaper_' + back, x, y, w, h, 1, (g, bw, bh) =>
+      paintXuanPaper(g, bw, bh, u, darkBack ? back : '#d8d4bf'));
+    if (!darkBack) this.markPaper(x, y, w, h);
+    const fraction = Math.min(1, Math.max(0, ratio));
+    if (!(fraction > 0)) return;
+    // 缓存整条染色纸，进度只改变裁剪宽度，血量变化不会生成新纹理。
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + inset, y + inset, iw * fraction, ih);
+    ctx.clip();
+    drawSkin(ctx, 'barInk_' + pigment, x + inset, y + inset, iw, ih, 1, (g, bw, bh) =>
+      paintXuanPaper(g, bw, bh, u, pigment, false, 'transparent'));
+    ctx.restore();
   }
 
   /** 品质框 */

@@ -30,7 +30,7 @@ export default async function({ page }) {
     await click('mode_chapter');
   }
   if (want('arena')) {
-    await click('nav_arena'); await capture('arena-defense');
+    await click('side_arena'); await capture('arena-defense');
     await click('arena_tower'); await capture('arena-tower');
     await click('arena_endless'); await capture('arena-endless');
     await click('arena_defense');

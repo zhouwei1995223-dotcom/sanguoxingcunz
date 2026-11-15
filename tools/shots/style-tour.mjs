@@ -22,7 +22,7 @@ export default async function({ page }) {
   await page.waitForTimeout(200);
   // 主界面只有征战 / 天机签；守城、布阵在「演武」页
   await button('mode_chapter'); await page.waitForTimeout(300); await capture('home-chapter');
-  await button('nav_arena');
+  await button('side_arena');
   for (const m of ['defense', 'tower']) {
     await button('arena_' + m);
     await page.waitForTimeout(300);
