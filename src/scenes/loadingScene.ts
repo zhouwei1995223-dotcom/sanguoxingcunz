@@ -8,7 +8,7 @@ import { onLogin } from '../meta/ops';
 import { cloudPull } from '../meta/cloud';
 import { GAME_INFO, NEW_UI } from '../data/platformConfig';
 import { cachedLayer } from '../ui/layerCache';
-import { paintSplash } from './homeArt';
+import { drawGameTitle, paintSplash } from './homeArt';
 import { HomeScene } from './homeScene';
 import { BattleScene } from './battleScene';
 import { reportDailyLogin } from '../meta/telemetry';
@@ -98,24 +98,9 @@ export class LoadingScene implements Scene {
       if (this.restored) ui.text('已从云端恢复进度', ui.W / 2, ui.H * 0.62 + 100 * u, 22, '#9be37a');
     } else {
       // 山水启动页：绢色天空、朱砂落日、三重远山（静态，整屏缓存），标题和主界面一个写法
-      const ty = ui.H * 0.27, cx = ui.W / 2, name = GAME_INFO.shortName;
-      g.drawImage(cachedLayer('splash', `${u}`, ui.W, ui.H, (cg) => {
-        paintSplash(cg, ui.W, ui.H, u);
-        cg.font = ui.font(100, true);
-        cg.textAlign = 'center';
-        cg.textBaseline = 'middle';
-        cg.lineJoin = 'round';
-        cg.fillStyle = 'rgba(70,40,14,0.26)';
-        cg.fillText(name, cx + 4 * u, ty + 8 * u);
-        cg.lineWidth = 18 * u; cg.strokeStyle = '#fdf6e4'; cg.strokeText(name, cx, ty);
-        cg.lineWidth = 8 * u; cg.strokeStyle = '#e0bf7a'; cg.strokeText(name, cx, ty);
-        cg.lineWidth = 4 * u; cg.strokeStyle = '#6a4a1c'; cg.strokeText(name, cx, ty);
-        const tg = cg.createLinearGradient(0, ty - 52 * u, 0, ty + 50 * u);
-        tg.addColorStop(0, '#4a3a2e'); tg.addColorStop(0.4, '#1e1612'); tg.addColorStop(1, '#0a0705');
-        cg.fillStyle = tg;
-        cg.fillText(name, cx, ty);
-      }), 0, 0);
-      ui.text('乱 世 幸 存 者', cx, ty + 92 * u, 30, '#a3241a', 'center', 'rgba(253,246,228,0.95)');
+      const ty = ui.H * 0.27, cx = ui.W / 2;
+      g.drawImage(cachedLayer('splash', `${u}`, ui.W, ui.H, (cg) => paintSplash(cg, ui.W, ui.H, u)), 0, 0);
+      drawGameTitle(g, ui.W, ty, u);
       const by = ui.H * 0.8;
       ui.bar(ui.W * 0.16, by, ui.W * 0.68, 24 * u, this.shown, '#b02c22', '#3a2a1c');
       ui.text(loaded ? '即将进入…' : '整军备战中…', cx, by + 54 * u, 23, '#3a2c20', 'center', 'rgba(250,242,224,0.9)');

@@ -2,8 +2,8 @@ import { game, Scene } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { cachedLayer } from '../ui/layerCache';
-import { drawSkin, paintInkPill, paintXuanPaper, paintMedal, paintDyedButton, paintSlipButton, LACQUER, Lacquer, rr, softShadow, mix } from '../ui/skin';
-import { paintPageBg } from './homeArt';
+import { drawSkin, paintInkPill, paintXuanPaper, paintMedal, paintDyedButton, paintSlipButton, LACQUER, Lacquer, rr, mix } from '../ui/skin';
+import { drawGameTitle, paintPageBg } from './homeArt';
 import { currentWeekly } from '../meta/goals';
 import { HomeBackground } from './homeBg';
 import { HomeCamp } from './homeCamp';
@@ -356,7 +356,15 @@ export class HomeScene implements Scene {
       ui.text(GAME_INFO.shortName, ui.W / 2, ty, 88, '#fee761', 'center', '#7a1c24');
       ui.text('— 乱世幸存者 —', ui.W / 2, ty + 66 * u, 28, '#fff4d6');
     } else {
-      this.drawTitle(ui, ty - 14 * u);
+      const titleY = ty - 14 * u;
+      const compact = ui.H - ui.safeTop - ui.safeBottom < 1480 * u;
+      const titleScale = compact ? .84 * u : u;
+      if (compact) {
+        const w = 544 * titleScale, h = 148 * titleScale;
+        drawSkin(ctx, 'homeTitlePaper', (ui.W - w) / 2, titleY - 60 * titleScale, w, h, 1,
+          (g, pw, ph) => paintXuanPaper(g, pw, ph, titleScale, '#eee7d4', false, 'transparent'));
+      }
+      drawGameTitle(ui.ctx, ui.W, titleY, titleScale);
     }
 
     // 点人物进武将页
@@ -712,70 +720,6 @@ export class HomeScene implements Scene {
     const ew = 150 * u;
     if (ui.button('side_prepare', 20 * u, by, ew, bh, '备战', C.btnGold, { size: 32, sub: '兵器兵法' })) game.openDialog(new PreparationDialog());
     if (ui.button('def_list', ui.W - ew - 20 * u, by, ew, bh, '关卡', C.btnBlue, { size: 32, sub: `${save.defense?.cleared || 0}/${n}` })) game.openDialog(new DefenseListDialog((l) => { save.selectedDefense = l; markDirty(); }));
-  }
-
-  /** 主界面标题：焦墨大字 + 鎏金衬线 + 朱文方印（静态，整条缓存） */
-  private drawTitle(ui: UI, ty: number) {
-    const u = ui.u, W = ui.W, lh = Math.ceil(230 * u), mid = 92 * u;
-    const layer = cachedLayer('home_title', `${u}`, W, lh, (g) => {
-      const cx = W / 2, name = GAME_INFO.shortName;
-      // 字后面一团绢色云气
-      g.save();
-      g.translate(cx, mid + 6 * u);
-      g.scale(3.4, 1);
-      const halo = g.createRadialGradient(0, 0, 8 * u, 0, 0, 88 * u);
-      halo.addColorStop(0, 'rgba(252,244,224,0.86)');
-      halo.addColorStop(0.6, 'rgba(250,240,214,0.4)');
-      halo.addColorStop(1, 'rgba(250,240,214,0)');
-      g.fillStyle = halo;
-      g.beginPath(); g.arc(0, 0, 88 * u, 0, Math.PI * 2); g.fill();
-      g.restore();
-      g.font = ui.font(84, true);
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.lineJoin = 'round';
-      g.fillStyle = 'rgba(70,40,14,0.28)';
-      g.fillText(name, cx + 3 * u, mid + 7 * u);
-      g.lineWidth = 15 * u; g.strokeStyle = '#fdf6e4'; g.strokeText(name, cx, mid);
-      g.lineWidth = 7 * u; g.strokeStyle = '#e0bf7a'; g.strokeText(name, cx, mid);
-      g.lineWidth = 3.4 * u; g.strokeStyle = '#6a4a1c'; g.strokeText(name, cx, mid);
-      const tg = g.createLinearGradient(0, mid - 44 * u, 0, mid + 42 * u);
-      tg.addColorStop(0, '#4a3a2e'); tg.addColorStop(0.4, '#1e1612'); tg.addColorStop(1, '#0a0705');
-      g.fillStyle = tg;
-      g.fillText(name, cx, mid);
-      // 朱文方印
-      const tw = g.measureText(name).width;
-      const ss = 46 * u, sx = cx + tw / 2 + 6 * u, sy = mid - 46 * u;
-      softShadow(g, sx, sy, ss, ss, 6 * u, 4 * u, 0.2, 2 * u);
-      rr(g, sx, sy, ss, ss, 6 * u);
-      const sgr = g.createLinearGradient(0, sy, 0, sy + ss);
-      sgr.addColorStop(0, '#d44a3a'); sgr.addColorStop(1, '#a3241a');
-      g.fillStyle = sgr; g.fill();
-      rr(g, sx + 3 * u, sy + 3 * u, ss - 6 * u, ss - 6 * u, 3.5 * u);
-      g.strokeStyle = 'rgba(255,240,214,0.9)'; g.lineWidth = Math.max(1, 1.4 * u); g.stroke();
-      g.font = ui.font(17, true);
-      g.fillStyle = '#fff3dc';
-      g.fillText('单', sx + ss / 2, sy + ss * 0.31);
-      g.fillText('骑', sx + ss / 2, sy + ss * 0.71);
-      // 副标题：两道鎏金线夹一行朱字
-      const sy0 = mid + 72 * u, sub = '乱 世 幸 存 者';
-      g.font = ui.font(23, true);
-      const sw = g.measureText(sub).width;
-      g.lineWidth = 6 * u; g.strokeStyle = 'rgba(253,246,228,0.95)'; g.strokeText(sub, cx, sy0);
-      g.fillStyle = '#a3241a';
-      g.fillText(sub, cx, sy0);
-      for (const dir of [-1, 1]) {
-        const x0 = cx + dir * (sw / 2 + 22 * u), x1 = cx + dir * (sw / 2 + 150 * u);
-        const lg = g.createLinearGradient(x0, 0, x1, 0);
-        lg.addColorStop(0, 'rgba(150,104,40,0.95)'); lg.addColorStop(1, 'rgba(150,104,40,0)');
-        g.fillStyle = lg;
-        g.fillRect(Math.min(x0, x1), sy0 - 1.2 * u, Math.abs(x1 - x0), 2.4 * u);
-        g.fillStyle = '#b8862e';
-        const dx = cx + dir * (sw / 2 + 12 * u), d = 4.5 * u;
-        g.beginPath(); g.moveTo(dx, sy0 - d); g.lineTo(dx + d, sy0); g.lineTo(dx, sy0 + d); g.lineTo(dx - d, sy0); g.closePath(); g.fill();
-      }
-    });
-    ui.ctx.drawImage(layer, 0, Math.round(ty - mid));
   }
 
   // —— 演武页：守城 / 布阵 / 无尽 / 每周挑战 ——

@@ -1,3 +1,5 @@
+import { GAME_INFO } from '../data/platformConfig';
+import { cachedLayer } from '../ui/layerCache';
 import { hash2 } from '../core/math';
 import { drawXuanTexture } from '../ui/xuanPaper';
 import { getPlatform } from '../platform';
@@ -7,6 +9,58 @@ import { getPlatform } from '../platform';
 
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
+
+/** 墨字、朱印与副题在同一透明图层印一次，山水透过飞白露出来。 */
+export function drawGameTitle(ctx: G, width: number, y: number, scale: number) {
+  const mid = 60;
+  const layer = cachedLayer('inkTitle', String(scale), width, 148 * scale, (g) => {
+    g.scale(scale, scale);
+    const name = GAME_INFO.shortName;
+    const face = '"KaiTi","Kaiti SC","STKaiti","Noto Serif SC","SimSun",serif';
+    g.font = `bold 86px ${face}`;
+    g.textBaseline = 'middle';
+    const textWidth = g.measureText(name).width;
+    const stampWidth = 34, gap = 13;
+    const left = (width / scale - textWidth - gap - stampWidth) / 2;
+    g.fillStyle = '#293931';
+    g.fillText(name, left, mid);
+    // 稀疏的纸纤维在字的墨面内留下细短断纹，字号缩小时仍能读清。
+    g.save();
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = 'rgba(0,0,0,.32)';
+    for (let i = 0; i < 780; i++) {
+      const x = left + hash2(i, 9, 1) * textWidth;
+      const fy = mid - 41 + hash2(i, 9, 2) * 82;
+      g.fillRect(x, fy, 1 + 5 * hash2(i, 9, 3), .65);
+    }
+    g.restore();
+
+    const sx = left + textWidth + gap, sy = mid - 36;
+    g.save();
+    g.translate(sx, sy);
+    g.rotate(-.035);
+    g.beginPath();
+    g.moveTo(1, 2); g.lineTo(12, .7); g.lineTo(23, 1.5); g.lineTo(33, 0);
+    g.lineTo(34, 18); g.lineTo(33, 31); g.lineTo(34, 48);
+    g.lineTo(21, 50); g.lineTo(1, 49); g.lineTo(.7, 34); g.closePath();
+    g.fillStyle = '#a34436'; g.fill();
+    g.textAlign = 'center'; g.fillStyle = '#faf0d9'; g.font = `bold 20px ${face}`;
+    g.fillText('单', stampWidth / 2, 14); g.fillText('骑', stampWidth / 2, 36);
+    g.restore();
+
+    const center = width / scale / 2, subY = mid + 58;
+    g.textAlign = 'center'; g.font = `bold 23px ${face}`; g.fillStyle = '#873e32';
+    g.fillText('乱 世 幸 存 者', center, subY);
+    const half = g.measureText('乱 世 幸 存 者').width / 2;
+    for (const direction of [-1, 1]) {
+      const x = center + direction * (half + 16);
+      g.fillStyle = '#68766a';
+      g.beginPath(); g.moveTo(x, subY - 1); g.lineTo(x + direction * 69, subY);
+      g.lineTo(x + direction * 9, subY + 1.2); g.closePath(); g.fill();
+    }
+  });
+  ctx.drawImage(layer, 0, Math.round(y - mid * scale));
+}
 
 /** 一维平滑噪声，返回 [0,1] */
 function noise1(x: number, seed: number): number {

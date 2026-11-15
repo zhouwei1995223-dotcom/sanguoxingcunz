@@ -123,17 +123,6 @@ export function rr(g: G, x: number, y: number, w: number, h: number, r: number) 
   g.closePath();
 }
 
-/** 柔和投影：几层逐渐收小的半透明圆角矩形叠出来（不用 shadowBlur，各平台结果一致） */
-export function softShadow(g: G, x: number, y: number, w: number, h: number, r: number, blur: number, alpha: number, dy = 0) {
-  const n = Math.max(3, Math.min(7, Math.round(blur / 1.6)));
-  g.fillStyle = `rgba(26,16,8,${(alpha * 1.7 / n).toFixed(3)})`;
-  for (let i = 0; i < n; i++) {
-    const e = blur * (1 - i / n);
-    rr(g, x - e, y - e + dy, w + e * 2, h + e * 2, r + e);
-    g.fill();
-  }
-}
-
 function seedOf(a: number, b: number, c = 0): number {
   return (Math.round(a) * 73 + Math.round(b) * 151 + c * 37) | 0;
 }
