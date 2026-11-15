@@ -5,7 +5,7 @@ import { playSfx } from '../audio/sound';
 import { NEW_UI } from '../data/platformConfig';
 import { drawXuanTexture, XuanTextureOpts } from './xuanPaper';
 import { TextCache } from './textCache';
-import { drawSkin, skinFrame, paintPanel, paintDyedButton, paintSlipButton, paintRibbon, paintSlot, paintInkPill, paintBarTrack, LACQUER, Lacquer, rr, mix } from './skin';
+import { drawSkin, skinFrame, paintPanel, paintDyedButton, paintSlipButton, paintSlot, paintInkPill, paintBarTrack, LACQUER, Lacquer, rr, mix } from './skin';
 
 // 立即模式 UI：每帧重新绘制并登记可点击区域；点击判定使用上一帧的区域表，天然支持弹窗遮挡。
 
@@ -544,7 +544,7 @@ export class UI {
     const ctx = this.ctx, u = this.u;
     this.darkZones.push({ x: x - 24 * u, y, w: w + 48 * u, h, layer: this.layer });
     const lac = ribbonLacquer(color);
-    drawSkin(ctx, 'rb_' + color, x, y, w, h, 26 * u, (g, pw, ph) => paintRibbon(g, pw, ph, u, lac));
+    drawSkin(ctx, 'rb_' + color, x, y, w, h, 26 * u, (g, pw, ph) => paintDyedButton(g, pw, ph, u, lac, false));
     // 标题两侧的小金菱
     const tw = this.measure(label, 31);
     const ornOffset = Math.min(w / 2 - 22 * u, tw / 2 + 24 * u);

@@ -4,7 +4,7 @@ import type { EquipItem } from '../meta/save';
 import { fmtNum, easeOutBack } from '../core/math';
 import { HERO_BY_ID } from '../data/heroes';
 import { NO_ADS } from '../data/platformConfig';
-import { drawSkin, paintInkPill, paintMedal, LACQUER, goldGrad } from './skin';
+import { drawSkin, paintInkPill, paintMedal } from './skin';
 
 // 通用界面组件
 
@@ -96,12 +96,8 @@ export function dialogFrame(ui: UI, w: number, h: number, title: string, t = 1, 
       const pressed = ui.isPressed(closeId);
       ui.markDark(cx, cy, cs, cs);
       drawSkin(ui.ctx, 'close' + (pressed ? 'P' : ''), cx, cy, cs, cs, 12 * u, (g, s0) => {
-        paintMedal(g, s0, u, pressed, 'ink');
-        const c = s0 / 2, ri = s0 / 2 - Math.max(2.5, 4.2 * u);
-        const rg = g.createRadialGradient(c, c - ri * 0.4, ri * 0.1, c, c, ri);
-        rg.addColorStop(0, LACQUER.red.top); rg.addColorStop(0.6, LACQUER.red.mid); rg.addColorStop(1, LACQUER.red.bot);
-        g.beginPath(); g.arc(c, c, ri, 0, Math.PI * 2); g.fillStyle = rg; g.fill();
-        if (pressed) { g.fillStyle = 'rgba(0,0,0,0.18)'; g.fill(); }
+        paintMedal(g, s0, u, pressed, 'red');
+        const c = s0 / 2, ri = c - 4 * u;
         g.strokeStyle = '#fff3d8'; g.lineWidth = Math.max(2, 4 * u); g.lineCap = 'round';
         const k = ri * 0.42;
         g.beginPath(); g.moveTo(c - k, c - k); g.lineTo(c + k, c + k); g.moveTo(c + k, c - k); g.lineTo(c - k, c + k); g.stroke();
@@ -147,10 +143,7 @@ export function currencyBar(ui: UI, x: number, y: number, w: number, icon: strin
     const px = x + w - ps - 5 * u, py2 = y + (h - ps) / 2;
     const pressed = ui.isPressed(plusId);
     drawSkin(ctx, 'plus' + (pressed ? 'P' : ''), px, py2, ps, ps, 4 * u, (g, s0) => {
-      g.beginPath(); g.arc(s0 / 2, s0 / 2, s0 / 2, 0, Math.PI * 2);
-      g.fillStyle = goldGrad(g, 0, s0); g.fill();
-      if (pressed) { g.fillStyle = 'rgba(60,30,0,0.25)'; g.fill(); }
-      g.strokeStyle = 'rgba(90,56,14,0.6)'; g.lineWidth = Math.max(1, u); g.stroke();
+      paintMedal(g, s0, u, pressed);
       g.strokeStyle = '#4a2c0a'; g.lineWidth = Math.max(2, 3.4 * u); g.lineCap = 'round';
       const k = s0 * 0.22, c = s0 / 2;
       g.beginPath(); g.moveTo(c - k, c); g.lineTo(c + k, c); g.moveTo(c, c - k); g.lineTo(c, c + k); g.stroke();

@@ -123,22 +123,6 @@ export function rr(g: G, x: number, y: number, w: number, h: number, r: number) 
   g.closePath();
 }
 
-/** 委角矩形（四角内凹的小圆弧，传统牌匾 / 册页边框的做法） */
-export function notched(g: G, x: number, y: number, w: number, h: number, n: number) {
-  n = Math.max(0, Math.min(n, w / 3, h / 3));
-  g.beginPath();
-  g.moveTo(x + n, y);
-  g.lineTo(x + w - n, y);
-  g.quadraticCurveTo(x + w - n, y + n, x + w, y + n);
-  g.lineTo(x + w, y + h - n);
-  g.quadraticCurveTo(x + w - n, y + h - n, x + w - n, y + h);
-  g.lineTo(x + n, y + h);
-  g.quadraticCurveTo(x + n, y + h - n, x, y + h - n);
-  g.lineTo(x, y + n);
-  g.quadraticCurveTo(x + n, y + n, x + n, y);
-  g.closePath();
-}
-
 /** 柔和投影：几层逐渐收小的半透明圆角矩形叠出来（不用 shadowBlur，各平台结果一致） */
 export function softShadow(g: G, x: number, y: number, w: number, h: number, r: number, blur: number, alpha: number, dy = 0) {
   const n = Math.max(3, Math.min(7, Math.round(blur / 1.6)));
@@ -156,26 +140,6 @@ function vgrad(g: G, y0: number, y1: number, stops: [number, string][]): CanvasG
   return gr;
 }
 
-/** 鎏金渐变（上亮下暗） */
-export function goldGrad(g: G, y0: number, y1: number): CanvasGradient {
-  return vgrad(g, y0, y1, [[0, '#fbe9b4'], [0.35, '#e2bd69'], [0.7, '#b88a3a'], [1, '#8a6226']]);
-}
-
-/** 在圆角区域里铺宣纸肌理（按 seed 从整张宣纸上取不同位置，各控件纹理不重样） */
-export function paperGrain(g: G, x: number, y: number, w: number, h: number, r: number, u: number, seed: number, alpha = 1) {
-  const tex = xuanSheet(u);
-  if (!tex || w < 6 || h < 6) return;
-  const sw = Math.min(Math.ceil(w), tex.width), sh = Math.min(Math.ceil(h), tex.height);
-  const sx = Math.floor(((seed * 2654435761) >>> 0) % Math.max(1, tex.width - sw));
-  const sy = Math.floor(((seed * 40503 + 977) >>> 0) % Math.max(1, Math.min(tex.height, Math.round(1700 * u)) - sh));
-  g.save();
-  rr(g, x, y, w, h, r);
-  g.clip();
-  g.globalAlpha = alpha;
-  g.drawImage(tex, sx, sy, sw, sh, x, y, sw, sh);
-  g.restore();
-}
-
 function seedOf(a: number, b: number, c = 0): number {
   return (Math.round(a) * 73 + Math.round(b) * 151 + c * 37) | 0;
 }
@@ -183,102 +147,9 @@ function seedOf(a: number, b: number, c = 0): number {
 // —— 面板 ——
 export type PanelStyle = 'card' | 'inset' | 'tile';
 
-/**
- * card：主面板（描金墨框 + 熟宣纸面 + 委角内线）
- * inset：嵌在页面里的副面板（背包、未解锁），纸色更深、没有投影
- * tile：小方笺
- */
 export function paintPanel(g: G, w: number, h: number, u: number, style: PanelStyle) {
-  const r = Math.min(12 * u, Math.min(w, h) * 0.2);
-  const seed = seedOf(w, h, style.length);
-  if (style === 'inset') {
-    rr(g, 0, 0, w, h, r);
-    g.fillStyle = 'rgba(70,52,34,0.5)';
-    g.fill();
-    const b = Math.max(1, 1.5 * u);
-    rr(g, b, b, w - b * 2, h - b * 2, r - b);
-    g.fillStyle = vgrad(g, 0, h, [[0, '#dccdaf'], [0.12, '#e6d9bd'], [1, '#d8c7a6']]);
-    g.fill();
-    paperGrain(g, b, b, w - b * 2, h - b * 2, r - b, u, seed, 0.9);
-    // 顶部内阴影：嵌进去的感觉
-    g.save();
-    rr(g, b, b, w - b * 2, h - b * 2, r - b);
-    g.clip();
-    g.fillStyle = vgrad(g, b, b + 16 * u, [[0, 'rgba(60,42,24,0.22)'], [1, 'rgba(60,42,24,0)']]);
-    g.fillRect(0, 0, w, 18 * u);
-    g.restore();
-    return;
-  }
-  const small = style === 'tile' || Math.min(w, h) < 120 * u;
-  softShadow(g, 0, 0, w, h, r, (small ? 6 : 12) * u, small ? 0.2 : 0.26, (small ? 3 : 5) * u);
-  // 墨框
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = '#2a2018';
-  g.fill();
-  // 描金线
-  const b1 = Math.max(1, 1.6 * u);
-  rr(g, b1, b1, w - b1 * 2, h - b1 * 2, r - b1);
-  g.fillStyle = goldGrad(g, 0, h);
-  g.fill();
-  // 纸面
-  const b2 = b1 + Math.max(1, 1.6 * u);
-  rr(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2);
-  g.fillStyle = vgrad(g, 0, h, [[0, '#fbf5e6'], [0.5, '#f3e8d0'], [1, '#e7d7b6']]);
-  g.fill();
-  paperGrain(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2, u, seed, 1);
-  // 四周极淡的包浆收边
-  g.save();
-  rr(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2);
-  g.clip();
-  const edge = Math.min(26 * u, Math.min(w, h) * 0.2);
-  g.fillStyle = vgrad(g, h - edge - b2, h - b2, [[0, 'rgba(126,92,50,0)'], [1, 'rgba(126,92,50,0.13)']]);
-  g.fillRect(0, h - edge - b2, w, edge);
-  g.fillStyle = vgrad(g, b2, b2 + edge * 0.6, [[0, 'rgba(255,252,240,0.5)'], [1, 'rgba(255,252,240,0)']]);
-  g.fillRect(0, b2, w, edge * 0.6);
-  // 大面板底部一抹远山淡墨
-  if (!small && w >= 260 * u && h >= 180 * u) {
-    const by = h - b2;
-    g.fillStyle = 'rgba(62,54,44,0.05)';
-    g.beginPath();
-    g.moveTo(0, by);
-    g.lineTo(0, by - 40 * u);
-    g.quadraticCurveTo(w * 0.22, by - 96 * u, w * 0.46, by - 36 * u);
-    g.quadraticCurveTo(w * 0.62, by - 4 * u, w * 0.78, by - 70 * u);
-    g.quadraticCurveTo(w * 0.9, by - 96 * u, w, by - 30 * u);
-    g.lineTo(w, by);
-    g.closePath();
-    g.fill();
-    g.fillStyle = 'rgba(62,54,44,0.04)';
-    g.beginPath();
-    g.moveTo(0, by);
-    g.lineTo(0, by - 18 * u);
-    g.quadraticCurveTo(w * 0.34, by - 60 * u, w * 0.6, by - 16 * u);
-    g.quadraticCurveTo(w * 0.8, by - 42 * u, w, by - 12 * u);
-    g.lineTo(w, by);
-    g.closePath();
-    g.fill();
-  }
-  g.restore();
-  // 委角内线
-  if (!small) {
-    const m = b2 + 7 * u;
-    if (w > m * 2 + 30 * u && h > m * 2 + 30 * u) {
-      notched(g, m, m, w - m * 2, h - m * 2, 9 * u);
-      g.strokeStyle = 'rgba(134,100,56,0.5)';
-      g.lineWidth = Math.max(1, 1.2 * u);
-      g.stroke();
-      // 四角朱砂小点
-      g.fillStyle = 'rgba(184,52,38,0.75)';
-      const d = 2.2 * u, o = m + 2.4 * u;
-      for (const [cx, cy] of [[o, o], [w - o, o], [o, h - o], [w - o, h - o]]) { g.beginPath(); g.arc(cx, cy, d, 0, Math.PI * 2); g.fill(); }
-    }
-  } else {
-    const m = b2 + 3 * u;
-    rr(g, m, m, w - m * 2, h - m * 2, Math.max(1, r - m));
-    g.strokeStyle = 'rgba(134,100,56,0.36)';
-    g.lineWidth = Math.max(1, u);
-    g.stroke();
-  }
+  const color = style === 'inset' ? '#dad6c3' : style === 'tile' ? '#e6dfc8' : '#f1ead6';
+  paintXuanPaper(g, w, h, u, color);
 }
 
 // —— 按钮 ——
@@ -293,7 +164,7 @@ export const LACQUER: Record<string, Lacquer> = {
 };
 
 /** 平染宣纸：纤维露在纸边，略有起伏的轮廓按尺寸生成，不随帧抖动。 */
-export function paintXuanPaper(g: G, w: number, h: number, u: number, color: string, pressed = false) {
+export function paintXuanPaper(g: G, w: number, h: number, u: number, color: string, pressed = false, edgeColor = 'rgba(75,65,45,.45)', round = false) {
   let seed = seedOf(w, h);
   const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   const margin = Math.min(3.5 * u, Math.min(w, h) * 0.08);
@@ -313,17 +184,26 @@ export function paintXuanPaper(g: G, w: number, h: number, u: number, color: str
     }
     g.lineTo(bx, by);
   }
-  edge(x0 + corner, y0, x1 - corner, y0);
-  g.lineTo(x1, y0 + corner);
-  edge(x1, y0 + corner, x1, y1 - corner);
-  g.lineTo(x1 - corner, y1);
-  edge(x1 - corner, y1, x0 + corner, y1);
-  g.lineTo(x0, y1 - corner);
-  edge(x0, y1 - corner, x0, y0 + corner);
+  if (round) {
+    const radius = Math.min(w, h) / 2 - margin;
+    for (let i = 0; i < 48; i++) {
+      const a = i * Math.PI / 24, r = radius + margin * (random() - 0.5) * 0.7;
+      const x = w / 2 + r * Math.cos(a), y = h / 2 + r * Math.sin(a);
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+  } else {
+    edge(x0 + corner, y0, x1 - corner, y0);
+    g.lineTo(x1, y0 + corner);
+    edge(x1, y0 + corner, x1, y1 - corner);
+    g.lineTo(x1 - corner, y1);
+    edge(x1 - corner, y1, x0 + corner, y1);
+    g.lineTo(x0, y1 - corner);
+    edge(x0, y1 - corner, x0, y0 + corner);
+  }
   g.closePath();
   g.fillStyle = pressed ? mix(color, '#322e25', 0.12) : color;
   g.fill();
-  g.strokeStyle = 'rgba(75,65,45,.45)';
+  g.strokeStyle = edgeColor;
   g.lineWidth = Math.max(0.8, 1.2 * u);
   g.stroke();
   g.clip();
@@ -356,131 +236,21 @@ export function paintSlipButton(g: G, w: number, h: number, u: number, accent: s
   paintXuanPaper(g, w, h, u, disabled ? '#d7d3c2' : mix('#e4e4ce', accent, .045), pressed);
 }
 
-// —— 题签（标题条） ——
-export function paintRibbon(g: G, w: number, h: number, u: number, c: Lacquer) {
-  const tail = 22 * u, ty = 9 * u, th = h - 12 * u;
-  // 两侧燕尾（在主体后面，颜色更深）
-  for (const dir of [-1, 1]) {
-    const x0 = dir < 0 ? -tail : w + tail;
-    const x1 = dir < 0 ? 16 * u : w - 16 * u;
-    g.beginPath();
-    g.moveTo(x1, ty);
-    g.lineTo(x0, ty);
-    g.lineTo(x0 + dir * -10 * u, ty + th / 2);
-    g.lineTo(x0, ty + th);
-    g.lineTo(x1, ty + th);
-    g.closePath();
-    g.fillStyle = c.lip;
-    g.fill();
-    g.strokeStyle = 'rgba(226,189,105,0.75)';
-    g.lineWidth = Math.max(1, 1.2 * u);
-    g.stroke();
-  }
-  const r = 8 * u;
-  softShadow(g, 0, 0, w, h, r, 7 * u, 0.26, 3 * u);
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = goldGrad(g, 0, h);
-  g.fill();
-  const b = Math.max(1.5, 2.2 * u);
-  rr(g, b, b, w - b * 2, h - b * 2, r - b);
-  g.fillStyle = vgrad(g, 0, h, [[0, c.top], [0.5, c.mid], [1, c.bot]]);
-  g.fill();
-  g.save();
-  rr(g, b, b, w - b * 2, h - b * 2, r - b);
-  g.clip();
-  g.fillStyle = vgrad(g, 0, h * 0.5, [[0, 'rgba(255,255,255,0.2)'], [1, 'rgba(255,255,255,0)']]);
-  g.fillRect(0, 0, w, h * 0.5);
-  g.restore();
-  const m = b + 3.4 * u;
-  notched(g, m, m, w - m * 2, h - m * 2, 5 * u);
-  g.strokeStyle = 'rgba(255,232,170,0.5)';
-  g.lineWidth = Math.max(1, u);
-  g.stroke();
-}
-
-// —— 物品 / 头像格 ——
+// 物品品质以淡染纸色及单层色线区分。
 export function paintSlot(g: G, s: number, u: number, color: string) {
-  const r = Math.min(10 * u, s * 0.16);
-  const seed = seedOf(s, s, color.charCodeAt(2));
-  softShadow(g, 0, 0, s, s, r, 5 * u, 0.2, 2.5 * u);
-  rr(g, 0, 0, s, s, r);
-  g.fillStyle = '#2a2018';
-  g.fill();
-  const b = Math.max(1, 1.4 * u);
-  // 品质色边
-  rr(g, b, b, s - b * 2, s - b * 2, r - b);
-  g.fillStyle = vgrad(g, 0, s, [[0, mix(color, '#ffffff', 0.35)], [0.5, color], [1, mix(color, '#1a120c', 0.35)]]);
-  g.fill();
-  const b2 = b + Math.max(1.6, 2.6 * u);
-  rr(g, b2, b2, s - b2 * 2, s - b2 * 2, Math.max(1, r - b2));
-  g.fillStyle = vgrad(g, 0, s, [[0, mix('#fbf4e2', color, 0.06)], [0.55, mix('#f1e4c8', color, 0.14)], [1, mix('#e2d0ac', color, 0.3)]]);
-  g.fill();
-  paperGrain(g, b2, b2, s - b2 * 2, s - b2 * 2, Math.max(1, r - b2), u, seed, 0.8);
-  // 中心一团柔光，托住图标
-  g.save();
-  rr(g, b2, b2, s - b2 * 2, s - b2 * 2, Math.max(1, r - b2));
-  g.clip();
-  const rg = g.createRadialGradient(s / 2, s * 0.46, s * 0.05, s / 2, s * 0.46, s * 0.5);
-  rg.addColorStop(0, 'rgba(255,253,244,0.75)');
-  rg.addColorStop(1, 'rgba(255,253,244,0)');
-  g.fillStyle = rg;
-  g.fillRect(0, 0, s, s);
-  g.restore();
-  rr(g, b2 + 0.5, b2 + 0.5, s - b2 * 2 - 1, s - b2 * 2 - 1, Math.max(1, r - b2));
-  g.strokeStyle = 'rgba(60,40,20,0.3)';
-  g.lineWidth = Math.max(1, 0.8 * u);
-  g.stroke();
+  paintXuanPaper(g, s, s, u, mix('#eee8d4', color, .14), false, mix(color, '#514c40', .38));
 }
 
-// —— 墨漆小牌（货币条、战力牌、提示条） ——
-export function paintInkPill(g: G, w: number, h: number, u: number, alpha = 0.9, gold = true) {
-  const r = h / 2;
-  softShadow(g, 0, 0, w, h, r, 5 * u, 0.2, 2 * u);
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = gold ? goldGrad(g, 0, h) : 'rgba(20,14,10,0.9)';
-  g.fill();
-  const b = Math.max(1, 1.5 * u);
-  rr(g, b, b, w - b * 2, h - b * 2, r - b);
-  g.fillStyle = vgrad(g, 0, h, [[0, `rgba(66,50,38,${alpha})`], [0.5, `rgba(38,28,21,${alpha})`], [1, `rgba(24,17,12,${alpha})`]]);
-  g.fill();
+export function paintInkPill(g: G, w: number, h: number, u: number, alpha = .9) {
   g.save();
-  rr(g, b, b, w - b * 2, h - b * 2, r - b);
-  g.clip();
-  g.fillStyle = 'rgba(255,236,190,0.1)';
-  g.fillRect(0, b, w, h * 0.42);
+  g.globalAlpha *= alpha;
+  paintXuanPaper(g, w, h, u, '#414b41');
   g.restore();
 }
 
-/** 圆形徽章底（侧边功能按钮）：描金圈 + 宣纸面 */
-export function paintMedal(g: G, s: number, u: number, pressed: boolean, tone: 'paper' | 'ink' = 'paper') {
-  const c = s / 2, r = s / 2;
-  softShadow(g, 0, 0, s, s, r, 6 * u, pressed ? 0.14 : 0.28, pressed ? 1.5 * u : 4 * u);
-  g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2);
-  g.fillStyle = '#2a2018';
-  g.fill();
-  g.beginPath(); g.arc(c, c, r - Math.max(1, 1.4 * u), 0, Math.PI * 2);
-  g.fillStyle = goldGrad(g, 0, s);
-  g.fill();
-  const ri = r - Math.max(2.5, 4.2 * u);
-  g.beginPath(); g.arc(c, c, ri, 0, Math.PI * 2);
-  if (tone === 'paper') {
-    const rg = g.createRadialGradient(c, c - ri * 0.35, ri * 0.1, c, c, ri);
-    rg.addColorStop(0, '#fffaf0');
-    rg.addColorStop(0.7, '#f1e4c8');
-    rg.addColorStop(1, '#dcc8a2');
-    g.fillStyle = rg;
-  } else {
-    const rg = g.createRadialGradient(c, c - ri * 0.35, ri * 0.1, c, c, ri);
-    rg.addColorStop(0, '#5a493c');
-    rg.addColorStop(1, '#231a14');
-    g.fillStyle = rg;
-  }
-  g.fill();
-  g.beginPath(); g.arc(c, c, ri - 2.4 * u, 0, Math.PI * 2);
-  g.strokeStyle = tone === 'paper' ? 'rgba(134,100,56,0.42)' : 'rgba(255,226,160,0.3)';
-  g.lineWidth = Math.max(1, u);
-  g.stroke();
-  if (pressed) { g.beginPath(); g.arc(c, c, ri, 0, Math.PI * 2); g.fillStyle = 'rgba(40,24,10,0.16)'; g.fill(); }
+export function paintMedal(g: G, s: number, u: number, pressed: boolean, tone: 'paper' | 'ink' | 'red' = 'paper') {
+  const color = tone === 'red' ? '#a24336' : tone === 'ink' ? '#414b41' : '#e4e2cb';
+  paintXuanPaper(g, s, s, u, color, pressed, 'rgba(75,65,45,.42)', true);
 }
 
 /** 进度条槽 */

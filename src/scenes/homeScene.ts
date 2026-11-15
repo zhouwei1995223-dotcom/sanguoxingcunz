@@ -2,7 +2,7 @@ import { game, Scene } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { cachedLayer } from '../ui/layerCache';
-import { drawSkin, paintInkPill, paintXuanPaper, paintMedal, paintDyedButton, paintSlipButton, LACQUER, Lacquer, rr, goldGrad, softShadow, mix, paperGrain } from '../ui/skin';
+import { drawSkin, paintInkPill, paintXuanPaper, paintMedal, paintDyedButton, paintSlipButton, LACQUER, Lacquer, rr, softShadow, mix } from '../ui/skin';
 import { paintPageBg } from './homeArt';
 import { currentWeekly } from '../meta/goals';
 import { HomeBackground } from './homeBg';
@@ -264,17 +264,8 @@ export class HomeScene implements Scene {
     const bh = h + ui.safeBottom;
     ui.markDark(0, y - 14 * u, ui.W, bh + 14 * u);
     drawSkin(ctx, 'navbar', 0, y, ui.W, bh, 16 * u, (g, w0, h0) => {
-      const sh = g.createLinearGradient(0, -14 * u, 0, 0);
-      sh.addColorStop(0, 'rgba(30,18,8,0)'); sh.addColorStop(1, 'rgba(30,18,8,0.3)');
-      g.fillStyle = sh; g.fillRect(0, -14 * u, w0, 14 * u);
-      const body = g.createLinearGradient(0, 0, 0, h0);
-      body.addColorStop(0, '#3a2d23'); body.addColorStop(0.35, '#261c15'); body.addColorStop(1, '#140e0a');
-      g.fillStyle = body; g.fillRect(0, 0, w0, h0);
-      const gl = g.createLinearGradient(0, 0, w0, 0);
-      gl.addColorStop(0, '#8a6226'); gl.addColorStop(0.5, '#f6dc9a'); gl.addColorStop(1, '#8a6226');
-      g.fillStyle = gl; g.fillRect(0, 0, w0, Math.max(2, 2.6 * u));
-      g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, Math.max(2, 2.6 * u), w0, Math.max(1, u));
-      g.fillStyle = 'rgba(255,226,160,0.1)'; g.fillRect(0, 6 * u, w0, Math.max(1, u));
+      g.fillStyle = '#303c34';
+      g.fillRect(0, 0, w0, h0);
     });
     const tw = ui.W / TABS.length;
     TABS.forEach((t, i) => {
@@ -599,7 +590,10 @@ export class HomeScene implements Scene {
     ui.text('生存十分钟 · 全凭签运', tx, y + 70 * u + row * 0.55, 29, '#2a1d14', 'left', null);
     ui.text('砍树打怪攒金币，摇签得兵器、借名将', tx, y + 70 * u + row * 1.55, 19, '#5c4d3e', 'left', null);
 
-    ui.text(st.bestDmg ? `天命伤害最佳 ${fmtNum(st.bestDmg)} · 养成带入 装备10% 军略50%` : '养成带入：装备 10% · 军略 50%', tx, y + 70 * u + row * 2.5, 19, '#6a3a9a', 'left', null);
+    const record = st.bestDmg ? `最佳 ${fmtNum(st.bestDmg)} · 装备10% 军略50%` : '养成带入：装备 10% · 军略 50%';
+    const available = cx + cw / 2 - 20 * u - tx;
+    const recordSize = Math.min(19, 19 * available / ui.measure(record, 19));
+    ui.text(record, tx, y + 70 * u + row * 2.5, recordSize, '#6a3a9a', 'left', null);
     ui.text('每局都有奖励 · 活得越久、伤害越高越多', tx, y + 70 * u + row * 3.45, 19, '#a22633', 'left', null);
     if (ui.button('tj_rules', 30 * u, L.by, 150 * u, L.bh, '玩法', C.btnGray, { size: 27, sub: '签与概率' })) game.openDialog(new TianjiRulesDialog());
     if (ui.button('tj_rank', 190 * u, L.by, 150 * u, L.bh, '排行', C.btnBlue, { size: 27, sub: '天命伤害' })) game.openDialog(new RankDialog('tianji'));
@@ -827,7 +821,7 @@ export class HomeScene implements Scene {
       }
       // 左上角进度小牌
       const iw = ui.measure(tile.info, 18) + 30 * u;
-      drawSkin(ctx, 'ar_chip', x + 14 * u, y + 14 * u, iw, 34 * u, 6 * u, (g, w0, h0) => paintInkPill(g, w0, h0, u, 0.78, false));
+      drawSkin(ctx, 'ar_chip', x + 14 * u, y + 14 * u, iw, 34 * u, 6 * u, (g, w0, h0) => paintInkPill(g, w0, h0, u, 0.78));
       ui.text(tile.info, x + 14 * u + iw / 2, y + 31.5 * u, 18, '#ffe9c0', 'center', null);
       ui.text(tile.name, x + 24 * u, y + th - 62 * u, 36, '#fff6e0', 'left', tile.lac.ink);
       ui.text(tile.sub, x + 24 * u, y + th - 26 * u, 19, '#ffe9c0', 'left', null);
@@ -1155,7 +1149,7 @@ export class HomeScene implements Scene {
       }
       if (save.hero === h.id) {
         ui.markDark(x + kw - 66 * u, y + 108 * u, 60 * u, 28 * u);
-        drawSkin(ctx, 'tag_on', x + kw - 66 * u, y + 108 * u, 60 * u, 28 * u, 4 * u, (g, w0, h0) => { rr(g, 0, 0, w0, h0, 6 * u); g.fillStyle = '#b02c22'; g.fill(); g.strokeStyle = '#f6dc9a'; g.lineWidth = Math.max(1, 1.2 * u); g.stroke(); });
+        drawSkin(ctx, 'tag_on', x + kw - 66 * u, y + 108 * u, 60 * u, 28 * u, 2 * u, (g, w0, h0) => paintXuanPaper(g, w0, h0, u, '#a24336'));
         ui.text('出战', x + kw - 36 * u, y + 122 * u, 17, '#fff6e0', 'center', null);
       }
       if (wish && wish.id === h.id) ui.icon('star', x + 24 * u, y + 56 * u, 22 * u);
@@ -1196,7 +1190,7 @@ export class HomeScene implements Scene {
     if (st.owned) for (let k = 0; k < 5; k++) ui.icon('star', tx + 14 * u + k * 34 * u, sy + 152 * u, 30 * u, k < st.star ? 1 : 0.25);
     else { ui.icon('lock', tx + 16 * u, sy + 152 * u, 30 * u); ui.text('尚未获得', tx + 40 * u, sy + 152 * u, 22, '#ffe9c0', 'left', null); }
     const rw = ui.measure(h.role, 20) + 32 * u;
-    drawSkin(ctx, 'ar_chip', tx, sy + 180 * u, rw, 36 * u, 6 * u, (g, w0, h0) => paintInkPill(g, w0, h0, u, 0.78, false));
+    drawSkin(ctx, 'ar_chip', tx, sy + 180 * u, rw, 36 * u, 6 * u, (g, w0, h0) => paintInkPill(g, w0, h0, u, 0.78));
     ui.text(h.role, tx + rw / 2, sy + 198.5 * u, 20, '#ffe9c0', 'center', null);
     ui.wrapText(`「${h.quote}」`, tx, sy + 228 * u, sw * 0.45, 19, '#fff4d6', 1.4, 'left', null);
     // 左右切换（按名册当前的顺序）
@@ -1533,106 +1527,24 @@ export class HomeScene implements Scene {
 
 const CAMP_LACQUER: Record<string, Lacquer> = { shu: LACQUER.green, wei: LACQUER.blue, wu: LACQUER.red, qun: LACQUER.purple };
 
-/** 名册里的武将卡：品阶色描边 + 阵营淡染的纸面，上半截一团光托住人物 */
+/** 武将卡以纸色表现阵营，以单层色线表现品阶。 */
 function paintHeroCard(g: CanvasRenderingContext2D, w: number, h: number, u: number, rank: string, camp: string, owned: boolean, pressed: boolean) {
-  const r = 12 * u;
-  softShadow(g, 0, 0, w, h, r, 7 * u, pressed ? 0.12 : 0.22, pressed ? 1.5 * u : 3.5 * u);
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = '#2a2018';
-  g.fill();
-  const b1 = Math.max(1, 1.4 * u);
-  rr(g, b1, b1, w - b1 * 2, h - b1 * 2, r - b1);
-  const bg = g.createLinearGradient(0, 0, 0, h);
-  const rc = owned ? rank : mix(rank, '#8d8272', 0.65);
-  bg.addColorStop(0, mix(rc, '#ffffff', 0.4)); bg.addColorStop(0.5, rc); bg.addColorStop(1, mix(rc, '#1a120c', 0.4));
-  g.fillStyle = bg;
-  g.fill();
-  const b2 = b1 + Math.max(2, 3 * u);
-  rr(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2);
-  const face = g.createLinearGradient(0, 0, 0, h);
-  if (owned) { face.addColorStop(0, mix('#fbf4e2', camp, 0.1)); face.addColorStop(0.62, mix('#f1e4c8', camp, 0.2)); face.addColorStop(0.64, '#f6ecd6'); face.addColorStop(1, '#e6d6b6'); }
-  else { face.addColorStop(0, '#d9cfbc'); face.addColorStop(0.62, '#c9bda6'); face.addColorStop(0.64, '#ddd3c0'); face.addColorStop(1, '#cfc4ae'); }
-  g.fillStyle = face;
-  g.fill();
-  paperGrain(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2, u, Math.round(w + h), 0.8);
-  g.save();
-  rr(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2);
-  g.clip();
-  const rg = g.createRadialGradient(w / 2, h * 0.36, 4 * u, w / 2, h * 0.36, w * 0.5);
-  rg.addColorStop(0, owned ? 'rgba(255,252,240,0.9)' : 'rgba(255,252,240,0.35)');
-  rg.addColorStop(1, 'rgba(255,252,240,0)');
-  g.fillStyle = rg;
-  g.fillRect(0, 0, w, h * 0.64);
-  // 人物脚下的地台
-  g.fillStyle = owned ? mix(camp, '#3a2a1a', 0.3) : '#8d8272';
-  g.globalAlpha = 0.22;
-  g.save(); g.translate(w / 2, h * 0.585); g.scale(1, 0.26); g.beginPath(); g.arc(0, 0, w * 0.34, 0, Math.PI * 2); g.restore(); g.fill();
-  g.globalAlpha = 1;
-  g.fillStyle = 'rgba(120,90,50,0.35)';
-  g.fillRect(b2 + 8 * u, h * 0.64, w - b2 * 2 - 16 * u, Math.max(1, u));
-  if (pressed) { g.fillStyle = 'rgba(40,24,10,0.12)'; g.fillRect(0, 0, w, h); }
-  g.restore();
+  const color = owned ? mix('#f1ead6', camp, .08) : '#ddd9c8';
+  paintXuanPaper(g, w, h, u, color, pressed, mix(rank, '#6c6554', owned ? .28 : .6));
+  g.fillStyle = 'rgba(85,77,62,.19)';
+  g.fillRect(12 * u, h * .64, w - 24 * u, Math.max(1, u));
 }
 
 const TILE_AMBER = { top: '#e6a850', mid: '#bf7426', bot: '#8a4a14', lip: '#55290a', ink: '#42200a' };
 
-/** 演武页的模式牌：漆面底色 + 远山日轮 + 底部压暗托字；选中时描亮金边 */
-function paintArenaTile(g: CanvasRenderingContext2D, w: number, h: number, u: number, c: typeof LACQUER.red, sel: boolean, pressed: boolean) {
-  const r = 16 * u;
-  softShadow(g, 0, 0, w, h, r, 12 * u, sel ? 0.34 : 0.24, 5 * u);
+/** 染色宣纸托住演武插画与阵营立绘，选中的模式加朱砂印记。 */
+function paintArenaTile(g: CanvasRenderingContext2D, w: number, h: number, u: number, c: Lacquer, sel: boolean, pressed: boolean) {
+  const color = mix(c.mid, '#303c34', sel ? .46 : .67);
+  paintXuanPaper(g, w, h, u, color, pressed, sel ? '#a24336' : '#625d4a');
   if (sel) {
-    g.strokeStyle = 'rgba(250,214,120,0.55)';
-    g.lineWidth = 7 * u;
-    rr(g, -2 * u, -2 * u, w + 4 * u, h + 4 * u, r + 2 * u);
-    g.stroke();
+    g.fillStyle = '#be6652';
+    g.fillRect(19 * u, h - 64 * u, 3 * u, 42 * u);
   }
-  rr(g, 0, 0, w, h, r);
-  g.fillStyle = '#231a13';
-  g.fill();
-  const b1 = Math.max(1, 1.6 * u);
-  rr(g, b1, b1, w - b1 * 2, h - b1 * 2, r - b1);
-  if (sel) g.fillStyle = goldGrad(g, 0, h);
-  else { const gg = g.createLinearGradient(0, 0, 0, h); gg.addColorStop(0, '#b89a5e'); gg.addColorStop(1, '#6e5426'); g.fillStyle = gg; }
-  g.fill();
-  const b2 = b1 + (sel ? 3.2 : 2) * u;
-  rr(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2);
-  const bg = g.createLinearGradient(0, 0, 0, h);
-  bg.addColorStop(0, c.top); bg.addColorStop(0.5, c.mid); bg.addColorStop(1, c.bot);
-  g.fillStyle = bg;
-  g.fill();
-  g.save();
-  rr(g, b2, b2, w - b2 * 2, h - b2 * 2, r - b2);
-  g.clip();
-  // 日轮与光晕
-  const sx = w * 0.76, sy = h * 0.3;
-  const sg = g.createRadialGradient(sx, sy, 0, sx, sy, h * 0.7);
-  sg.addColorStop(0, 'rgba(255,244,210,0.42)'); sg.addColorStop(0.3, 'rgba(255,244,210,0.14)'); sg.addColorStop(1, 'rgba(255,244,210,0)');
-  g.fillStyle = sg; g.fillRect(0, 0, w, h);
-  g.fillStyle = 'rgba(255,246,222,0.3)';
-  g.beginPath(); g.arc(sx, sy, h * 0.16, 0, Math.PI * 2); g.fill();
-  // 两重远山
-  g.fillStyle = 'rgba(12,8,6,0.16)';
-  g.beginPath(); g.moveTo(0, h); g.lineTo(0, h * 0.5);
-  g.quadraticCurveTo(w * 0.16, h * 0.3, w * 0.34, h * 0.5); g.quadraticCurveTo(w * 0.5, h * 0.62, w * 0.66, h * 0.44); g.quadraticCurveTo(w * 0.86, h * 0.3, w, h * 0.52);
-  g.lineTo(w, h); g.closePath(); g.fill();
-  g.fillStyle = 'rgba(12,8,6,0.2)';
-  g.beginPath(); g.moveTo(0, h); g.lineTo(0, h * 0.66);
-  g.quadraticCurveTo(w * 0.3, h * 0.5, w * 0.52, h * 0.68); g.quadraticCurveTo(w * 0.78, h * 0.56, w, h * 0.7);
-  g.lineTo(w, h); g.closePath(); g.fill();
-  // 地面一抹亮
-  const fl = g.createLinearGradient(0, h * 0.56, 0, h * 0.74);
-  fl.addColorStop(0, 'rgba(255,240,200,0)'); fl.addColorStop(1, 'rgba(255,240,200,0.12)');
-  g.fillStyle = fl; g.fillRect(0, h * 0.56, w, h * 0.18);
-  // 底部压暗托字
-  const dk = g.createLinearGradient(0, h * 0.52, 0, h);
-  dk.addColorStop(0, 'rgba(10,6,4,0)'); dk.addColorStop(1, 'rgba(10,6,4,0.72)');
-  g.fillStyle = dk; g.fillRect(0, h * 0.52, w, h * 0.48);
-  if (pressed) { g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, 0, w, h); }
-  g.restore();
-  rr(g, b2 + 5 * u, b2 + 5 * u, w - (b2 + 5 * u) * 2, h - (b2 + 5 * u) * 2, r - b2 - 4 * u);
-  g.strokeStyle = 'rgba(255,232,170,0.28)';
-  g.lineWidth = Math.max(1, u);
-  g.stroke();
 }
 
 function fmtStat(stat: string, v: number): string {

@@ -1,3 +1,4 @@
+import { drawSkin, paintXuanPaper } from '../ui/skin';
 import { game, Dialog } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
@@ -84,16 +85,24 @@ export class SigninDialog implements Dialog {
       const y = f.y + 90 * u + row * (ch + 20 * u);
       const done = i < idx || (i === idx && !can);
       const today = i === idx && can;
-      ui.pixRect(x + 6 * u, y, cw - 12 * u, ch, today ? '#feae34' : '#120d0c');
-      ui.pixRect(x + 10 * u, y + 4 * u, cw - 20 * u, ch - 8 * u, big ? '#5a3a14' : '#3a2c2a');
+      if (ui.paperTheme) {
+        const tint = done ? '#d1cebc' : today ? '#ecddc1' : '#e6e3cf';
+        drawSkin(ui.ctx, 'signin_' + tint + big, x + 6 * u, y, cw - 12 * u, ch, 2 * u,
+          (g, w0, h0) => paintXuanPaper(g, w0, h0, u, tint, false, today || big ? '#a35441' : '#a6a18b'));
+      } else {
+        ui.pixRect(x + 6 * u, y, cw - 12 * u, ch, today ? '#feae34' : '#120d0c');
+        ui.pixRect(x + 10 * u, y + 4 * u, cw - 20 * u, ch - 8 * u, big ? '#5a3a14' : '#3a2c2a');
+      }
       ui.text(r.hero ? `第${i + 1}天·${HERO_BY_ID[r.hero].name}` : `第${i + 1}天`, x + cw / 2, y + 28 * u, 22, today ? '#fee761' : '#fff4d6');
       const e = rewardEntries(r)[0];
       ui.qualityFrame(x + cw / 2 - 45 * u, y + 52 * u, 90 * u, e.frame || '#8b9bb4');
       ui.icon(e.icon, x + cw / 2, y + 97 * u, 56 * u);
       ui.text(r.hero && r.yuanbao ? `${e.count} +${r.yuanbao}元宝` : e.count, x + cw / 2, y + 168 * u, r.hero && r.yuanbao ? 18 : 22, '#fff');
       if (done) {
-        ui.ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        ui.ctx.fillRect(x + 10 * u, y + 4 * u, cw - 20 * u, ch - 8 * u);
+        if (!ui.paperTheme) {
+          ui.ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ui.ctx.fillRect(x + 10 * u, y + 4 * u, cw - 20 * u, ch - 8 * u);
+        }
         ui.text('✓', x + cw / 2, y + ch / 2, 60, '#9be37a', 'center');
       }
     });
