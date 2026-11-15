@@ -89,7 +89,7 @@ export class HomeCamp {
   /**
    * fireY：篝火在屏幕上的 y（设备像素）；S：放大倍数。整个屏幕都画成营地地面。
    */
-  draw(g: CanvasRenderingContext2D, dt: number, W: number, H: number, fireY: number, S: number) {
+  draw(g: CanvasRenderingContext2D, dt: number, W: number, H: number, fireY: number, S: number, showSelection = true) {
     this.t += dt;
     this.syncRoster();
     this.update(dt);
@@ -207,13 +207,15 @@ export class HomeCamp {
     const hs = sprite(`${heroName}_${idle ? 4 + (Math.floor(t * 5) % 4) : 0}`);
     list.push({ y: HERO_POS[1], draw: () => {
       // 脚下金色光圈 + 头顶「出战」标签
-      const pulse = 0.55 + 0.25 * Math.sin(t * 3);
-      g.globalAlpha = pulse;
-      g.strokeStyle = '#fee761'; g.lineWidth = S;
-      g.save(); g.translate(X(HERO_POS[0]), Y(HERO_POS[1])); g.scale(1, 0.4); g.beginPath(); g.arc(0, 0, 15 * S, 0, TAU); g.restore(); g.stroke();
-      g.globalAlpha = 1;
+      if (showSelection) {
+        g.globalAlpha = 0.55 + 0.25 * Math.sin(t * 3);
+        g.strokeStyle = '#fee761'; g.lineWidth = S;
+        g.save(); g.translate(X(HERO_POS[0]), Y(HERO_POS[1])); g.scale(1, 0.4); g.beginPath(); g.arc(0, 0, 15 * S, 0, TAU); g.restore(); g.stroke();
+        g.globalAlpha = 1;
+      }
       g.fillStyle = 'rgba(70,46,22,0.22)'; g.fillRect(X(HERO_POS[0] - 8), Y(HERO_POS[1]), 16 * S, S); g.fillRect(X(HERO_POS[0] - 6), Y(HERO_POS[1] - 1), 12 * S, 3 * S);
       blit(hs, HERO_POS[0], HERO_POS[1]);
+      if (!showSelection) return;
       const ty = Y(HERO_POS[1] - hs.ay - 5 + Math.sin(t * 3) * 1.2);
       const hx = X(HERO_POS[0]);
       g.fillStyle = '#3a1410'; g.fillRect(hx - 10 * S, ty - 6 * S, 20 * S, 9 * S);

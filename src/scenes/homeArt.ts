@@ -11,9 +11,9 @@ type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 
 /** 墨字、朱印与副题在同一透明图层印一次，山水透过飞白露出来。 */
-export function drawGameTitle(ctx: G, width: number, y: number, scale: number) {
+export function drawGameTitle(ctx: G, width: number, y: number, scale: number, nameOnly = false) {
   const mid = 60;
-  const layer = cachedLayer('inkTitle', String(scale), width, 148 * scale, (g) => {
+  const layer = cachedLayer('inkTitle', scale + ':' + nameOnly, width, 148 * scale, (g) => {
     g.scale(scale, scale);
     const name = GAME_INFO.shortName;
     const face = '"KaiTi","Kaiti SC","STKaiti","Noto Serif SC","SimSun",serif';
@@ -21,7 +21,7 @@ export function drawGameTitle(ctx: G, width: number, y: number, scale: number) {
     g.textBaseline = 'middle';
     const textWidth = g.measureText(name).width;
     const stampWidth = 34, gap = 13;
-    const left = (width / scale - textWidth - gap - stampWidth) / 2;
+    const left = (width / scale - textWidth - (nameOnly ? 0 : gap + stampWidth)) / 2;
     g.fillStyle = '#293931';
     g.fillText(name, left, mid);
     // 稀疏的纸纤维在字的墨面内留下细短断纹，字号缩小时仍能读清。
@@ -35,6 +35,7 @@ export function drawGameTitle(ctx: G, width: number, y: number, scale: number) {
     }
     g.restore();
 
+    if (nameOnly) return;
     const sx = left + textWidth + gap, sy = mid - 36;
     g.save();
     g.translate(sx, sy);
