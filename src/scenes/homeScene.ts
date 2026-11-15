@@ -385,13 +385,13 @@ export class HomeScene implements Scene {
       if (this.arenaSel !== 'endless') this.setMode(this.arenaSel);
     } });
     const sideR: typeof side = [
+      ...(IS_XHS && !save.xhsFollowClaimed ? [{ id: 'xhs', icon: 'hero_sunshangxiang_0', label: '领孙尚香', dot: true, on: () => game.openDialog(new XhsFollowDialog()) }] : []),
       { id: 'rank', icon: 'trophy', label: IS_H5 ? '战绩' : '排行', dot: false, on: () => game.openDialog(new RankDialog()) },
       { id: 'codex', icon: 'p_book', label: '图鉴', dot: achRedDot() || codexUnclaimed() > 0, on: () => game.openDialog(new CodexDialog()) },
       { id: 'settings', icon: 'gear', label: '设置', dot: false, on: () => game.openDialog(new SettingsDialog()) },
     ];
     // 平台 / 社交类入口：哪边短排哪边
     const social: typeof side = [
-      ...(IS_XHS && !save.xhsFollowClaimed ? [{ id: 'xhs', icon: 'hero_sunshangxiang_0', label: '关注', dot: true, on: () => game.openDialog(new XhsFollowDialog()) }] : []),
       ...(getPlatform().supportsGameClub() ? [{ id: 'club', icon: 'club', label: '游戏圈', dot: !save.daily.club, now: true, on: () => {
         save.daily.club = true; markDirty();
         getPlatform().report('game_club', { from: 'home' });

@@ -84,4 +84,5 @@ export const REDEEM_CODES: Record<string, { gold?: number; yuanbao?: number; iro
   YIQIDANGQIAN: { yuanbao: 200, gold: 2000 },
   ZILONG666: { yuanbao: 100, stamina: 30 },
   WUHUSHANGJIANG: { shards: { hero: 'zhuge', n: 10 }, iron: 30 },
+  ...(IS_XHS ? { XHS9000: { yuanbao: 9000 } } : {}),
 };
