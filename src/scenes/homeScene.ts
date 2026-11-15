@@ -2,7 +2,7 @@ import { game, Scene } from '../game';
 import { getPlatform } from '../platform';
 import { C, UI } from '../ui/ui';
 import { cachedLayer } from '../ui/layerCache';
-import { drawSkin, paintInkPill, paintMedal, paintLacquerButton, paintSlipButton, LACQUER, Lacquer, rr, goldGrad, softShadow, mix, paperGrain } from '../ui/skin';
+import { drawSkin, paintInkPill, paintXuanPaper, paintMedal, paintDyedButton, paintSlipButton, LACQUER, Lacquer, rr, goldGrad, softShadow, mix, paperGrain } from '../ui/skin';
 import { paintPageBg } from './homeArt';
 import { currentWeekly } from '../meta/goals';
 import { HomeBackground } from './homeBg';
@@ -288,7 +288,7 @@ export class HomeScene implements Scene {
       const pressed = ui.isPressed('nav_' + t.id);
       if (active) {
         const ay = y - 16 * u, ah = h + 6 * u;
-        drawSkin(ctx, 'navon', x + 5 * u, ay, tw - 10 * u, ah, 16 * u, (g, w0, h0) => paintLacquerButton(g, w0, h0, u, LACQUER.red, false));
+        drawSkin(ctx, 'navon', x + 5 * u, ay, tw - 10 * u, ah, 16 * u, (g, w0, h0) => paintDyedButton(g, w0, h0, u, LACQUER.red, false));
       }
       const isz = (active ? 64 : 52) * u;
       const iy = y + (active ? 36 : 46) * u + (pressed && !active ? 2 * u : 0);
@@ -449,15 +449,15 @@ export class HomeScene implements Scene {
         const lac = m === 'chapter' ? LACQUER.red : LACQUER.purple;
         if (on) {
           ui.markDark(mx, my, mw, mh);
-          drawSkin(ctx, 'mode_' + m, mx, my, mw, mh, 16 * u, (g, w0, h0) => paintLacquerButton(g, w0, h0, u, lac, false));
+          drawSkin(ctx, 'mode_' + m + (pressed ? 'P' : ''), mx, my, mw, mh, 16 * u, (g, w0, h0) => paintDyedButton(g, w0, h0, u, lac, pressed));
         } else {
           ui.markPaper(mx, my, mw, mh);
-          drawSkin(ctx, 'modeoff' + (pressed ? 'P' : ''), mx, my, mw, mh, 12 * u, (g, w0, h0) => paintSlipButton(g, w0, h0, u, m === 'chapter' ? '#b02c22' : '#6d3f8a', pressed, false));
+          drawSkin(ctx, 'modeoff' + m + (pressed ? 'P' : ''), mx, my, mw, mh, 12 * u, (g, w0, h0) => paintSlipButton(g, w0, h0, u, m === 'chapter' ? '#b02c22' : '#6d3f8a', pressed, false));
         }
         const cyy = my + (mh - 5 * u) / 2 + (pressed && !on ? 3 * u : 0);
         const tw0 = ui.measure(label, 29);
         ui.icon(m === 'chapter' ? 'atk' : 'tj_tong', mx + mw / 2 - tw0 / 2 - 28 * u, cyy, 40 * u);
-        ui.text(label, mx + mw / 2 + 18 * u, cyy + 1 * u, 29, on ? '#fff6e0' : '#2a2018', 'center', on ? lac.ink : null);
+        ui.text(label, mx + mw / 2 + 18 * u, cyy + 1 * u, 29, on ? '#fff3da' : '#2a2018', 'center', null);
         if (m === 'tianji' && !on && !save.daily.tianjiRuns) ui.redDot(mx + mw - 10 * u, my + 8 * u);
         if (ui.clicked('mode_' + m, mx, my, mw, mh)) this.setMode(m);
       });
@@ -471,7 +471,11 @@ export class HomeScene implements Scene {
     const unlocked = chapterOpen(ch.id, d);
     const cw = ui.W - 80 * u, chH = L.chH;
     const cx = 40 * u, cy = L.cy;
-    ui.panel(cx, cy, cw, chH, 'wood');
+    if (NEW_UI) {
+      ui.markPaper(cx, cy, cw, chH);
+      drawSkin(ctx, 'chapterPaper', cx, cy, cw, chH, 2 * u,
+        (g, w, h) => paintXuanPaper(g, w, h, u, '#f1ead6'));
+    } else ui.panel(cx, cy, cw, chH, 'wood');
     // 难度页签：古籍乌丝栏 · 朱砂圈点样式（去掉笨重凹槽与实心绿砖）
     const tw = (cw - 60 * u) / 3;
     if (NEW_UI) {
@@ -487,19 +491,10 @@ export class HomeScene implements Scene {
         ui.text(df.name, tx + tw / 2, ty + 23 * u, 24, on ? '#1a1210' : open ? df.color : '#666', 'center', null);
       } else {
         const accent = df.id === 0 ? '#2b6e3f' : df.id === 1 ? '#b86818' : '#a82219';
-        if (i > 0) {
-          ctx.fillStyle = 'rgba(72,56,42,0.22)';
-          ctx.fillRect(tx, ty + 10 * u, Math.max(1, u), 24 * u);
-        }
-        if (on) {
-          const p = Math.max(2, Math.round(u * 2));
-          ui.pixRect(tx + 8 * u, ty + 2 * u, tw - 16 * u, 40 * u, '#fbf5e6', p);
-          ctx.strokeStyle = accent;
-          ctx.lineWidth = Math.max(1.2, u * 1.5);
-          ctx.strokeRect(tx + 10 * u, ty + 4 * u, tw - 20 * u, 36 * u);
-          ctx.fillStyle = accent;
-          ctx.fillRect(tx + 22 * u, ty + 4 * u, tw - 44 * u, 3 * u);
-        }
+        const pressed = ui.isPressed('diff_' + df.id);
+        const tone = on ? mix('#e0e0c8', accent, .24) : open ? '#e6dfc9' : '#e9e3d3';
+        drawSkin(ctx, 'diffPaper' + tone + (pressed ? 'P' : ''), tx + 3 * u, ty, tw - 6 * u, 44 * u, 2 * u,
+          (g, w, h) => paintXuanPaper(g, w, h, u, tone, pressed && open));
         ui.text(on ? `◆ ${df.name} ◆` : df.name, tx + tw / 2, ty + 22 * u, 22, on ? accent : open ? '#3b2f24' : '#8a7c6c', 'center', null);
       }
       if (!open) ui.icon('lock', tx + tw - 26 * u, ty + 22 * u, 24 * u);
@@ -549,13 +544,6 @@ export class HomeScene implements Scene {
     } else if (short !== long) powerLabel = `推荐 ${powerGuideText(short ?? long)}起 · 含极限`;
     else if (!WEB_RULES && need !== null) powerLabel = '推荐战力 ' + fmtNum(need);
     // 进度与推荐战力放在同一行
-    if (NEW_UI) {
-      const barW = cw - 96 * u, barH = 34 * u, barX = cx + 48 * u, barY = oy + 124 * u;
-      ui.pixRect(barX, barY, barW, barH, 'rgba(255,250,240,0.48)', Math.max(2, Math.round(u * 2)));
-      ctx.strokeStyle = 'rgba(120,98,74,0.38)';
-      ctx.lineWidth = Math.max(1, u);
-      ctx.strokeRect(barX + 1, barY + 1, barW - 2, barH - 2);
-    }
     ui.text(info, ui.W / 2 - 14 * u, oy + 141 * u, 20, cleared ? '#9be37a' : '#e6d3b3', 'right', NEW_UI ? null : undefined);
     ui.text(powerLabel, ui.W / 2 + 14 * u, oy + 141 * u, 20, need !== null && power >= need ? '#9be37a' : '#ff8a80', 'left', NEW_UI ? null : undefined);
     ui.pixRect(ui.W / 2 - 1 * u, oy + 131 * u, 2 * u, 20 * u, '#8c663b');
@@ -1110,7 +1098,7 @@ export class HomeScene implements Scene {
     chips.forEach((c, i) => {
       const x = 20 * u + i * (cw + cgap), y = top;
       const on = this.heroCamp === c.id, pressed = ui.isPressed('hero_camp_' + c.id);
-      if (on) { ui.markDark(x, y, cw, chh); drawSkin(ctx, 'chip_' + c.id, x, y, cw, chh, 14 * u, (g, w0, h0) => paintLacquerButton(g, w0, h0, u, c.lac, false)); }
+      if (on) { ui.markDark(x, y, cw, chh); drawSkin(ctx, 'chip_' + c.id, x, y, cw, chh, 14 * u, (g, w0, h0) => paintDyedButton(g, w0, h0, u, c.lac, false)); }
       else drawSkin(ctx, 'chipoff_' + c.id + (pressed ? 'P' : ''), x, y, cw, chh, 12 * u, (g, w0, h0) => paintSlipButton(g, w0, h0, u, c.color, pressed, false));
       ui.text(c.name, x + cw / 2, y + (chh - 4 * u) / 2 + (pressed && !on ? 3 * u : 0), 25, on ? '#fff6e0' : '#2a2018', 'center', on ? c.lac.ink : null);
       if (ui.clicked('hero_camp_' + c.id, x, y, cw, chh)) { this.heroCamp = c.id; ui.resetScroll('hero_list'); }

@@ -5,7 +5,7 @@ import { playSfx } from '../audio/sound';
 import { NEW_UI } from '../data/platformConfig';
 import { drawXuanTexture, XuanTextureOpts } from './xuanPaper';
 import { TextCache } from './textCache';
-import { drawSkin, skinFrame, paintPanel, paintLacquerButton, paintSlipButton, paintRibbon, paintSlot, paintInkPill, paintBarTrack, LACQUER, Lacquer, rr, mix } from './skin';
+import { drawSkin, skinFrame, paintPanel, paintDyedButton, paintSlipButton, paintRibbon, paintSlot, paintInkPill, paintBarTrack, LACQUER, Lacquer, rr, mix } from './skin';
 
 // 立即模式 UI：每帧重新绘制并登记可点击区域；点击判定使用上一帧的区域表，天然支持弹窗遮挡。
 
@@ -559,7 +559,7 @@ export class UI {
         ctx.fill();
       }
     }
-    this.text(label, cx, cy + 1 * u, 31, this.preserveTextColors ? C.text : '#fff6e0', 'center', lac.ink);
+    this.text(label, cx, cy + 1 * u, 31, '#fff3da', 'center', null);
   }
 
   /** 按钮：colors = [主色, 暗色, 高光] */
@@ -596,16 +596,13 @@ export class UI {
     const ctx = this.ctx, u = this.u;
     const solid = !opts.disabled && (cols === C.btnRed || cols === C.btnGreen) && w >= 180 * u;
     const size = opts.size || 30;
-    const lip = Math.max(2, Math.round((solid ? 5 : 4) * u));
-    const faceH = h - lip;
-    const dy = pressed ? lip - 1 : opts.disabled ? lip * 0.5 : 0;
     let tx = x + w / 2;
-    const ty = y + faceH / 2 + dy + (opts.sub ? -size * u * 0.34 : 0);
+    const ty = y + h / 2 + (opts.sub ? -size * u * 0.34 : 0);
     if (solid) {
-      // 主行动按钮（出征 / 守城 / 入局 / 双倍领取）：鎏金边朱漆 / 松石漆面
+      // 主行动按钮（出征 / 守城 / 入局 / 双倍领取）：平染宣纸
       this.darkZones.push({ x, y, w, h, layer: this.layer });
       const lac = cols === C.btnRed ? LACQUER.red : LACQUER.green;
-      drawSkin(ctx, (cols === C.btnRed ? 'bt_red' : 'bt_green') + (pressed ? 'P' : ''), x, y, w, h, 16 * u, (g, bw, bh) => paintLacquerButton(g, bw, bh, u, lac, pressed));
+      drawSkin(ctx, (cols === C.btnRed ? 'bt_red' : 'bt_green') + (pressed ? 'P' : ''), x, y, w, h, 16 * u, (g, bw, bh) => paintDyedButton(g, bw, bh, u, lac, pressed));
       if (opts.icon) {
         const isz = size * 1.3 * u;
         const tw = this.measure(label, size);
@@ -613,7 +610,7 @@ export class UI {
         this.icon(opts.icon, x + w / 2 - total / 2 + isz / 2, ty, isz);
         tx = x + w / 2 - total / 2 + isz + 8 * u + tw / 2;
       }
-      this.text(label, tx, ty, size, this.preserveTextColors ? C.text : '#fff6e0', 'center', lac.ink);
+      this.text(label, tx, ty, size, '#fff3da', 'center', null);
       if (opts.sub) this.text(opts.sub, x + w / 2, ty + size * u * 0.94, Math.max(17, size * 0.52), this.preserveTextColors ? '#fff' : '#ffe9c0', 'center', null);
     } else {
       // 次级按钮：象牙纸笺，边框 / 底色 / 小字带功能色
